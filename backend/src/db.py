@@ -71,7 +71,12 @@ class WinRateDB:
         """
         path = Path(filepath)
         if not path.is_file():
-            raise DatabaseError(f"Database file '{filepath}' does not exist.")
+            # Fallback check relative to backend root directory
+            backend_path = Path(__file__).resolve().parent.parent / filepath
+            if backend_path.is_file():
+                path = backend_path
+            else:
+                raise DatabaseError(f"Database file '{filepath}' does not exist.")
 
         try:
             with open(path, "r", encoding="utf-8") as f:

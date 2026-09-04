@@ -89,6 +89,8 @@ class TestGeneratorEngine:
     def test_generated_json_database_schema(self) -> None:
         """Verify the precomputed data/winrates.json conforms to the complete schema."""
         db_path = Path("data/winrates.json")
+        if not db_path.exists():
+            db_path = Path(__file__).resolve().parent.parent / "data" / "winrates.json"
         assert db_path.exists(), "data/winrates.json must exist"
 
         with open(db_path, "r", encoding="utf-8") as f:
