@@ -1,0 +1,4097 @@
+{
+  "2-2-2": {
+    "equity": 0.9974,
+    "win_rate": 0.9974,
+    "tie_rate": 0.0,
+    "loss_rate": 0.0026,
+    "category": "SAP",
+    "multiplicity": 4,
+    "samples": 18424
+  },
+  "3-2-2": {
+    "equity": 0.6661,
+    "win_rate": 0.666,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.3339,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "4-2-2": {
+    "equity": 0.7635,
+    "win_rate": 0.7635,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.2364,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "5-2-2": {
+    "equity": 0.8591,
+    "win_rate": 0.859,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.1408,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "6-2-2": {
+    "equity": 0.0038,
+    "win_rate": 0.0037,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.9961,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "7-2-2": {
+    "equity": 0.1008,
+    "win_rate": 0.1007,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.8991,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "8-2-2": {
+    "equity": 0.1959,
+    "win_rate": 0.1958,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.804,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "9-2-2": {
+    "equity": 0.2909,
+    "win_rate": 0.2908,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.709,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "10-2-2": {
+    "equity": 0.3936,
+    "win_rate": 0.3935,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.6063,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "J-2-2": {
+    "equity": 0.4062,
+    "win_rate": 0.4061,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.5937,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "Q-2-2": {
+    "equity": 0.4203,
+    "win_rate": 0.4202,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.5796,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "K-2-2": {
+    "equity": 0.4361,
+    "win_rate": 0.4361,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.5638,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "A-2-2": {
+    "equity": 0.5516,
+    "win_rate": 0.5516,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.4483,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "3-3-2": {
+    "equity": 0.764,
+    "win_rate": 0.7639,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.2359,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "4-3-2": {
+    "equity": 0.9646,
+    "win_rate": 0.9639,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.0347,
+    "category": "LIENG",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "5-3-2": {
+    "equity": 0.0024,
+    "win_rate": 0.0016,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.9969,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "6-3-2": {
+    "equity": 0.0996,
+    "win_rate": 0.0988,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.8997,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "7-3-2": {
+    "equity": 0.1948,
+    "win_rate": 0.194,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.8045,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "8-3-2": {
+    "equity": 0.2938,
+    "win_rate": 0.293,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.7055,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "9-3-2": {
+    "equity": 0.3936,
+    "win_rate": 0.3929,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.6056,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "10-3-2": {
+    "equity": 0.4909,
+    "win_rate": 0.4902,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.5084,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "J-3-2": {
+    "equity": 0.5039,
+    "win_rate": 0.5032,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.4953,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-3-2": {
+    "equity": 0.5185,
+    "win_rate": 0.5177,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.4808,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-3-2": {
+    "equity": 0.5348,
+    "win_rate": 0.534,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.4645,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-2-3": {
+    "equity": 0.962,
+    "win_rate": 0.9612,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.0373,
+    "category": "LIENG",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "4-4-2": {
+    "equity": 0.0007,
+    "win_rate": 0.0007,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.9992,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "5-4-2": {
+    "equity": 0.0976,
+    "win_rate": 0.0969,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.9017,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "6-4-2": {
+    "equity": 0.1923,
+    "win_rate": 0.1916,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.8069,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "7-4-2": {
+    "equity": 0.2907,
+    "win_rate": 0.2899,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.7086,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "8-4-2": {
+    "equity": 0.3958,
+    "win_rate": 0.3951,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.6035,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "9-4-2": {
+    "equity": 0.4894,
+    "win_rate": 0.4887,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.5098,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "10-4-2": {
+    "equity": 0.5939,
+    "win_rate": 0.5931,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.4054,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "J-4-2": {
+    "equity": 0.606,
+    "win_rate": 0.6053,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.3932,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-4-2": {
+    "equity": 0.6197,
+    "win_rate": 0.619,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.3796,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-4-2": {
+    "equity": 0.6351,
+    "win_rate": 0.6344,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.3641,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-4-2": {
+    "equity": 0.7481,
+    "win_rate": 0.7474,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.2511,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "5-5-2": {
+    "equity": 0.1903,
+    "win_rate": 0.1902,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.8097,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "6-5-2": {
+    "equity": 0.2879,
+    "win_rate": 0.2871,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.7114,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "7-5-2": {
+    "equity": 0.3917,
+    "win_rate": 0.391,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.6075,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "8-5-2": {
+    "equity": 0.4908,
+    "win_rate": 0.4901,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.5085,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "9-5-2": {
+    "equity": 0.5919,
+    "win_rate": 0.5912,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.4073,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "10-5-2": {
+    "equity": 0.6914,
+    "win_rate": 0.6907,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.3079,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "J-5-2": {
+    "equity": 0.701,
+    "win_rate": 0.7002,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.2983,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-5-2": {
+    "equity": 0.7155,
+    "win_rate": 0.7148,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.2838,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-5-2": {
+    "equity": 0.7318,
+    "win_rate": 0.7311,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.2675,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-5-2": {
+    "equity": 0.845,
+    "win_rate": 0.8443,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.1543,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "6-6-2": {
+    "equity": 0.3872,
+    "win_rate": 0.3871,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.6127,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "7-6-2": {
+    "equity": 0.4843,
+    "win_rate": 0.4836,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.5149,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "8-6-2": {
+    "equity": 0.5902,
+    "win_rate": 0.5895,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.409,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "9-6-2": {
+    "equity": 0.688,
+    "win_rate": 0.6873,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.3113,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "10-6-2": {
+    "equity": 0.7879,
+    "win_rate": 0.7871,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.2114,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "J-6-2": {
+    "equity": 0.7991,
+    "win_rate": 0.7984,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.2001,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-6-2": {
+    "equity": 0.8128,
+    "win_rate": 0.8121,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.1864,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-6-2": {
+    "equity": 0.8282,
+    "win_rate": 0.8275,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.171,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-6-2": {
+    "equity": 0.9412,
+    "win_rate": 0.9405,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.058,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "7-7-2": {
+    "equity": 0.5837,
+    "win_rate": 0.5836,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.4163,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "8-7-2": {
+    "equity": 0.6855,
+    "win_rate": 0.6848,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.3137,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "9-7-2": {
+    "equity": 0.783,
+    "win_rate": 0.7822,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.2163,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "10-7-2": {
+    "equity": 0.8848,
+    "win_rate": 0.8841,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.1145,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "J-7-2": {
+    "equity": 0.897,
+    "win_rate": 0.8962,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.1023,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-7-2": {
+    "equity": 0.908,
+    "win_rate": 0.9073,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.0912,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-7-2": {
+    "equity": 0.9243,
+    "win_rate": 0.9236,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.075,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-7-2": {
+    "equity": 0.0826,
+    "win_rate": 0.0818,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.9167,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "8-8-2": {
+    "equity": 0.7804,
+    "win_rate": 0.7803,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.2196,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "9-8-2": {
+    "equity": 0.879,
+    "win_rate": 0.8783,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.1202,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "10-8-2": {
+    "equity": 0.0285,
+    "win_rate": 0.0278,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.9707,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "J-8-2": {
+    "equity": 0.0387,
+    "win_rate": 0.038,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.9605,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-8-2": {
+    "equity": 0.0515,
+    "win_rate": 0.0508,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.9477,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-8-2": {
+    "equity": 0.0643,
+    "win_rate": 0.0636,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.9349,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-8-2": {
+    "equity": 0.1686,
+    "win_rate": 0.1679,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.8307,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "9-9-2": {
+    "equity": 0.0182,
+    "win_rate": 0.0181,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.9817,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "10-9-2": {
+    "equity": 0.1178,
+    "win_rate": 0.1171,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.8815,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "J-9-2": {
+    "equity": 0.133,
+    "win_rate": 0.1323,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.8663,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-9-2": {
+    "equity": 0.1454,
+    "win_rate": 0.1446,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.8539,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-9-2": {
+    "equity": 0.1569,
+    "win_rate": 0.1562,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.8424,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-9-2": {
+    "equity": 0.2748,
+    "win_rate": 0.2741,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.7244,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "10-10-2": {
+    "equity": 0.2097,
+    "win_rate": 0.2096,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.7902,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "J-10-2": {
+    "equity": 0.2253,
+    "win_rate": 0.2245,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.774,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-10-2": {
+    "equity": 0.2408,
+    "win_rate": 0.2401,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.7585,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-10-2": {
+    "equity": 0.2574,
+    "win_rate": 0.2567,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.7419,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-10-2": {
+    "equity": 0.3711,
+    "win_rate": 0.3703,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.6282,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "J-J-2": {
+    "equity": 0.2289,
+    "win_rate": 0.2288,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.771,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "Q-J-2": {
+    "equity": 0.245,
+    "win_rate": 0.2443,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.7542,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-J-2": {
+    "equity": 0.2616,
+    "win_rate": 0.2609,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.7376,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-J-2": {
+    "equity": 0.3758,
+    "win_rate": 0.3751,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.6234,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-Q-2": {
+    "equity": 0.2473,
+    "win_rate": 0.2472,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.7527,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "K-Q-2": {
+    "equity": 0.2642,
+    "win_rate": 0.2635,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.735,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-Q-2": {
+    "equity": 0.3784,
+    "win_rate": 0.3777,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.6208,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-K-2": {
+    "equity": 0.2647,
+    "win_rate": 0.2647,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.7352,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "A-K-2": {
+    "equity": 0.3795,
+    "win_rate": 0.3788,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.6197,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-A-2": {
+    "equity": 0.4725,
+    "win_rate": 0.4724,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.5274,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "3-3-3": {
+    "equity": 0.9976,
+    "win_rate": 0.9976,
+    "tie_rate": 0.0,
+    "loss_rate": 0.0024,
+    "category": "SAP",
+    "multiplicity": 4,
+    "samples": 18424
+  },
+  "4-3-3": {
+    "equity": 0.0001,
+    "win_rate": 0.0,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.9998,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "5-3-3": {
+    "equity": 0.0956,
+    "win_rate": 0.0955,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.9043,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "6-3-3": {
+    "equity": 0.1905,
+    "win_rate": 0.1904,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.8094,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "7-3-3": {
+    "equity": 0.2937,
+    "win_rate": 0.2936,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.7062,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "8-3-3": {
+    "equity": 0.3911,
+    "win_rate": 0.391,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.6088,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "9-3-3": {
+    "equity": 0.4867,
+    "win_rate": 0.4866,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.5132,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "10-3-3": {
+    "equity": 0.5912,
+    "win_rate": 0.5911,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.4088,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "J-3-3": {
+    "equity": 0.6038,
+    "win_rate": 0.6037,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.3962,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "Q-3-3": {
+    "equity": 0.6179,
+    "win_rate": 0.6178,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.3821,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "K-3-3": {
+    "equity": 0.6337,
+    "win_rate": 0.6336,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.3662,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "A-3-3": {
+    "equity": 0.7473,
+    "win_rate": 0.7472,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.2527,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "4-4-3": {
+    "equity": 0.0946,
+    "win_rate": 0.0946,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.9053,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "5-4-3": {
+    "equity": 0.9681,
+    "win_rate": 0.9673,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.0312,
+    "category": "LIENG",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "6-4-3": {
+    "equity": 0.2889,
+    "win_rate": 0.2882,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.7104,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "7-4-3": {
+    "equity": 0.3898,
+    "win_rate": 0.3891,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.6094,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "8-4-3": {
+    "equity": 0.4839,
+    "win_rate": 0.4832,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.5154,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "9-4-3": {
+    "equity": 0.5886,
+    "win_rate": 0.5879,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.4107,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "10-4-3": {
+    "equity": 0.689,
+    "win_rate": 0.6883,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.3102,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "J-4-3": {
+    "equity": 0.6986,
+    "win_rate": 0.6978,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.3007,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-4-3": {
+    "equity": 0.7131,
+    "win_rate": 0.7124,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.2861,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-4-3": {
+    "equity": 0.7294,
+    "win_rate": 0.7287,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.2699,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-4-3": {
+    "equity": 0.8421,
+    "win_rate": 0.8413,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.1572,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "5-5-3": {
+    "equity": 0.2872,
+    "win_rate": 0.2871,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.7127,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "6-5-3": {
+    "equity": 0.3864,
+    "win_rate": 0.3856,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.6129,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "7-5-3": {
+    "equity": 0.4825,
+    "win_rate": 0.4818,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.5167,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "8-5-3": {
+    "equity": 0.5842,
+    "win_rate": 0.5835,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.4151,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "9-5-3": {
+    "equity": 0.6862,
+    "win_rate": 0.6855,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.3131,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "10-5-3": {
+    "equity": 0.7859,
+    "win_rate": 0.7852,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.2134,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "J-5-3": {
+    "equity": 0.7972,
+    "win_rate": 0.7965,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.2021,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-5-3": {
+    "equity": 0.8109,
+    "win_rate": 0.8101,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.1884,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-5-3": {
+    "equity": 0.8263,
+    "win_rate": 0.8256,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.173,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-5-3": {
+    "equity": 0.9393,
+    "win_rate": 0.9386,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.06,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "6-6-3": {
+    "equity": 0.479,
+    "win_rate": 0.4789,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.5209,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "7-6-3": {
+    "equity": 0.5831,
+    "win_rate": 0.5824,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.4161,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "8-6-3": {
+    "equity": 0.6806,
+    "win_rate": 0.6798,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.3187,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "9-6-3": {
+    "equity": 0.7817,
+    "win_rate": 0.7809,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.2176,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "10-6-3": {
+    "equity": 0.8836,
+    "win_rate": 0.8829,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.1157,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "J-6-3": {
+    "equity": 0.8958,
+    "win_rate": 0.895,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.1035,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-6-3": {
+    "equity": 0.9068,
+    "win_rate": 0.9061,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.0924,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-6-3": {
+    "equity": 0.9231,
+    "win_rate": 0.9224,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.0762,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-6-3": {
+    "equity": 0.08,
+    "win_rate": 0.0792,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.9193,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "7-7-3": {
+    "equity": 0.6795,
+    "win_rate": 0.6794,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.3204,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "8-7-3": {
+    "equity": 0.7761,
+    "win_rate": 0.7753,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.2232,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "9-7-3": {
+    "equity": 0.8778,
+    "win_rate": 0.8771,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.1214,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "10-7-3": {
+    "equity": 0.026,
+    "win_rate": 0.0253,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.9732,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "J-7-3": {
+    "equity": 0.0362,
+    "win_rate": 0.0355,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.963,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-7-3": {
+    "equity": 0.049,
+    "win_rate": 0.0483,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.9502,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-7-3": {
+    "equity": 0.0618,
+    "win_rate": 0.0611,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.9374,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-7-3": {
+    "equity": 0.1662,
+    "win_rate": 0.1654,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.8331,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "8-8-3": {
+    "equity": 0.8689,
+    "win_rate": 0.8689,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.131,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "9-8-3": {
+    "equity": 0.0173,
+    "win_rate": 0.0166,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.9819,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "10-8-3": {
+    "equity": 0.1167,
+    "win_rate": 0.1159,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.8826,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "J-8-3": {
+    "equity": 0.1319,
+    "win_rate": 0.1311,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.8674,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-8-3": {
+    "equity": 0.1442,
+    "win_rate": 0.1435,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.855,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-8-3": {
+    "equity": 0.1557,
+    "win_rate": 0.155,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.8435,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-8-3": {
+    "equity": 0.2769,
+    "win_rate": 0.2762,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.7223,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "9-9-3": {
+    "equity": 0.1087,
+    "win_rate": 0.1087,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.8912,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "10-9-3": {
+    "equity": 0.2109,
+    "win_rate": 0.2102,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.7883,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "J-9-3": {
+    "equity": 0.2253,
+    "win_rate": 0.2245,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.774,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-9-3": {
+    "equity": 0.2411,
+    "win_rate": 0.2404,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.7581,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-9-3": {
+    "equity": 0.2587,
+    "win_rate": 0.258,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.7406,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-9-3": {
+    "equity": 0.3687,
+    "win_rate": 0.368,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.6305,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "10-10-3": {
+    "equity": 0.3094,
+    "win_rate": 0.3093,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.6906,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "J-10-3": {
+    "equity": 0.3236,
+    "win_rate": 0.3229,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.6756,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-10-3": {
+    "equity": 0.3378,
+    "win_rate": 0.3371,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.6614,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-10-3": {
+    "equity": 0.3532,
+    "win_rate": 0.3524,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.6461,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-10-3": {
+    "equity": 0.4657,
+    "win_rate": 0.465,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.5335,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "J-J-3": {
+    "equity": 0.3273,
+    "win_rate": 0.3272,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.6727,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "Q-J-3": {
+    "equity": 0.3421,
+    "win_rate": 0.3413,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.6572,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-J-3": {
+    "equity": 0.3574,
+    "win_rate": 0.3567,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.6419,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-J-3": {
+    "equity": 0.4705,
+    "win_rate": 0.4698,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.5288,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-Q-3": {
+    "equity": 0.3443,
+    "win_rate": 0.3442,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.6556,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "K-Q-3": {
+    "equity": 0.36,
+    "win_rate": 0.3593,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.6393,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-Q-3": {
+    "equity": 0.4731,
+    "win_rate": 0.4724,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.5262,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-K-3": {
+    "equity": 0.3605,
+    "win_rate": 0.3604,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.6394,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "A-K-3": {
+    "equity": 0.4742,
+    "win_rate": 0.4735,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.5251,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-A-3": {
+    "equity": 0.57,
+    "win_rate": 0.5699,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.4299,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "4-4-4": {
+    "equity": 0.9978,
+    "win_rate": 0.9978,
+    "tie_rate": 0.0,
+    "loss_rate": 0.0022,
+    "category": "SAP",
+    "multiplicity": 4,
+    "samples": 18424
+  },
+  "5-4-4": {
+    "equity": 0.2858,
+    "win_rate": 0.2857,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.7141,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "6-4-4": {
+    "equity": 0.3887,
+    "win_rate": 0.3886,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.6112,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "7-4-4": {
+    "equity": 0.4778,
+    "win_rate": 0.4777,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.5221,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "8-4-4": {
+    "equity": 0.583,
+    "win_rate": 0.5829,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.4169,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "9-4-4": {
+    "equity": 0.6839,
+    "win_rate": 0.6838,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.3161,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "10-4-4": {
+    "equity": 0.7824,
+    "win_rate": 0.7823,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.2175,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "J-4-4": {
+    "equity": 0.7942,
+    "win_rate": 0.7941,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.2058,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "Q-4-4": {
+    "equity": 0.8083,
+    "win_rate": 0.8082,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.1917,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "K-4-4": {
+    "equity": 0.8241,
+    "win_rate": 0.824,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.1758,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "A-4-4": {
+    "equity": 0.9377,
+    "win_rate": 0.9376,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.0623,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "5-5-4": {
+    "equity": 0.3876,
+    "win_rate": 0.3875,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.6123,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "6-5-4": {
+    "equity": 0.9715,
+    "win_rate": 0.9708,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.0277,
+    "category": "LIENG",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "7-5-4": {
+    "equity": 0.5779,
+    "win_rate": 0.5771,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.4214,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "8-5-4": {
+    "equity": 0.6776,
+    "win_rate": 0.6769,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.3216,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "9-5-4": {
+    "equity": 0.7785,
+    "win_rate": 0.7777,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.2208,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "10-5-4": {
+    "equity": 0.8803,
+    "win_rate": 0.8796,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.1189,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "J-5-4": {
+    "equity": 0.8925,
+    "win_rate": 0.8918,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.1068,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-5-4": {
+    "equity": 0.9036,
+    "win_rate": 0.9028,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.0957,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-5-4": {
+    "equity": 0.9199,
+    "win_rate": 0.9191,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.0794,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-5-4": {
+    "equity": 0.078,
+    "win_rate": 0.0773,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.9212,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "6-6-4": {
+    "equity": 0.5803,
+    "win_rate": 0.5802,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.4196,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "7-6-4": {
+    "equity": 0.6743,
+    "win_rate": 0.6736,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.325,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "8-6-4": {
+    "equity": 0.7734,
+    "win_rate": 0.7727,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.2258,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "9-6-4": {
+    "equity": 0.8756,
+    "win_rate": 0.8748,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.1237,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "10-6-4": {
+    "equity": 0.0239,
+    "win_rate": 0.0231,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.9754,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "J-6-4": {
+    "equity": 0.0341,
+    "win_rate": 0.0333,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.9652,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-6-4": {
+    "equity": 0.0469,
+    "win_rate": 0.0461,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.9524,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-6-4": {
+    "equity": 0.0597,
+    "win_rate": 0.0589,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.9396,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-6-4": {
+    "equity": 0.1635,
+    "win_rate": 0.1627,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.8358,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "7-7-4": {
+    "equity": 0.7669,
+    "win_rate": 0.7668,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.233,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "8-7-4": {
+    "equity": 0.8674,
+    "win_rate": 0.8667,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.1318,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "9-7-4": {
+    "equity": 0.0153,
+    "win_rate": 0.0145,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.984,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "10-7-4": {
+    "equity": 0.1142,
+    "win_rate": 0.1134,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.8851,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "J-7-4": {
+    "equity": 0.1294,
+    "win_rate": 0.1286,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.8699,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-7-4": {
+    "equity": 0.1417,
+    "win_rate": 0.141,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.8575,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-7-4": {
+    "equity": 0.1533,
+    "win_rate": 0.1525,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.846,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-7-4": {
+    "equity": 0.2746,
+    "win_rate": 0.2739,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.7247,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "8-8-4": {
+    "equity": 0.0102,
+    "win_rate": 0.0101,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.9897,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "9-8-4": {
+    "equity": 0.1089,
+    "win_rate": 0.1082,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.8904,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "10-8-4": {
+    "equity": 0.2098,
+    "win_rate": 0.209,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.7895,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "J-8-4": {
+    "equity": 0.2241,
+    "win_rate": 0.2233,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.7752,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-8-4": {
+    "equity": 0.2399,
+    "win_rate": 0.2392,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.7593,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-8-4": {
+    "equity": 0.2575,
+    "win_rate": 0.2568,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.7417,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-8-4": {
+    "equity": 0.37,
+    "win_rate": 0.3693,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.6292,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "9-9-4": {
+    "equity": 0.2044,
+    "win_rate": 0.2043,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.7955,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "10-9-4": {
+    "equity": 0.3097,
+    "win_rate": 0.309,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.6895,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "J-9-4": {
+    "equity": 0.3228,
+    "win_rate": 0.322,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.6765,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-9-4": {
+    "equity": 0.3373,
+    "win_rate": 0.3366,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.662,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-9-4": {
+    "equity": 0.3536,
+    "win_rate": 0.3529,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.6457,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-9-4": {
+    "equity": 0.4635,
+    "win_rate": 0.4628,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.5358,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "10-10-4": {
+    "equity": 0.4069,
+    "win_rate": 0.4069,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.593,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "J-10-4": {
+    "equity": 0.4203,
+    "win_rate": 0.4196,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.5789,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-10-4": {
+    "equity": 0.4337,
+    "win_rate": 0.433,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.5656,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-10-4": {
+    "equity": 0.4481,
+    "win_rate": 0.4474,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.5511,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-10-4": {
+    "equity": 0.564,
+    "win_rate": 0.5632,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.4353,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "J-J-4": {
+    "equity": 0.424,
+    "win_rate": 0.4239,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.5759,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "Q-J-4": {
+    "equity": 0.4379,
+    "win_rate": 0.4372,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.5613,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-J-4": {
+    "equity": 0.4524,
+    "win_rate": 0.4516,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.5469,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-J-4": {
+    "equity": 0.5687,
+    "win_rate": 0.568,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.4305,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-Q-4": {
+    "equity": 0.4402,
+    "win_rate": 0.4401,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.5598,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "K-Q-4": {
+    "equity": 0.455,
+    "win_rate": 0.4542,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.5443,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-Q-4": {
+    "equity": 0.5713,
+    "win_rate": 0.5706,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.4279,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-K-4": {
+    "equity": 0.4555,
+    "win_rate": 0.4554,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.5445,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "A-K-4": {
+    "equity": 0.5724,
+    "win_rate": 0.5717,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.4268,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-A-4": {
+    "equity": 0.6671,
+    "win_rate": 0.6671,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.3328,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "5-5-5": {
+    "equity": 0.998,
+    "win_rate": 0.998,
+    "tie_rate": 0.0,
+    "loss_rate": 0.002,
+    "category": "SAP",
+    "multiplicity": 4,
+    "samples": 18424
+  },
+  "6-5-5": {
+    "equity": 0.5767,
+    "win_rate": 0.5766,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.4232,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "7-5-5": {
+    "equity": 0.6734,
+    "win_rate": 0.6734,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.3265,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "8-5-5": {
+    "equity": 0.7736,
+    "win_rate": 0.7736,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.2263,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "9-5-5": {
+    "equity": 0.8739,
+    "win_rate": 0.8739,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.126,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "10-5-5": {
+    "equity": 0.0214,
+    "win_rate": 0.0213,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.9786,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "J-5-5": {
+    "equity": 0.032,
+    "win_rate": 0.0319,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.9679,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "Q-5-5": {
+    "equity": 0.0452,
+    "win_rate": 0.0452,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.9547,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "K-5-5": {
+    "equity": 0.0585,
+    "win_rate": 0.0584,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.9414,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "A-5-5": {
+    "equity": 0.1618,
+    "win_rate": 0.1617,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.8381,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "6-6-5": {
+    "equity": 0.6691,
+    "win_rate": 0.669,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.3308,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "7-6-5": {
+    "equity": 0.975,
+    "win_rate": 0.9743,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.0243,
+    "category": "LIENG",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "8-6-5": {
+    "equity": 0.8651,
+    "win_rate": 0.8644,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.1341,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "9-6-5": {
+    "equity": 0.0125,
+    "win_rate": 0.0117,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.9868,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "10-6-5": {
+    "equity": 0.1118,
+    "win_rate": 0.1111,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.8874,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "J-6-5": {
+    "equity": 0.127,
+    "win_rate": 0.1263,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.8722,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-6-5": {
+    "equity": 0.1394,
+    "win_rate": 0.1387,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.8599,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-6-5": {
+    "equity": 0.1509,
+    "win_rate": 0.1502,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.8483,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-6-5": {
+    "equity": 0.273,
+    "win_rate": 0.2723,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.7262,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "7-7-5": {
+    "equity": 0.8633,
+    "win_rate": 0.8632,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.1366,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "8-7-5": {
+    "equity": 0.0089,
+    "win_rate": 0.0081,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.9904,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "9-7-5": {
+    "equity": 0.1069,
+    "win_rate": 0.1062,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.8924,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "10-7-5": {
+    "equity": 0.2074,
+    "win_rate": 0.2066,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.7919,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "J-7-5": {
+    "equity": 0.2217,
+    "win_rate": 0.221,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.7776,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-7-5": {
+    "equity": 0.2375,
+    "win_rate": 0.2368,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.7617,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-7-5": {
+    "equity": 0.2551,
+    "win_rate": 0.2544,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.7441,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-7-5": {
+    "equity": 0.3681,
+    "win_rate": 0.3674,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.6311,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "8-8-5": {
+    "equity": 0.1051,
+    "win_rate": 0.105,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.8949,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "9-8-5": {
+    "equity": 0.2045,
+    "win_rate": 0.2038,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.7947,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "10-8-5": {
+    "equity": 0.3085,
+    "win_rate": 0.3078,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.6908,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "J-8-5": {
+    "equity": 0.3215,
+    "win_rate": 0.3208,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.6778,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-8-5": {
+    "equity": 0.3361,
+    "win_rate": 0.3353,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.6632,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-8-5": {
+    "equity": 0.3523,
+    "win_rate": 0.3516,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.6469,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-8-5": {
+    "equity": 0.4653,
+    "win_rate": 0.4646,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.534,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "9-9-5": {
+    "equity": 0.3044,
+    "win_rate": 0.3043,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.6956,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "10-9-5": {
+    "equity": 0.4081,
+    "win_rate": 0.4074,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.5911,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "J-9-5": {
+    "equity": 0.4203,
+    "win_rate": 0.4196,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.579,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-9-5": {
+    "equity": 0.434,
+    "win_rate": 0.4332,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.5653,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-9-5": {
+    "equity": 0.4494,
+    "win_rate": 0.4487,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.5499,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-9-5": {
+    "equity": 0.5622,
+    "win_rate": 0.5615,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.437,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "10-10-5": {
+    "equity": 0.5034,
+    "win_rate": 0.5034,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.4965,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "J-10-5": {
+    "equity": 0.5177,
+    "win_rate": 0.517,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.4815,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-10-5": {
+    "equity": 0.5319,
+    "win_rate": 0.5312,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.4673,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-10-5": {
+    "equity": 0.5472,
+    "win_rate": 0.5465,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.452,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-10-5": {
+    "equity": 0.6598,
+    "win_rate": 0.6591,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.3394,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "J-J-5": {
+    "equity": 0.5214,
+    "win_rate": 0.5213,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.4786,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "Q-J-5": {
+    "equity": 0.5362,
+    "win_rate": 0.5354,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.4631,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-J-5": {
+    "equity": 0.5515,
+    "win_rate": 0.5507,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.4478,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-J-5": {
+    "equity": 0.6646,
+    "win_rate": 0.6639,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.3347,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-Q-5": {
+    "equity": 0.5384,
+    "win_rate": 0.5383,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.4615,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "K-Q-5": {
+    "equity": 0.5541,
+    "win_rate": 0.5534,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.4452,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-Q-5": {
+    "equity": 0.6672,
+    "win_rate": 0.6665,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.3321,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-K-5": {
+    "equity": 0.5546,
+    "win_rate": 0.5545,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.4453,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "A-K-5": {
+    "equity": 0.6683,
+    "win_rate": 0.6676,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.331,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-A-5": {
+    "equity": 0.765,
+    "win_rate": 0.7649,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.235,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "6-6-6": {
+    "equity": 0.9983,
+    "win_rate": 0.9983,
+    "tie_rate": 0.0,
+    "loss_rate": 0.0017,
+    "category": "SAP",
+    "multiplicity": 4,
+    "samples": 18424
+  },
+  "7-6-6": {
+    "equity": 0.863,
+    "win_rate": 0.8629,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.1369,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "8-6-6": {
+    "equity": 0.0075,
+    "win_rate": 0.0074,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.9925,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "9-6-6": {
+    "equity": 0.1052,
+    "win_rate": 0.1051,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.8948,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "10-6-6": {
+    "equity": 0.205,
+    "win_rate": 0.205,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.7949,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "J-6-6": {
+    "equity": 0.2198,
+    "win_rate": 0.2197,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.7801,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "Q-6-6": {
+    "equity": 0.2361,
+    "win_rate": 0.236,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.7638,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "K-6-6": {
+    "equity": 0.2541,
+    "win_rate": 0.254,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.7458,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "A-6-6": {
+    "equity": 0.3667,
+    "win_rate": 0.3666,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.6333,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "7-7-6": {
+    "equity": 0.0071,
+    "win_rate": 0.0071,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.9928,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "8-7-6": {
+    "equity": 0.9785,
+    "win_rate": 0.9777,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.0208,
+    "category": "LIENG",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "9-7-6": {
+    "equity": 0.2009,
+    "win_rate": 0.2002,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.7984,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "10-7-6": {
+    "equity": 0.3056,
+    "win_rate": 0.3048,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.6937,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "J-7-6": {
+    "equity": 0.3186,
+    "win_rate": 0.3178,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.6807,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-7-6": {
+    "equity": 0.3331,
+    "win_rate": 0.3324,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.6661,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-7-6": {
+    "equity": 0.3494,
+    "win_rate": 0.3487,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.6499,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-7-6": {
+    "equity": 0.4632,
+    "win_rate": 0.4624,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.5361,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "8-8-6": {
+    "equity": 0.2,
+    "win_rate": 0.2,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.7999,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "9-8-6": {
+    "equity": 0.3034,
+    "win_rate": 0.3027,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.6958,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "10-8-6": {
+    "equity": 0.4067,
+    "win_rate": 0.4059,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.5926,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "J-8-6": {
+    "equity": 0.4188,
+    "win_rate": 0.4181,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.5804,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-8-6": {
+    "equity": 0.4325,
+    "win_rate": 0.4318,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.5668,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-8-6": {
+    "equity": 0.4479,
+    "win_rate": 0.4472,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.5513,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-8-6": {
+    "equity": 0.5632,
+    "win_rate": 0.5624,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.4361,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "9-9-6": {
+    "equity": 0.4039,
+    "win_rate": 0.4038,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.596,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "10-9-6": {
+    "equity": 0.5045,
+    "win_rate": 0.5037,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.4948,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "J-9-6": {
+    "equity": 0.5175,
+    "win_rate": 0.5168,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.4818,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-9-6": {
+    "equity": 0.5321,
+    "win_rate": 0.5313,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.4672,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-9-6": {
+    "equity": 0.5483,
+    "win_rate": 0.5476,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.4509,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-9-6": {
+    "equity": 0.6574,
+    "win_rate": 0.6566,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.3419,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "10-10-6": {
+    "equity": 0.6034,
+    "win_rate": 0.6033,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.3965,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "J-10-6": {
+    "equity": 0.6168,
+    "win_rate": 0.6161,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.3824,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-10-6": {
+    "equity": 0.6302,
+    "win_rate": 0.6295,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.3691,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-10-6": {
+    "equity": 0.6446,
+    "win_rate": 0.6439,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.3546,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-10-6": {
+    "equity": 0.7578,
+    "win_rate": 0.7571,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.2414,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "J-J-6": {
+    "equity": 0.6205,
+    "win_rate": 0.6204,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.3795,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "Q-J-6": {
+    "equity": 0.6344,
+    "win_rate": 0.6337,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.3649,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-J-6": {
+    "equity": 0.6489,
+    "win_rate": 0.6481,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.3504,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-J-6": {
+    "equity": 0.7618,
+    "win_rate": 0.761,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.2375,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-Q-6": {
+    "equity": 0.6366,
+    "win_rate": 0.6366,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.3633,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "K-Q-6": {
+    "equity": 0.6515,
+    "win_rate": 0.6507,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.3478,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-Q-6": {
+    "equity": 0.7644,
+    "win_rate": 0.7636,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.2349,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-K-6": {
+    "equity": 0.6519,
+    "win_rate": 0.6519,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.348,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "A-K-6": {
+    "equity": 0.7654,
+    "win_rate": 0.7647,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.2338,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-A-6": {
+    "equity": 0.8603,
+    "win_rate": 0.8602,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.1397,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "7-7-7": {
+    "equity": 0.9985,
+    "win_rate": 0.9985,
+    "tie_rate": 0.0,
+    "loss_rate": 0.0015,
+    "category": "SAP",
+    "multiplicity": 4,
+    "samples": 18424
+  },
+  "8-7-7": {
+    "equity": 0.1993,
+    "win_rate": 0.1992,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.8006,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "9-7-7": {
+    "equity": 0.3013,
+    "win_rate": 0.3012,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.6986,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "10-7-7": {
+    "equity": 0.4047,
+    "win_rate": 0.4046,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.5953,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "J-7-7": {
+    "equity": 0.4173,
+    "win_rate": 0.4172,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.5827,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "Q-7-7": {
+    "equity": 0.4314,
+    "win_rate": 0.4313,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.5686,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "K-7-7": {
+    "equity": 0.4472,
+    "win_rate": 0.4471,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.5527,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "A-7-7": {
+    "equity": 0.5621,
+    "win_rate": 0.562,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.4379,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "8-8-7": {
+    "equity": 0.3,
+    "win_rate": 0.2999,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.6999,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "9-8-7": {
+    "equity": 0.982,
+    "win_rate": 0.9812,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.0173,
+    "category": "LIENG",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "10-8-7": {
+    "equity": 0.5023,
+    "win_rate": 0.5016,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.497,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "J-8-7": {
+    "equity": 0.5153,
+    "win_rate": 0.5146,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.4839,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-8-7": {
+    "equity": 0.5299,
+    "win_rate": 0.5291,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.4694,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-8-7": {
+    "equity": 0.5462,
+    "win_rate": 0.5454,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.4531,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-8-7": {
+    "equity": 0.659,
+    "win_rate": 0.6583,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.3403,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "9-9-7": {
+    "equity": 0.4989,
+    "win_rate": 0.4988,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.501,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "10-9-7": {
+    "equity": 0.604,
+    "win_rate": 0.6033,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.3952,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "J-9-7": {
+    "equity": 0.6162,
+    "win_rate": 0.6154,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.3831,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-9-7": {
+    "equity": 0.6299,
+    "win_rate": 0.6291,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.3694,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-9-7": {
+    "equity": 0.6453,
+    "win_rate": 0.6445,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.354,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-9-7": {
+    "equity": 0.7555,
+    "win_rate": 0.7548,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.2438,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "10-10-7": {
+    "equity": 0.6969,
+    "win_rate": 0.6968,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.303,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "J-10-7": {
+    "equity": 0.7103,
+    "win_rate": 0.7096,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.289,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-10-7": {
+    "equity": 0.7245,
+    "win_rate": 0.7238,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.2748,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-10-7": {
+    "equity": 0.7398,
+    "win_rate": 0.7391,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.2594,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-10-7": {
+    "equity": 0.8533,
+    "win_rate": 0.8525,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.146,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "J-J-7": {
+    "equity": 0.7131,
+    "win_rate": 0.713,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.2869,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "Q-J-7": {
+    "equity": 0.7279,
+    "win_rate": 0.7271,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.2714,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-J-7": {
+    "equity": 0.7432,
+    "win_rate": 0.7425,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.2561,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-J-7": {
+    "equity": 0.8572,
+    "win_rate": 0.8564,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.1421,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-Q-7": {
+    "equity": 0.7301,
+    "win_rate": 0.73,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.2698,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "K-Q-7": {
+    "equity": 0.7458,
+    "win_rate": 0.7451,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.2535,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-Q-7": {
+    "equity": 0.8598,
+    "win_rate": 0.859,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.1395,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-K-7": {
+    "equity": 0.7463,
+    "win_rate": 0.7462,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.2536,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "A-K-7": {
+    "equity": 0.8609,
+    "win_rate": 0.8601,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.1384,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-A-7": {
+    "equity": 0.9541,
+    "win_rate": 0.954,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.0459,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "8-8-8": {
+    "equity": 0.9987,
+    "win_rate": 0.9987,
+    "tie_rate": 0.0,
+    "loss_rate": 0.0013,
+    "category": "SAP",
+    "multiplicity": 4,
+    "samples": 18424
+  },
+  "9-8-8": {
+    "equity": 0.4987,
+    "win_rate": 0.4986,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.5012,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "10-8-8": {
+    "equity": 0.6029,
+    "win_rate": 0.6028,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.397,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "J-8-8": {
+    "equity": 0.6155,
+    "win_rate": 0.6154,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.3844,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "Q-8-8": {
+    "equity": 0.6296,
+    "win_rate": 0.6295,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.3703,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "K-8-8": {
+    "equity": 0.6454,
+    "win_rate": 0.6454,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.3545,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "A-8-8": {
+    "equity": 0.7589,
+    "win_rate": 0.7588,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.241,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "9-9-8": {
+    "equity": 0.5988,
+    "win_rate": 0.5987,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.4012,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "10-9-8": {
+    "equity": 0.9854,
+    "win_rate": 0.9847,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.0138,
+    "category": "LIENG",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "J-9-8": {
+    "equity": 0.7105,
+    "win_rate": 0.7098,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.2888,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-9-8": {
+    "equity": 0.7251,
+    "win_rate": 0.7243,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.2742,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-9-8": {
+    "equity": 0.7413,
+    "win_rate": 0.7406,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.2579,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-9-8": {
+    "equity": 0.8512,
+    "win_rate": 0.8505,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.1481,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "10-10-8": {
+    "equity": 0.7939,
+    "win_rate": 0.7939,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.206,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "J-10-8": {
+    "equity": 0.8067,
+    "win_rate": 0.806,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.1926,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-10-8": {
+    "equity": 0.82,
+    "win_rate": 0.8193,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.1792,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-10-8": {
+    "equity": 0.8345,
+    "win_rate": 0.8337,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.1648,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-10-8": {
+    "equity": 0.9476,
+    "win_rate": 0.9469,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.0516,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "J-J-8": {
+    "equity": 0.8097,
+    "win_rate": 0.8096,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.1902,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "Q-J-8": {
+    "equity": 0.8236,
+    "win_rate": 0.8229,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.1756,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-J-8": {
+    "equity": 0.8381,
+    "win_rate": 0.8373,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.1612,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-J-8": {
+    "equity": 0.9518,
+    "win_rate": 0.951,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.0475,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-Q-8": {
+    "equity": 0.8259,
+    "win_rate": 0.8258,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.1741,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "K-Q-8": {
+    "equity": 0.8407,
+    "win_rate": 0.8399,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.1586,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-Q-8": {
+    "equity": 0.9535,
+    "win_rate": 0.9528,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.0458,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-K-8": {
+    "equity": 0.8412,
+    "win_rate": 0.8411,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.1588,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "A-K-8": {
+    "equity": 0.9546,
+    "win_rate": 0.9539,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.0447,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-A-8": {
+    "equity": 0.0942,
+    "win_rate": 0.0941,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.9057,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "9-9-9": {
+    "equity": 0.9989,
+    "win_rate": 0.9989,
+    "tie_rate": 0.0,
+    "loss_rate": 0.0011,
+    "category": "SAP",
+    "multiplicity": 4,
+    "samples": 18424
+  },
+  "10-9-9": {
+    "equity": 0.7937,
+    "win_rate": 0.7936,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.2062,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "J-9-9": {
+    "equity": 0.8059,
+    "win_rate": 0.8058,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.194,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "Q-9-9": {
+    "equity": 0.82,
+    "win_rate": 0.8199,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.1799,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "K-9-9": {
+    "equity": 0.8358,
+    "win_rate": 0.8358,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.1641,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "A-9-9": {
+    "equity": 0.9439,
+    "win_rate": 0.9438,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.0561,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "10-10-9": {
+    "equity": 0.8879,
+    "win_rate": 0.8879,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.112,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "J-10-9": {
+    "equity": 0.9889,
+    "win_rate": 0.9882,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.0104,
+    "category": "LIENG",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-10-9": {
+    "equity": 0.9138,
+    "win_rate": 0.9131,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.0854,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-10-9": {
+    "equity": 0.9291,
+    "win_rate": 0.9284,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.0701,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-10-9": {
+    "equity": 0.0858,
+    "win_rate": 0.0851,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.9134,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "J-J-9": {
+    "equity": 0.9033,
+    "win_rate": 0.9032,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.0967,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "Q-J-9": {
+    "equity": 0.9174,
+    "win_rate": 0.9167,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.0818,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-J-9": {
+    "equity": 0.9327,
+    "win_rate": 0.932,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.0665,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-J-9": {
+    "equity": 0.0906,
+    "win_rate": 0.0899,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.9087,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-Q-9": {
+    "equity": 0.919,
+    "win_rate": 0.9189,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.0809,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "K-Q-9": {
+    "equity": 0.9347,
+    "win_rate": 0.9339,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.0646,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-Q-9": {
+    "equity": 0.0926,
+    "win_rate": 0.0918,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.9067,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-K-9": {
+    "equity": 0.9352,
+    "win_rate": 0.9351,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.0648,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "A-K-9": {
+    "equity": 0.0937,
+    "win_rate": 0.0929,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.9056,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-A-9": {
+    "equity": 0.1839,
+    "win_rate": 0.1838,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.8161,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "10-10-10": {
+    "equity": 0.9991,
+    "win_rate": 0.9991,
+    "tie_rate": 0.0,
+    "loss_rate": 0.0009,
+    "category": "SAP",
+    "multiplicity": 4,
+    "samples": 18424
+  },
+  "J-10-10": {
+    "equity": 0.0412,
+    "win_rate": 0.0411,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.9587,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "Q-10-10": {
+    "equity": 0.0538,
+    "win_rate": 0.0537,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.9461,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "K-10-10": {
+    "equity": 0.0664,
+    "win_rate": 0.0663,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.9335,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "A-10-10": {
+    "equity": 0.1704,
+    "win_rate": 0.1703,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.8295,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "J-J-10": {
+    "equity": 0.0415,
+    "win_rate": 0.0415,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.9584,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "Q-J-10": {
+    "equity": 0.9924,
+    "win_rate": 0.9916,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.0069,
+    "category": "LIENG",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-J-10": {
+    "equity": 0.0684,
+    "win_rate": 0.0677,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.9309,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-J-10": {
+    "equity": 0.1743,
+    "win_rate": 0.1735,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.825,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "Q-Q-10": {
+    "equity": 0.0549,
+    "win_rate": 0.0548,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.945,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "K-Q-10": {
+    "equity": 0.0704,
+    "win_rate": 0.0696,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.9289,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-Q-10": {
+    "equity": 0.1772,
+    "win_rate": 0.1765,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.8221,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-K-10": {
+    "equity": 0.0709,
+    "win_rate": 0.0708,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.9291,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "A-K-10": {
+    "equity": 0.1821,
+    "win_rate": 0.1813,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.8172,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-A-10": {
+    "equity": 0.2775,
+    "win_rate": 0.2775,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.7224,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "J-J-J": {
+    "equity": 0.9993,
+    "win_rate": 0.9993,
+    "tie_rate": 0.0,
+    "loss_rate": 0.0007,
+    "category": "SAP",
+    "multiplicity": 4,
+    "samples": 18424
+  },
+  "Q-J-J": {
+    "equity": 0.9599,
+    "win_rate": 0.9598,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.04,
+    "category": "DI",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "K-J-J": {
+    "equity": 0.9604,
+    "win_rate": 0.9603,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.0396,
+    "category": "DI",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "A-J-J": {
+    "equity": 0.1779,
+    "win_rate": 0.1778,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.822,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "Q-Q-J": {
+    "equity": 0.9602,
+    "win_rate": 0.9602,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.0397,
+    "category": "DI",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "K-Q-J": {
+    "equity": 0.995,
+    "win_rate": 0.9942,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.0043,
+    "category": "LIENG",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-Q-J": {
+    "equity": 0.1814,
+    "win_rate": 0.1807,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.8178,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "K-K-J": {
+    "equity": 0.9612,
+    "win_rate": 0.9611,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.0387,
+    "category": "DI",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "A-K-J": {
+    "equity": 0.1863,
+    "win_rate": 0.1856,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.813,
+    "category": "DIEM",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-A-J": {
+    "equity": 0.2806,
+    "win_rate": 0.2805,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.7193,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "Q-Q-Q": {
+    "equity": 0.9996,
+    "win_rate": 0.9996,
+    "tie_rate": 0.0,
+    "loss_rate": 0.0004,
+    "category": "SAP",
+    "multiplicity": 4,
+    "samples": 18424
+  },
+  "K-Q-Q": {
+    "equity": 0.9609,
+    "win_rate": 0.9608,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.039,
+    "category": "DI",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "A-Q-Q": {
+    "equity": 0.1828,
+    "win_rate": 0.1827,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.8171,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "K-K-Q": {
+    "equity": 0.961,
+    "win_rate": 0.9609,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.0389,
+    "category": "DI",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "Q-K-A": {
+    "equity": 0.9969,
+    "win_rate": 0.9962,
+    "tie_rate": 0.0015,
+    "loss_rate": 0.0023,
+    "category": "LIENG",
+    "multiplicity": 64,
+    "samples": 18424
+  },
+  "A-A-Q": {
+    "equity": 0.2812,
+    "win_rate": 0.2812,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.7187,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "K-K-K": {
+    "equity": 0.9998,
+    "win_rate": 0.9998,
+    "tie_rate": 0.0,
+    "loss_rate": 0.0002,
+    "category": "SAP",
+    "multiplicity": 4,
+    "samples": 18424
+  },
+  "A-K-K": {
+    "equity": 0.1872,
+    "win_rate": 0.1871,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.8127,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "A-A-K": {
+    "equity": 0.2806,
+    "win_rate": 0.2805,
+    "tie_rate": 0.0002,
+    "loss_rate": 0.7193,
+    "category": "DIEM",
+    "multiplicity": 24,
+    "samples": 18424
+  },
+  "A-A-A": {
+    "equity": 1.0,
+    "win_rate": 1.0,
+    "tie_rate": 0.0,
+    "loss_rate": 0.0,
+    "category": "SAP",
+    "multiplicity": 4,
+    "samples": 18424
+  }
+}

@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.pytest_cache/
+.coverage
+
+# Keep data tracked
+!backend/data/winrates.json
+
+# Node & Frontend Build
+node_modules/
+frontend/dist/
+frontend/node_modules/
+.env.local
+.env.*.local
+
