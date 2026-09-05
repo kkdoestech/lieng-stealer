@@ -1,4 +1,4 @@
-# ***112ĐÁNH BẠI "NHÀ CÁI" TRONG ĐÊM CÙNG LÝ THUYẾT TRÒ CHƠI VÀ AI PAIR PROGRAMMING***
+# ***ĐÁNH BẠI "NHÀ CÁI" TRONG ĐÊM CÙNG LÝ THUYẾT TRÒ CHƠI VÀ AI PAIR PROGRAMMING***
 
 *\*P.S: Đây là educational project, không phải financial advice.\**
 

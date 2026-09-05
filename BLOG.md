@@ -1,4 +1,4 @@
-# **ĐÁNH BẠI "CHIẾU BẠC" TRONG ĐÊM CÙNG LÝ THUYẾT TRÒ CHƠI VÀ AI PAIR PROGRAMMINGg**
+# **ĐÁNH BẠI "CHIẾU BẠC" TRONG ĐÊM CÙNG LÝ THUYẾT TRÒ CHƠI VÀ ANTIGRAVITY**
 
 *Câu chuyện về một đêm mất ngủ, 22,100 thế bài Liêng, và hành trình đảo ngược một tool Texas Hold'em thành công cụ tính toán Expected Value thực thụ.*
 
