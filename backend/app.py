@@ -145,6 +145,95 @@ def solve_api() -> Any:
     })
 
 
+@app.route("/api/evaluate", methods=["POST"])
+def evaluate_api() -> Any:
+    """Evaluate a single 3-card hand against current game parameters."""
+    data = request.get_json(silent=True) or {}
+    try:
+        pot = float(data.get("pot", 100000.0))
+        bet = float(data.get("bet", data.get("bet_size", 50000.0)))
+        fold_equity = float(data.get("fold_equity", 0.35))
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid numerical parameters for pot, bet, or fold_equity."}), 400
+
+    if pot <= 0 or bet <= 0:
+        return jsonify({"error": "Pot and bet must be strictly greater than zero."}), 400
+    if not (0.0 <= fold_equity <= 1.0):
+        return jsonify({"error": "Fold equity must be between 0.0 and 1.0."}), 400
+
+    hand_input = data.get("hand")
+    if not hand_input or not isinstance(hand_input, str) or not hand_input.strip():
+        return jsonify({"error": "Field 'hand' is required."}), 400
+
+    try:
+        player_hand = Hand.from_str(hand_input.strip())
+        stats = win_rate_db.get_by_cards(player_hand.cards)
+        ev_res = evaluate_action(pot, bet, fold_equity, stats.equity)
+        canonical = to_canonical(player_hand.cards)
+        return jsonify({
+            "hand": str(player_hand),
+            "canonical_id": canonical.canonical_id,
+            "category": stats.category.name,
+            "pot": pot,
+            "bet": bet,
+            "fold_equity": fold_equity,
+            "showdown_equity": stats.equity,
+            "ev": ev_res.ev,
+            "break_even_fold_equity": ev_res.break_even_fold_equity,
+            "recommended_action": "RAISE" if ev_res.is_profitable else "CHECK/FOLD",
+            "is_profitable": ev_res.is_profitable,
+        }), 200
+    except LiengError as err:
+        return jsonify({"error": f"Invalid hand: {err}"}), 400
+
+
+@app.route("/api/range", methods=["POST"])
+def range_api() -> Any:
+    """Scan and return full combinatorial range coverage and thresholds."""
+    data = request.get_json(silent=True) or {}
+    try:
+        pot = float(data.get("pot", 100000.0))
+        bet = float(data.get("bet", data.get("bet_size", 50000.0)))
+        fold_equity = float(data.get("fold_equity", 0.35))
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid numerical parameters for pot, bet, or fold_equity."}), 400
+
+    if pot <= 0 or bet <= 0:
+        return jsonify({"error": "Pot and bet must be strictly greater than zero."}), 400
+    if not (0.0 <= fold_equity <= 1.0):
+        return jsonify({"error": "Fold equity must be between 0.0 and 1.0."}), 400
+
+    records = range_finder.solve_range(pot, bet, fold_equity)
+    profitable = [r for r in records if r.is_raise_profitable]
+    coverage = range_finder.calculate_range_coverage(profitable)
+    be_bluff = calculate_break_even_fold_equity(pot, bet, win_rate_when_called=0.0)
+    combos = sum(r.multiplicity for r in profitable)
+
+    return jsonify({
+        "pot": pot,
+        "bet": bet,
+        "fold_equity": fold_equity,
+        "final_pot": pot + 2.0 * bet,
+        "pure_bluff_break_even_fold_equity": be_bluff,
+        "total_combinations": 22100,
+        "profitable_combinations": combos,
+        "range_coverage_percent": coverage,
+        "total_canonical_classes": len(records),
+        "profitable_classes": len(profitable),
+        "top_hands": [
+            {
+                "canonical_id": r.canonical_id,
+                "category": r.category.name,
+                "showdown_equity": r.equity,
+                "ev": r.ev,
+                "multiplicity": r.multiplicity,
+                "recommended_action": "RAISE" if r.is_raise_profitable else "CHECK/FOLD",
+            }
+            for r in records[:30]
+        ],
+    }), 200
+
+
 @app.route("/api/analyze", methods=["POST"])
 def analyze_api() -> Any:
     """Query OpenRouter LLM for strategic game-theoretic commentary."""
