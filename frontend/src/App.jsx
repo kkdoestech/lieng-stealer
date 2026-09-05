@@ -18,6 +18,7 @@ export default function App() {
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [solveData, setSolveData] = useState(null);
   const [aiAdvice, setAiAdvice] = useState("");
+  const [isNotesOpen, setIsNotesOpen] = useState(false);
   const [error, setError] = useState("");
 
   const handleSolve = async () => {
@@ -47,7 +48,7 @@ export default function App() {
       setSolveData(solveJson);
       setIsLoading(false);
 
-      // 2. Call analyze endpoint for strategic AI advice
+      // 2. Call analyze endpoint for strategic AI telemetry
       try {
         const analyzeRes = await fetch(`${API_BASE}/api/analyze`, {
           method: "POST",
@@ -64,17 +65,17 @@ export default function App() {
 
         if (analyzeRes.ok) {
           const analyzeJson = await analyzeRes.json();
-          setAiAdvice(analyzeJson.advice || "Không có lời khuyên.");
+          setAiAdvice(analyzeJson.advice || "No telemetry analysis generated.");
         } else {
-          setAiAdvice("Không thể kết nối AI gateway.");
+          setAiAdvice("AI telemetry gateway unreachable.");
         }
       } catch (aiErr) {
-        setAiAdvice("Lỗi khi tải AI Commentary: " + aiErr.message);
+        setAiAdvice(`Telemetry transmission fault: ${aiErr.message}`);
       } finally {
         setIsAiLoading(false);
       }
     } catch (err) {
-      setError("Backend offline. Ensure 'python app.py' is running on port 5000.");
+      setError("LOCAL SOLVER DAEMON OFFLINE. VERIFY BACKEND RUNNING ON PORT 5000.");
       setIsLoading(false);
       setIsAiLoading(false);
     }
@@ -89,41 +90,100 @@ export default function App() {
   const summary = solveData?.summary;
   const isRaise = handEval?.decision === "RAISE";
 
+  // Category Matrix Statistics
+  const totalProfitableCombos = summary?.profitable_combinations || 0;
+  const sapProfitable = Math.min(52, Math.max(0, totalProfitableCombos));
+  const liengProfitable = Math.min(768, Math.max(0, totalProfitableCombos - 52));
+  const diProfitable = Math.min(288, Math.max(0, totalProfitableCombos - 820));
+  const diemProfitable = Math.min(20992, Math.max(0, totalProfitableCombos - 1108));
+
+  const categoryMatrix = [
+    {
+      name: "SÁP",
+      desc: "Three of a Kind",
+      classes: 13,
+      combos: 52,
+      profitable: sapProfitable,
+      pct: ((sapProfitable / 52) * 100).toFixed(1),
+      tier: "TIER 1 (NUTS)",
+    },
+    {
+      name: "LIÊNG",
+      desc: "Straight Sequence",
+      classes: 12,
+      combos: 768,
+      profitable: liengProfitable,
+      pct: ((liengProfitable / 768) * 100).toFixed(1),
+      tier: "TIER 2 (STRONG)",
+    },
+    {
+      name: "ĐĨ",
+      desc: "Three Face Cards",
+      classes: 6,
+      combos: 288,
+      profitable: diProfitable,
+      pct: ((diProfitable / 288) * 100).toFixed(1),
+      tier: "TIER 3 (MEDIUM)",
+    },
+    {
+      name: "ĐIỂM",
+      desc: "Points Modulo 10",
+      classes: 424,
+      combos: 20992,
+      profitable: diemProfitable,
+      pct: ((diemProfitable / 20992) * 100).toFixed(1),
+      tier: "TIER 4 (MARGINAL)",
+    },
+  ];
+
   return (
-    <div className="app-container">
-      {/* Header */}
-      <header className="app-header">
-        <div className="brand-badge">
-          <span className="dot"></span>
-          <span>GAME-THEORETIC SOLVER & AI ADVISOR</span>
+    <div className="terminal-container">
+      {/* Tactical Header & Telemetry Status */}
+      <header className="terminal-header">
+        <div className="brand-group">
+          <h1 className="terminal-title">
+            <span className="brand-white">LIÊNG</span> <span className="brand-green">SCOPE</span>
+          </h1>
+          <p className="terminal-subtitle">GTO SOLVER & COMBINATORIAL ENGINE</p>
         </div>
-        <h1 className="app-title">Liêng Stealer</h1>
-        <p className="app-subtitle">
-          High-performance Expected Value solver and optimal range calculator for 3-card Vietnamese Liêng.
-        </p>
+
+        <div className="telemetry-status-tag">
+          <span className="radar-beacon"></span>
+          <span className="telemetry-status-text">LIVE SOLVER</span>
+          <span className="telemetry-separator">/</span>
+          <span className="telemetry-classes">455 CLASSES LOADED</span>
+        </div>
       </header>
 
-      {/* Main Dashboard Grid */}
-      <main className="dashboard-grid">
-        {/* Left Column: Form Controls */}
-        <section className="card-panel">
-          <h2 className="panel-title">
-            <span>⚙️</span> Game State Parameters
-          </h2>
+      {/* Main Tactical Grid */}
+      <main className="terminal-grid">
+        {/* Left Column: Control Telemetry */}
+        <section className="terminal-card control-panel">
+          <div className="panel-header">
+            <span className="panel-tag">// TELEMETRY CONTROLS</span>
+            <span className="panel-id">SEC-01</span>
+          </div>
 
           <div className="form-group">
-            <label className="form-label">Current Pot (Dead Money)</label>
-            <input
-              type="number"
-              className="input-field"
-              value={pot}
-              onChange={(e) => setPot(Number(e.target.value))}
-              step="10000"
-              min="1000"
-            />
-            <div className="quick-tags">
+            <label className="form-label">CURRENT POT (VND)</label>
+            <div className="input-wrapper">
+              <input
+                type="number"
+                className="input-field"
+                value={pot}
+                onChange={(e) => setPot(Number(e.target.value))}
+                step="10000"
+                min="1000"
+              />
+            </div>
+            <div className="preset-chips">
               {[50000, 100000, 200000, 500000].map((v) => (
-                <button key={v} type="button" className="tag-btn" onClick={() => setPot(v)}>
+                <button
+                  key={v}
+                  type="button"
+                  className={`preset-chip ${pot === v ? "active" : ""}`}
+                  onClick={() => setPot(v)}
+                >
                   {v / 1000}k
                 </button>
               ))}
@@ -131,60 +191,46 @@ export default function App() {
           </div>
 
           <div className="form-group">
-            <label className="form-label">Bet / Raise Sizing</label>
-            <input
-              type="number"
-              className="input-field"
-              value={betSize}
-              onChange={(e) => setBetSize(Number(e.target.value))}
-              step="10000"
-              min="1000"
-            />
-            <div className="quick-tags">
-              <button type="button" className="tag-btn" onClick={() => setBetSize(Math.round(pot * 0.5))}>
+            <label className="form-label">BET / RAISE SIZING</label>
+            <div className="input-wrapper">
+              <input
+                type="number"
+                className="input-field"
+                value={betSize}
+                onChange={(e) => setBetSize(Number(e.target.value))}
+                step="10000"
+                min="1000"
+              />
+            </div>
+            <div className="preset-chips">
+              <button
+                type="button"
+                className={`preset-chip ${betSize === Math.round(pot * 0.5) ? "active" : ""}`}
+                onClick={() => setBetSize(Math.round(pot * 0.5))}
+              >
                 0.5x Pot
               </button>
-              <button type="button" className="tag-btn" onClick={() => setBetSize(pot)}>
-                1x Pot
+              <button
+                type="button"
+                className={`preset-chip ${betSize === pot ? "active" : ""}`}
+                onClick={() => setBetSize(pot)}
+              >
+                1.0x Pot
               </button>
-              <button type="button" className="tag-btn" onClick={() => setBetSize(pot * 2)}>
-                2x Pot
-              </button>
-            </div>
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">Player Hand (3 Cards)</label>
-            <input
-              type="text"
-              className="input-field mono"
-              value={hand}
-              onChange={(e) => setHand(e.target.value)}
-              placeholder="e.g. As Kh Qd or 9s 10c Kd"
-            />
-            <div className="quick-tags">
-              <button type="button" className="tag-btn" onClick={() => setHand("As Kh Qd")}>
-                Liêng Q-K-A
-              </button>
-              <button type="button" className="tag-btn" onClick={() => setHand("7s 7h 7d")}>
-                Sáp 7
-              </button>
-              <button type="button" className="tag-btn" onClick={() => setHand("Js Qh Kd")}>
-                Liêng J-Q-K
-              </button>
-              <button type="button" className="tag-btn" onClick={() => setHand("9s 10h Kd")}>
-                9 điểm
-              </button>
-              <button type="button" className="tag-btn" onClick={() => setHand("2s 3h 5d")}>
-                0 điểm (Bù)
+              <button
+                type="button"
+                className={`preset-chip ${betSize === pot * 2 ? "active" : ""}`}
+                onClick={() => setBetSize(pot * 2)}
+              >
+                2.0x Pot
               </button>
             </div>
           </div>
 
           <div className="form-group">
-            <div className="slider-header">
-              <label className="form-label" style={{ marginBottom: 0 }}>Opponent Fold Equity</label>
-              <span className="slider-val mono">{Math.round(foldEquity * 100)}%</span>
+            <div className="slider-label-row">
+              <label className="form-label">OPPONENT FOLD FREQUENCY</label>
+              <span className="slider-value-badge">{Math.round(foldEquity * 100)}%</span>
             </div>
             <input
               type="range"
@@ -193,145 +239,258 @@ export default function App() {
               step="0.01"
               value={foldEquity}
               onChange={(e) => setFoldEquity(parseFloat(e.target.value))}
-              className="range-slider"
+              className="radar-slider"
             />
-            <div className="slider-hints">
-              <span>0% (Calling Station)</span>
+            <div className="slider-calibrations">
+              <span>0% (CALLING STATION)</span>
               <span>50%</span>
-              <span>100% (Tight/Fold)</span>
+              <span>100% (EXTREME FOLD)</span>
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">PLAYER HAND (3 CARDS)</label>
+            <div className="input-wrapper">
+              <input
+                type="text"
+                className="input-field mono-bold"
+                value={hand}
+                onChange={(e) => setHand(e.target.value)}
+                placeholder="e.g. As Kh Qd"
+              />
+            </div>
+            <div className="preset-chips">
+              <button
+                type="button"
+                className={`preset-chip ${hand === "As Kh Qd" ? "active" : ""}`}
+                onClick={() => setHand("As Kh Qd")}
+              >
+                Liêng Q-K-A
+              </button>
+              <button
+                type="button"
+                className={`preset-chip ${hand === "7s 7h 7d" ? "active" : ""}`}
+                onClick={() => setHand("7s 7h 7d")}
+              >
+                Sáp 7
+              </button>
+              <button
+                type="button"
+                className={`preset-chip ${hand === "Js Qh Kd" ? "active" : ""}`}
+                onClick={() => setHand("Js Qh Kd")}
+              >
+                Liêng J-Q-K
+              </button>
+              <button
+                type="button"
+                className={`preset-chip ${hand === "9s 10h Kd" ? "active" : ""}`}
+                onClick={() => setHand("9s 10h Kd")}
+              >
+                9 Điểm
+              </button>
+              <button
+                type="button"
+                className={`preset-chip ${hand === "2s 3h 5d" ? "active" : ""}`}
+                onClick={() => setHand("2s 3h 5d")}
+              >
+                0 Điểm (Bù)
+              </button>
             </div>
           </div>
 
           <button
             type="button"
-            className="btn-primary"
+            className="tactical-btn"
             onClick={handleSolve}
             disabled={isLoading}
           >
-            {isLoading ? <span className="spinner"></span> : "⚡ Solve & Analyze"}
+            {isLoading ? "[ COMPUTING RANGE... ]" : "[ EXECUTE SOLVER ]"}
           </button>
 
           {error && (
-            <div style={{ marginTop: "1rem", color: "var(--accent-rose)", fontSize: "0.85rem" }}>
-              ⚠️ {error}
+            <div className="terminal-alert">
+              <span className="alert-marker">!</span>
+              <span>{error}</span>
             </div>
           )}
+
+          {/* Engine Specs Sub-Card */}
+          <div className="specs-subcard">
+            <div className="spec-row">
+              <span className="spec-label">SOLVER ARCHITECTURE</span>
+              <span className="spec-val">MONTE CARLO / CANONICAL</span>
+            </div>
+            <div className="spec-row">
+              <span className="spec-label">COMBINATORIAL SPACE</span>
+              <span className="spec-val">22,100 COMBOS (455 CLS)</span>
+            </div>
+            <div className="spec-row">
+              <span className="spec-label">ONLINE QUERY COMPLEXITY</span>
+              <span className="spec-val">O(1) CACHED LOOKUP</span>
+            </div>
+          </div>
         </section>
 
-        {/* Right Column: Output Dashboards */}
+        {/* Right Column: Strategic HUD & Matrix */}
         <section className="results-container">
-          {/* Decision Hero Card */}
+          {/* Verdict Banner */}
           {handEval && (
-            <div className={`decision-card ${isRaise ? "raise" : "check-fold"}`}>
-              <div>
-                <span className="decision-label">Recommended Action</span>
-                <h3 className="decision-action">
-                  {isRaise ? "RAISE / ALL-IN" : "CHECK / FOLD"}
-                </h3>
-                <p className="decision-hand-tag">
-                  {handEval.hand} • <span style={{ color: "#93c5fd" }}>{handEval.score_name}</span>
-                </p>
+            <div className={`verdict-banner ${isRaise ? "verdict-raise" : "verdict-fold"}`}>
+              <div className="verdict-col-left">
+                <span className="verdict-label">// RECOMMENDED ACTION</span>
+                <h2 className="verdict-title">
+                  {isRaise ? "ACTION: RAISE / ALL-IN" : "ACTION: CHECK / FOLD"}
+                </h2>
+                <div className="verdict-meta">
+                  <span className="holding-tag">{handEval.hand}</span>
+                  <span className="holding-sep">•</span>
+                  <span className="holding-class">[{handEval.canonical_id}]</span>
+                  <span className="holding-sep">•</span>
+                  <span className="holding-score">{handEval.score_name.toUpperCase()}</span>
+                </div>
               </div>
-              <div style={{ textAlign: "right" }}>
-                <span className="decision-label">Expected Value</span>
-                <h3 className="decision-action" style={{ fontSize: "1.8rem" }}>
-                  {handEval.ev > 0 ? "+" : ""}{formatMoney(handEval.ev)} VND
-                </h3>
-                <p className="metric-subtext">
-                  Break-even Fold Equity: {Math.round(handEval.break_even_fold_equity * 100)}%
-                </p>
+
+              <div className="verdict-col-right">
+                <span className="verdict-label">// EXPECTED VALUE</span>
+                <div className="verdict-ev">
+                  {handEval.ev > 0 ? "+" : ""}{formatMoney(handEval.ev)} <span className="ev-currency">VND</span>
+                </div>
+                <div className="verdict-breakeven">
+                  BREAK-EVEN FOLD EQ: <span className="mono-green">{Math.round(handEval.break_even_fold_equity * 100)}%</span>
+                </div>
               </div>
             </div>
           )}
 
-          {/* Metrics Grid */}
-          <div className="metrics-grid">
-            <div className="metric-card">
-              <div className="metric-label">Range Coverage</div>
-              <div className="metric-value positive">
+          {/* 4-Card Metrics HUD */}
+          <div className="hud-metrics-grid">
+            <div className="hud-card">
+              <div className="hud-label">RANGE COVERAGE</div>
+              <div className="hud-value green-glow">
                 {summary?.range_coverage_percent?.toFixed(1) || "0.0"}%
               </div>
-              <div className="metric-subtext">
-                {summary?.profitable_combinations?.toLocaleString()} / 22,100 hands
+              <div className="hud-subtext">
+                {summary?.profitable_combinations?.toLocaleString() || "0"} / 22,100 COMBOS
               </div>
             </div>
 
-            <div className="metric-card">
-              <div className="metric-label">Showdown Equity</div>
-              <div className="metric-value" style={{ color: "#38bdf8" }}>
+            <div className="hud-card">
+              <div className="hud-label">SHOWDOWN EQUITY</div>
+              <div className="hud-value white-metric">
                 {handEval ? `${(handEval.showdown_equity * 100).toFixed(1)}%` : "N/A"}
               </div>
-              <div className="metric-subtext">vs. random 49 cards</div>
+              <div className="hud-subtext">VS UNKNOWN 49-CARD SPECTRUM</div>
             </div>
 
-            <div className="metric-card">
-              <div className="metric-label">Pure Bluff Threshold</div>
-              <div className="metric-value" style={{ color: "#fbbf24" }}>
+            <div className="hud-card">
+              <div className="hud-label">EXPECTED VALUE</div>
+              <div className={`hud-value ${handEval?.ev > 0 ? "green-metric" : "dim-metric"}`}>
+                {handEval ? `${handEval.ev > 0 ? "+" : ""}${formatMoney(handEval.ev)}` : "0"}
+              </div>
+              <div className="hud-subtext">NET VND GAIN PER DECISION</div>
+            </div>
+
+            <div className="hud-card">
+              <div className="hud-label">PURE BLUFF THRESHOLD</div>
+              <div className="hud-value amber-metric">
                 {summary ? `${(summary.pure_bluff_break_even_fold_equity * 100).toFixed(1)}%` : "N/A"}
               </div>
-              <div className="metric-subtext">Fold Equity needed to bluff 0 pts</div>
-            </div>
-
-            <div className="metric-card">
-              <div className="metric-label">Final Pot</div>
-              <div className="metric-value" style={{ color: "#e2e8f0" }}>
-                {formatMoney(summary?.final_pot)}
-              </div>
-              <div className="metric-subtext">Pot + 2x Bet</div>
+              <div className="hud-subtext">MIN FOLD EQ FOR 0-PT AIR</div>
             </div>
           </div>
 
-          {/* AI Strategic Commentary Block */}
-          <div className="ai-card">
-            <div className="ai-header">
-              <div className="ai-title">
-                <span>🤖</span> AI Strategic Commentary
-              </div>
-              <span className="ai-badge">Llama 3.1 8B Instruct</span>
+          {/* Range Breakdown Matrix Table */}
+          <div className="terminal-card table-panel">
+            <div className="panel-header">
+              <span className="panel-tag">// CATEGORY COVERAGE MATRIX</span>
+              <span className="panel-id">4 CORE HIERARCHIES</span>
             </div>
-            {isAiLoading ? (
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--text-secondary)" }}>
-                <span className="spinner"></span>
-                <span>Generating game-theoretic breakdown via OpenRouter...</span>
-              </div>
-            ) : (
-              <div className="ai-content">{aiAdvice || "No analysis available yet."}</div>
-            )}
+
+            <div className="table-wrapper">
+              <table className="tactical-table">
+                <thead>
+                  <tr>
+                    <th>CATEGORY</th>
+                    <th>DESCRIPTION</th>
+                    <th>CLASSES</th>
+                    <th>COMBOS</th>
+                    <th>PROFITABLE</th>
+                    <th>COVERAGE</th>
+                    <th>RADAR STATUS</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {categoryMatrix.map((cat) => (
+                    <tr key={cat.name}>
+                      <td>
+                        <span className={`cat-pill cat-${cat.name}`}>{cat.name}</span>
+                      </td>
+                      <td className="desc-cell">{cat.desc}</td>
+                      <td className="mono-num">{cat.classes}</td>
+                      <td className="mono-num">{cat.combos.toLocaleString()}</td>
+                      <td className="mono-num">{cat.profitable.toLocaleString()}</td>
+                      <td className="mono-num highlight-val">{cat.pct}%</td>
+                      <td>
+                        <span
+                          className={`status-chip ${
+                            Number(cat.pct) === 100
+                              ? "chip-full"
+                              : Number(cat.pct) > 0
+                              ? "chip-partial"
+                              : "chip-zero"
+                          }`}
+                        >
+                          {Number(cat.pct) === 100
+                            ? "100% PUSH"
+                            : Number(cat.pct) > 0
+                            ? "PARTIAL"
+                            : "FOLD"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
 
-          {/* Top Profitable Hands Table */}
+          {/* Top Canonical Holdings Table */}
           {solveData?.top_hands && (
-            <div className="card-panel" style={{ padding: "1.25rem" }}>
-              <h3 className="panel-title" style={{ fontSize: "1rem" }}>
-                <span>🏆</span> Top Profitable Raising Holdings (Sample Range)
-              </h3>
-              <div className="table-container">
-                <table className="hands-table">
+            <div className="terminal-card table-panel">
+              <div className="panel-header">
+                <span className="panel-tag">// TOP PROFITABLE HOLDINGS</span>
+                <span className="panel-id">SAMPLE EQUIVALENCE CLASSES</span>
+              </div>
+
+              <div className="table-wrapper">
+                <table className="tactical-table">
                   <thead>
                     <tr>
-                      <th>Canonical Class</th>
-                      <th>Category</th>
-                      <th>Showdown Equity</th>
-                      <th>Expected Value (EV)</th>
-                      <th>Multiplicity</th>
+                      <th>CANONICAL ID</th>
+                      <th>CATEGORY</th>
+                      <th>SHOWDOWN EQUITY</th>
+                      <th>EXPECTED VALUE (EV)</th>
+                      <th>MULTIPLICITY</th>
+                      <th>ACTION</th>
                     </tr>
                   </thead>
                   <tbody>
                     {solveData.top_hands.slice(0, 10).map((item) => (
                       <tr key={item.canonical_id}>
-                        <td className="mono" style={{ fontWeight: 700, color: "#f8fafc" }}>
-                          {item.canonical_id}
-                        </td>
+                        <td className="mono-canonical">{item.canonical_id}</td>
                         <td>
-                          <span className={`badge-cat badge-${item.category}`}>
-                            {item.category}
-                          </span>
+                          <span className={`cat-pill cat-${item.category}`}>{item.category}</span>
                         </td>
-                        <td>{(item.equity * 100).toFixed(1)}%</td>
-                        <td style={{ fontWeight: 700, color: item.ev > 0 ? "var(--accent-emerald)" : "var(--accent-rose)" }}>
+                        <td className="mono-num">{(item.equity * 100).toFixed(1)}%</td>
+                        <td className={`mono-num bold-num ${item.ev > 0 ? "positive-ev" : "negative-ev"}`}>
                           {item.ev > 0 ? "+" : ""}{formatMoney(item.ev)} VND
                         </td>
-                        <td style={{ color: "var(--text-muted)" }}>{item.multiplicity} combos</td>
+                        <td className="dim-cell">{item.multiplicity} combos</td>
+                        <td>
+                          <span className={`action-badge ${item.is_profitable ? "act-raise" : "act-fold"}`}>
+                            {item.is_profitable ? "RAISE" : "FOLD"}
+                          </span>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -339,6 +498,38 @@ export default function App() {
               </div>
             </div>
           )}
+
+          {/* Collapsible Mathematical Telemetry Notes Drawer */}
+          <div className="notes-drawer-container">
+            <button
+              type="button"
+              className="drawer-toggle-btn"
+              onClick={() => setIsNotesOpen(!isNotesOpen)}
+            >
+              <span>{isNotesOpen ? "[ − COLLAPSE TELEMETRY NOTES ]" : "[ + MATHEMATICAL TELEMETRY NOTES ]"}</span>
+              <span className="drawer-indicator">{isNotesOpen ? "▲" : "▼"}</span>
+            </button>
+
+            {isNotesOpen && (
+              <div className="drawer-content">
+                <div className="drawer-header">
+                  <span className="drawer-title">// GAME-THEORETIC TELEMETRY ADVISORY</span>
+                  <span className="drawer-sub">OPENROUTER / LLAMA 3.1 8B INSTRUCT</span>
+                </div>
+
+                {isAiLoading ? (
+                  <div className="telemetry-loading">
+                    <span className="radar-spinner"></span>
+                    <span>&gt; TRANSMITTING GAME-THEORETIC TELEMETRY QUERY...</span>
+                  </div>
+                ) : (
+                  <div className="telemetry-body">
+                    {aiAdvice || "No active telemetry payload recorded for this game state."}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </section>
       </main>
     </div>
