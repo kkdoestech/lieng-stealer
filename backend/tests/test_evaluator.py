@@ -20,7 +20,6 @@ from src.evaluator import (
     Rank,
     Suit,
     calculate_points,
-    evaluate_hand,
 )
 from src.exceptions import InvalidCardError, InvalidHandSizeError
 

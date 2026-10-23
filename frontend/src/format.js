@@ -1,4 +1,4 @@
-// Pure formatting helpers, kept outside React so they can be unit-tested with `node --test`.
+// Pure formatting helpers, kept outside React so they can be unit-tested without a browser.
 
 export function formatMoney(num, locale) {
   if (num === undefined || num === null) return "0";

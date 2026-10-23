@@ -13,11 +13,12 @@ import itertools
 import json
 import os
 import random
+from collections.abc import Sequence
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
-from src.evaluator import Card, Deck, evaluate_hand
+from src.evaluator import Deck, evaluate_hand
 from src.hands import (
     CanonicalHand,
     generate_all_canonical_hands,
@@ -72,8 +73,8 @@ def compute_hand_equity(
         # Monte Carlo random sampling
         total_showdowns = samples
         for _ in range(samples):
-            opp_cards = random.sample(remaining_deck, 3)
-            opp_score = evaluate_hand(opp_cards)
+            sampled = random.sample(remaining_deck, 3)
+            opp_score = evaluate_hand(sampled)
             if hero_score > opp_score:
                 wins += 1
             elif hero_score == opp_score:

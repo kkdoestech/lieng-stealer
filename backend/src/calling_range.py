@@ -15,9 +15,10 @@ from __future__ import annotations
 from array import array
 from bisect import bisect_right
 from collections import Counter
-from enum import Enum
+from collections.abc import Sequence
+from enum import StrEnum
 from math import comb
-from typing import Final, Sequence
+from typing import Final
 
 from src.hands import CanonicalHand, generate_all_canonical_hands
 
@@ -30,7 +31,7 @@ _COMB: Final[tuple[tuple[int, ...], ...]] = tuple(
 )
 
 
-class OpponentModel(str, Enum):
+class OpponentModel(StrEnum):
     """How the opponent decides which hands to fold."""
     RANDOM = "random"  # Folds regardless of strength, so a call comes from a random hand
     RANGE = "range"    # Folds the weakest hands, calls with the strongest (1 - f)
@@ -149,7 +150,7 @@ class CallingRangeModel:
         if hero < k:
             # Hero beats every calling class weaker than itself, including the boundary
             beaten = row[k] - row[hero + 1] + boundary
-            tied = row[hero + 1] - row[hero]
+            tied = float(row[hero + 1] - row[hero])
         elif hero == k:
             beaten = 0.0
             tied = boundary

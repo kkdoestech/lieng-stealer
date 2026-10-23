@@ -7,9 +7,10 @@ and AI-powered strategic commentary via OpenRouter LLM.
 from __future__ import annotations
 
 import os
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Sequence
+from typing import Any
 
 import requests
 from flask import Flask, jsonify, request
@@ -17,9 +18,9 @@ from flask_cors import CORS
 
 from src.calling_range import CallingRangeModel, OpponentModel
 from src.db import WinRateDB
+from src.ev import EVResult, calculate_break_even_fold_equity, evaluate_action, profitable_fold_zones
 from src.evaluator import Hand, HandCategory
 from src.exceptions import InvalidGameParamsError, LiengError
-from src.ev import EVResult, calculate_break_even_fold_equity, evaluate_action, profitable_fold_zones
 from src.hands import to_canonical
 from src.range_finder import HandEVRecord, RangeFinder
 

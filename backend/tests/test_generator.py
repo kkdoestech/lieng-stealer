@@ -10,18 +10,15 @@ Verifies:
 
 import json
 from pathlib import Path
+
 import pytest
 
-from src.evaluator import HandCategory
 from src.generator import (
     build_parser,
     compute_hand_equity,
-    generate_winrates_database,
 )
 from src.hands import (
     generate_all_canonical_hands,
-    to_canonical,
-    get_representative_cards,
 )
 
 
@@ -94,7 +91,7 @@ class TestGeneratorEngine:
             db_path = Path(__file__).resolve().parent.parent / "data" / "winrates.json"
         assert db_path.exists(), "data/winrates.json must exist"
 
-        with open(db_path, "r", encoding="utf-8") as f:
+        with open(db_path, encoding="utf-8") as f:
             data = json.load(f)
 
         assert len(data) == 455, f"Expected 455 canonical hands, got {len(data)}"

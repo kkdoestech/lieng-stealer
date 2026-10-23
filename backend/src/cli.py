@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import argparse
 import sys
-from typing import Sequence
+from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 # Ensure UTF-8 output encoding for Windows terminals
 if sys.stdout and hasattr(sys.stdout, "reconfigure"):
@@ -19,8 +20,8 @@ if sys.stdout and hasattr(sys.stdout, "reconfigure"):
 
 from src.calling_range import CallingRangeModel, OpponentModel
 from src.db import WinRateDB
+from src.ev import calculate_break_even_fold_equity, evaluate_action
 from src.evaluator import Hand, HandCategory
-from src.ev import calculate_break_even_fold_equity, calculate_ev, evaluate_action
 from src.exceptions import LiengError
 from src.hands import to_canonical
 from src.range_finder import HandEVRecord, RangeFinder
@@ -30,12 +31,15 @@ MODEL_DESCRIPTIONS = {
     OpponentModel.RANGE: "folds weakest hands first (range)",
 }
 
+if TYPE_CHECKING:
+    from rich.console import Console
+
+_console: Console | None
 try:
     from rich import box
     from rich.console import Console
     from rich.panel import Panel
     from rich.table import Table
-    from rich.text import Text
     HAS_RICH = True
     _console = Console(legacy_windows=False)
 except ImportError:

@@ -8,12 +8,14 @@ Verifies:
 - Full 455-hand equity table stays within the 25 ms range-solve budget
 """
 
+import itertools
 import time
 
 import pytest
 
 from src.calling_range import OPPONENT_COMBINATIONS, CallingRangeModel
 from src.db import WinRateDB
+from tests.perf import budget
 
 
 @pytest.fixture(scope="module")
@@ -46,7 +48,7 @@ class TestCallingRangeModel:
 
     def test_equity_never_increases_with_fold_equity(self, model: CallingRangeModel) -> None:
         tables = [model.equity_table(i / 20) for i in range(21)]
-        for weaker_range, stronger_range in zip(tables, tables[1:]):
+        for weaker_range, stronger_range in itertools.pairwise(tables):
             for cid, equity in stronger_range.items():
                 assert equity <= weaker_range[cid] + 1e-9, cid
 
@@ -75,4 +77,4 @@ class TestCallingRangeModel:
         start = time.perf_counter()
         model.equity_table(0.35)
         elapsed_ms = (time.perf_counter() - start) * 1000
-        assert elapsed_ms < 25.0
+        assert elapsed_ms < budget(25.0)

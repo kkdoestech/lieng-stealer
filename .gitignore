@@ -5,15 +5,16 @@ __pycache__/
 .venv/
 venv/
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 .coverage
 
-# Keep data tracked
-!backend/data/winrates.json
+# Secrets: never commit real environment files (backend/.env.example documents the variables)
+.env
+.env.*
+!.env.example
 
 # Node & Frontend Build
 node_modules/
 frontend/dist/
 frontend/node_modules/
-.env.local
-.env.*.local
-

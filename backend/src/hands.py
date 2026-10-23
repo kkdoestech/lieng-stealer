@@ -12,19 +12,18 @@ from __future__ import annotations
 
 import itertools
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Final, Sequence
 
 from src.evaluator import (
     Card,
-    Hand,
     HandCategory,
     HandScore,
     Rank,
     Suit,
     evaluate_hand,
 )
-from src.exceptions import InvalidCardError, InvalidHandSizeError
+from src.exceptions import InvalidHandSizeError
 
 
 @dataclass(frozen=True)

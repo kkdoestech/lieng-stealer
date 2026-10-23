@@ -12,6 +12,7 @@ rigorous across 6 diverse game scenarios:
 
 import sys
 from pathlib import Path
+
 import pytest
 
 # Ensure UTF-8 encoding on Windows terminal output

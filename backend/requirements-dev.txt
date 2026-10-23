@@ -1,0 +1,7 @@
+# Everything for local development: the API, the CLI, tests, linting and type checks.
+-r requirements.txt
+pytest==9.1.1
+rich==13.7.1
+ruff==0.17.2
+mypy==2.4.0
+types-requests==2.33.0.20261006

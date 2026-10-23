@@ -7,12 +7,13 @@ typed, immutable in-memory Hash Table for high-performance O(1) decision queries
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 from src.evaluator import Card, HandCategory
-from src.exceptions import DatabaseError, DatabaseNotLoadedError, InvalidHandSizeError
+from src.exceptions import DatabaseError, DatabaseNotLoadedError
 from src.hands import get_canonical_id
 
 
@@ -28,7 +29,7 @@ class HandStats:
     samples: int
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "HandStats":
+    def from_dict(cls, data: dict[str, Any]) -> HandStats:
         """Construct a HandStats instance from a dictionary record."""
         return cls(
             equity=float(data["equity"]),
@@ -79,7 +80,7 @@ class WinRateDB:
                 raise DatabaseError(f"Database file '{filepath}' does not exist.")
 
         try:
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 raw_data = json.load(f)
         except json.JSONDecodeError as err:
             raise DatabaseError(f"Malformed JSON in database file '{filepath}': {err}") from err

@@ -12,7 +12,7 @@ import pytest
 
 from src.calling_range import CallingRangeModel, OpponentModel
 from src.db import WinRateDB
-from src.range_finder import TOTAL_COMBINATIONS, RangeFinder
+from src.range_finder import RangeFinder
 
 
 @pytest.fixture(scope="module")

@@ -6,13 +6,14 @@ filtering for positive expected value (EV > 0) and measuring total range coverag
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Final, Sequence
+from typing import Final
 
 from src.calling_range import CallingRangeModel, OpponentModel
-from src.db import HandStats, WinRateDB
-from src.evaluator import HandCategory
+from src.db import WinRateDB
 from src.ev import calculate_ev, is_profitable
+from src.evaluator import HandCategory
 from src.hands import generate_all_canonical_hands
 
 TOTAL_COMBINATIONS: Final[int] = 22100

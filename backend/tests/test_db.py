@@ -8,11 +8,13 @@ Verifies:
 """
 
 import time
+
 import pytest
 
 from src.db import HandStats, WinRateDB
 from src.evaluator import Card, HandCategory
 from src.exceptions import DatabaseError, DatabaseNotLoadedError
+from tests.perf import budget
 
 
 class TestWinRateDB:
@@ -54,7 +56,7 @@ class TestWinRateDB:
 
         avg_latency_us = (elapsed / n_queries) * 1e6
         # Assert well within the 5 microsecond budget
-        assert avg_latency_us < 5.0, f"Lookup latency too high: {avg_latency_us:.3f} us"
+        assert avg_latency_us < budget(5.0), f"Lookup latency too high: {avg_latency_us:.3f} us"
 
     def test_get_by_cards(self, loaded_db: WinRateDB) -> None:
         """Ensure concrete Card sequences correctly resolve to canonical stats."""

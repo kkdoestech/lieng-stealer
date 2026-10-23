@@ -13,15 +13,12 @@ Verifies:
 """
 
 from collections import Counter
-import pytest
 
-from src.evaluator import Card, HandCategory, Rank, Suit
+from src.evaluator import Card, HandCategory, Rank
 from src.hands import (
-    CanonicalHand,
     generate_all_canonical_hands,
     get_canonical_id,
     get_representative_cards,
-    to_canonical,
 )
 
 

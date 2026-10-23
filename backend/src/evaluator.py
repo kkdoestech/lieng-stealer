@@ -8,9 +8,10 @@ Sáp (Category 4) > Liêng (Category 3) > Đĩ (Category 2) > Điểm (Category 
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from enum import Enum, IntEnum
-from typing import Final, Iterable, Sequence
+from typing import Final
 
 from src.exceptions import InvalidCardError, InvalidHandSizeError
 
@@ -34,7 +35,7 @@ class Suit(Enum):
         return symbols[self]
 
     @classmethod
-    def from_str(cls, suit_str: str) -> "Suit":
+    def from_str(cls, suit_str: str) -> Suit:
         """Parse suit from single-character representation or unicode symbol."""
         cleaned = suit_str.strip().lower()
         mapping = {
@@ -93,7 +94,7 @@ class Rank(IntEnum):
         return self in (Rank.JACK, Rank.QUEEN, Rank.KING)
 
     @classmethod
-    def from_str(cls, rank_str: str) -> "Rank":
+    def from_str(cls, rank_str: str) -> Rank:
         """Parse rank from string."""
         cleaned = rank_str.strip().upper()
         mapping = {
@@ -124,7 +125,7 @@ class Card:
         return self.rank.is_face_card
 
     @classmethod
-    def from_str(cls, card_str: str) -> "Card":
+    def from_str(cls, card_str: str) -> Card:
         """Parse a card string such as 'Ah', '9d', '10c', or 'Ts'.
 
         Args:
@@ -386,12 +387,12 @@ class Hand:
             raise InvalidHandSizeError("A Liêng hand cannot have duplicate cards.")
 
     @classmethod
-    def from_cards(cls, c1: Card, c2: Card, c3: Card) -> "Hand":
+    def from_cards(cls, c1: Card, c2: Card, c3: Card) -> Hand:
         """Construct a Hand from 3 Card instances."""
         return cls(cards=(c1, c2, c3))
 
     @classmethod
-    def from_str(cls, hand_str: str) -> "Hand":
+    def from_str(cls, hand_str: str) -> Hand:
         """Parse a hand string such as 'Ah Kd 2c' or 'As,Kh,Qd'.
 
         Args:
