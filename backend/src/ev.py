@@ -12,6 +12,11 @@ from dataclasses import dataclass
 
 from src.exceptions import InvalidGameParamsError
 
+# Default game parameters, shared by the CLI and the API when the user doesn't give a value.
+DEFAULT_POT = 100000.0
+DEFAULT_BET_SIZE = 50000.0
+DEFAULT_FOLD_EQUITY = 0.35
+
 
 @dataclass(frozen=True)
 class EVResult:

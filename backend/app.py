@@ -26,7 +26,16 @@ from werkzeug.exceptions import HTTPException
 
 from src.calling_range import CallingRangeModel, OpponentModel
 from src.db import HandStats, WinRateDB
-from src.ev import EVResult, calculate_break_even_fold_equity, evaluate_action, final_pot, profitable_fold_zones
+from src.ev import (
+    DEFAULT_BET_SIZE,
+    DEFAULT_FOLD_EQUITY,
+    DEFAULT_POT,
+    EVResult,
+    calculate_break_even_fold_equity,
+    evaluate_action,
+    final_pot,
+    profitable_fold_zones,
+)
 from src.evaluator import Hand
 from src.exceptions import InvalidCardError, InvalidGameParamsError, InvalidHandSizeError
 from src.hands import TOTAL_COMBINATIONS, CanonicalHand, to_canonical
@@ -35,9 +44,6 @@ from src.range_finder import HandEVRecord, RangeFinder, category_breakdown
 
 API_VERSION: Final[str] = "1.1.0"
 TOP_HANDS_LIMIT: Final[int] = 30
-DEFAULT_POT: Final[float] = 100000.0
-DEFAULT_BET_SIZE: Final[float] = 50000.0
-DEFAULT_FOLD_EQUITY: Final[float] = 0.35
 OPENROUTER_URL: Final[str] = "https://openrouter.ai/api/v1/chat/completions"
 FALLBACK_MODEL_NAME: Final[str] = "rule-based-solver-engine (OPENROUTER_API_KEY not configured)"
 
