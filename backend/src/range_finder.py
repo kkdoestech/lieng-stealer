@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Final, Sequence
 
+from src.calling_range import CallingRangeModel, OpponentModel
 from src.db import HandStats, WinRateDB
 from src.evaluator import HandCategory
 from src.ev import calculate_ev, is_profitable
@@ -30,17 +31,24 @@ class HandEVRecord:
 class RangeFinder:
     """Solves and ranks profitable ranges across all canonical hands."""
 
-    def __init__(self, db: WinRateDB) -> None:
-        """Initialize RangeFinder with a populated WinRateDB instance."""
+    def __init__(self, db: WinRateDB, calling_model: CallingRangeModel | None = None) -> None:
+        """Initialize RangeFinder with a populated WinRateDB instance.
+
+        Args:
+            db: Win-rate database (equity against a random opponent hand).
+            calling_model: Calling-range model, required only for OpponentModel.RANGE.
+        """
         if not db.is_loaded:
             db.load()
         self._db = db
+        self._calling_model = calling_model
 
     def solve_range(
         self,
         pot: float,
         bet_size: float,
         fold_equity: float,
+        opponent_model: OpponentModel = OpponentModel.RANDOM,
     ) -> list[HandEVRecord]:
         """Evaluate and rank all 455 canonical hands sorted descending by EV.
 
@@ -48,25 +56,37 @@ class RangeFinder:
             pot: Dead pot size before hero's bet (must be > 0).
             bet_size: Additional bet / raise amount (must be > 0).
             fold_equity: Opponent fold probability in [0.0, 1.0].
+            opponent_model: RANDOM uses equity vs a random hand; RANGE uses equity
+                vs an opponent who folds their weakest hands.
 
         Returns:
             List of all 455 HandEVRecord instances sorted by EV descending.
+
+        Raises:
+            ValueError: If RANGE is requested without a CallingRangeModel.
         """
         all_stats = self._db.all_items()
         records: list[HandEVRecord] = []
 
+        range_equity: dict[str, float] | None = None
+        if opponent_model is OpponentModel.RANGE:
+            if self._calling_model is None:
+                raise ValueError("OpponentModel.RANGE requires a CallingRangeModel.")
+            range_equity = self._calling_model.equity_table(fold_equity)
+
         for cid, stats in all_stats.items():
+            equity = range_equity[cid] if range_equity is not None else stats.equity
             ev = calculate_ev(
                 pot=pot,
                 bet_size=bet_size,
                 fold_equity=fold_equity,
-                win_rate_when_called=stats.equity,
+                win_rate_when_called=equity,
             )
             records.append(
                 HandEVRecord(
                     canonical_id=cid,
                     category=stats.category,
-                    equity=stats.equity,
+                    equity=equity,
                     ev=ev,
                     multiplicity=stats.multiplicity,
                     is_raise_profitable=is_profitable(ev),

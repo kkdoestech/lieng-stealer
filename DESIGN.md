@@ -73,15 +73,15 @@
   - Accompanied by player holding evaluation, exact canonical class, and net EV readout.
 - **4-Card Metrics HUD**:
   1. `RANGE COVERAGE`: Percentage of 22,100 combinations profitable to raise.
-  2. `SHOWDOWN EQUITY`: Mathematical win-rate vs. random holding distribution.
+  2. `SHOWDOWN EQUITY`: Win-rate when called: vs. the opponent's calling range ("Weakest hands" model) or vs. a random holding ("At random" model).
   3. `EXPECTED VALUE`: Net gain/loss in VND across calling and folding branches.
   4. `PURE BLUFF THRESHOLD`: Break-even fold equity required to profitably push air (0 points).
 - **Range Breakdown Matrix**:
   - Structured matrix summarizing performance across the 4 core Liêng categories:
     - `SÁP` (Three of a Kind, 13 classes / 52 combinations)
     - `LIÊNG` (Straight / Sequence, 12 classes / 768 combinations)
-    - `ĐĨ` (Three Face Cards, 6 classes / 288 combinations)
-    - `ĐIỂM` (Point Totals Modulo 10, 424 classes / 20,992 combinations)
+    - `ĐĨ` (Three Face Cards, 6 classes / 144 combinations)
+    - `ĐIỂM` (Point Totals Modulo 10, 424 classes / 21,136 combinations)
 - **Top Canonical Holdings Table**:
   - High-density monospaced table displaying top playable holdings with equity, EV, and combo multiplicity.
 - **Mathematical Telemetry Notes (Collapsible Drawer)**:

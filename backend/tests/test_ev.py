@@ -13,11 +13,13 @@ Verifies:
 
 import pytest
 
+from src.calling_range import CallingRangeModel
 from src.ev import (
     calculate_break_even_fold_equity,
     calculate_ev,
     evaluate_action,
     is_profitable,
+    profitable_fold_zones,
 )
 
 
@@ -111,3 +113,32 @@ class TestEVEngine:
         assert res.final_pot == 200000.0
         assert res.is_profitable is True
         assert res.ev > 0.0
+
+
+class TestProfitableFoldZones:
+    """Test suite for scanning fold frequencies where raising is +EV."""
+
+    def test_pure_bluff_starts_above_closed_form_threshold(self) -> None:
+        """Air needs f > B / (P + B) = 50%; the first grid point strictly above is 51%."""
+        zones = profitable_fold_zones(pot=100000.0, bet_size=100000.0, equity_at=lambda f: 0.0)
+        assert zones == [(0.51, 1.0)]
+
+    def test_nuts_profitable_everywhere(self) -> None:
+        zones = profitable_fold_zones(pot=100000.0, bet_size=100000.0, equity_at=lambda f: 1.0)
+        assert zones == [(0.0, 1.0)]
+
+    def test_medium_hand_has_two_zones_against_calling_range(self) -> None:
+        """K-Q-3 wins against loose callers and as a bluff, but loses in between."""
+        model = CallingRangeModel()
+        zones = profitable_fold_zones(
+            pot=100000.0,
+            bet_size=100000.0,
+            equity_at=lambda f: model.equity("K-Q-3", f),
+        )
+        assert len(zones) == 2
+        assert zones[0][0] == 0.0
+        assert zones[1] == (0.51, 1.0)
+
+    def test_invalid_steps(self) -> None:
+        with pytest.raises(ValueError):
+            profitable_fold_zones(pot=100.0, bet_size=50.0, equity_at=lambda f: 0.5, steps=0)

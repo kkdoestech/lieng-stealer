@@ -13,6 +13,8 @@
    -------------------------------------------------------------------------- */
 .terminal-header {
   display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 2rem;
@@ -101,6 +103,47 @@
   color: var(--text-muted);
 }
 
+/* Language Toggle (EN / VI) */
+.header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.lang-toggle {
+  display: inline-flex;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-base);
+  border-radius: 2px;
+  padding: 0.2rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.lang-toggle:hover,
+.lang-toggle:focus-visible {
+  border-color: var(--accent-green);
+  outline: none;
+}
+
+.lang-option {
+  padding: 0.25rem 0.6rem;
+  border-radius: 2px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  transition: all 0.15s;
+}
+
+.lang-option.active {
+  background: var(--accent-green-muted);
+  color: var(--accent-green);
+  font-weight: 700;
+}
+
 /* --------------------------------------------------------------------------
    MAIN DASHBOARD GRID LAYOUT
    -------------------------------------------------------------------------- */
@@ -109,6 +152,11 @@
   grid-template-columns: 380px 1fr;
   gap: 1.5rem;
   align-items: start;
+}
+
+/* Let grid items shrink below their tables' min-content width (tables scroll instead) */
+.terminal-grid > * {
+  min-width: 0;
 }
 
 @media (max-width: 1024px) {
@@ -282,6 +330,64 @@
   color: var(--text-dim);
   letter-spacing: 0.04em;
   margin-top: 0.35rem;
+}
+
+/* Opponent Model Toggle */
+.model-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  margin-top: 0.9rem;
+}
+
+.model-label {
+  margin-bottom: 0;
+}
+
+.model-chips {
+  margin-top: 0;
+}
+
+/* Raise Profit Map: red track = -EV, green zones = +EV, white marker = current fold frequency */
+.profit-map {
+  margin-top: 0.9rem;
+}
+
+.profit-map-label {
+  display: block;
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  letter-spacing: 0.04em;
+  margin-bottom: 0.35rem;
+}
+
+.profit-map-bar {
+  position: relative;
+  height: 10px;
+  background: var(--accent-red-muted);
+  border: 1px solid var(--border-base);
+  border-radius: 2px;
+}
+
+.profit-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--accent-green-muted);
+  border-left: 1px solid var(--accent-green);
+  border-right: 1px solid var(--accent-green);
+}
+
+.profit-marker {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  background: var(--text-white);
+  transform: translateX(-1px);
+  box-shadow: 0 0 4px var(--text-white);
 }
 
 /* Solid Rectangular Green Action Button */

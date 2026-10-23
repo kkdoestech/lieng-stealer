@@ -16,6 +16,11 @@ class InvalidHandSizeError(LiengError):
     pass
 
 
+class InvalidGameParamsError(LiengError):
+    """Raised when pot, bet size, fold equity, or opponent model are invalid."""
+    pass
+
+
 class DatabaseError(LiengError):
     """Base error for precomputed database operations."""
     pass

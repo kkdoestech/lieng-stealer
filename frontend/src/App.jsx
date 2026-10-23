@@ -1,30 +1,65 @@
 import { useState, useEffect } from 'react';
 import './App.css';
+import { STRINGS, LANGUAGES } from './i18n.js';
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
+const LANG_STORAGE_KEY = "lieng-scope-lang";
+
+// Backend category enum -> display label and i18n description key
+const CATEGORY_LABELS = { SAP: "SÁP", LIENG: "LIÊNG", DI: "ĐĨ", DIEM: "ĐIỂM" };
+const CATEGORY_DESC_KEYS = { SAP: "descSap", LIENG: "descLieng", DI: "descDi", DIEM: "descDiem" };
 
 function formatMoney(num) {
   if (num === undefined || num === null) return "0";
   return new Intl.NumberFormat("vi-VN").format(Math.round(num));
 }
 
+function formatZones(zones) {
+  const pct = (f) => `${Math.round(f * 100)}%`;
+  return zones.map(([start, end]) => (start === end ? pct(start) : `${pct(start)}–${pct(end)}`)).join(" · ");
+}
+
+function loadSavedLang() {
+  try {
+    const saved = localStorage.getItem(LANG_STORAGE_KEY);
+    return LANGUAGES.includes(saved) ? saved : "en";
+  } catch {
+    return "en";
+  }
+}
+
 export default function App() {
+  const [lang, setLang] = useState(loadSavedLang);
+  const t = STRINGS[lang];
+
   const [pot, setPot] = useState(100000);
   const [betSize, setBetSize] = useState(50000);
   const [hand, setHand] = useState("As Kh Qd");
   const [foldEquity, setFoldEquity] = useState(0.35);
+  const [opponentModel, setOpponentModel] = useState("range");
 
   const [isLoading, setIsLoading] = useState(false);
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [solveData, setSolveData] = useState(null);
-  const [aiAdvice, setAiAdvice] = useState("");
+  // { text } from the server, or { key, detail } for a client-side notice translated at render
+  const [aiAdvice, setAiAdvice] = useState(null);
   const [isNotesOpen, setIsNotesOpen] = useState(false);
-  const [error, setError] = useState("");
+  // { key, detail } translated at render, or null
+  const [solveError, setSolveError] = useState(null);
+
+  useEffect(() => {
+    document.documentElement.lang = lang;
+    try {
+      localStorage.setItem(LANG_STORAGE_KEY, lang);
+    } catch {
+      // Storage unavailable (e.g. private mode): the choice just won't persist.
+    }
+  }, [lang]);
 
   const handleSolve = async () => {
     setIsLoading(true);
     setIsAiLoading(true);
-    setError("");
+    setSolveError(null);
 
     try {
       // 1. Call solve endpoint
@@ -36,12 +71,17 @@ export default function App() {
           bet_size: Number(betSize),
           fold_equity: Number(foldEquity),
           hand: hand.trim(),
+          opponent_model: opponentModel,
         }),
       });
 
       if (!solveRes.ok) {
-        const errJson = await solveRes.json();
-        throw new Error(errJson.error || `Server responded with ${solveRes.status}`);
+        // The solver is up but rejected the input (e.g. duplicate cards)
+        const errJson = await solveRes.json().catch(() => ({}));
+        setSolveError({ key: "invalidInput", detail: errJson.error || `HTTP ${solveRes.status}` });
+        setIsLoading(false);
+        setIsAiLoading(false);
+        return;
       }
 
       const solveJson = await solveRes.json();
@@ -58,6 +98,7 @@ export default function App() {
             bet_size: Number(betSize),
             fold_equity: Number(foldEquity),
             hand: hand.trim(),
+            opponent_model: opponentModel,
             hand_evaluation: solveJson.hand_evaluation,
             range_coverage_percent: solveJson.summary?.range_coverage_percent,
           }),
@@ -65,17 +106,17 @@ export default function App() {
 
         if (analyzeRes.ok) {
           const analyzeJson = await analyzeRes.json();
-          setAiAdvice(analyzeJson.advice || "No telemetry analysis generated.");
+          setAiAdvice(analyzeJson.advice ? { text: analyzeJson.advice } : { key: "aiNoAdvice" });
         } else {
-          setAiAdvice("AI telemetry gateway unreachable.");
+          setAiAdvice({ key: "aiUnreachable" });
         }
       } catch (aiErr) {
-        setAiAdvice(`Telemetry transmission fault: ${aiErr.message}`);
+        setAiAdvice({ key: "aiTransportFault", detail: aiErr.message });
       } finally {
         setIsAiLoading(false);
       }
-    } catch (err) {
-      setError("LOCAL SOLVER DAEMON OFFLINE. VERIFY BACKEND RUNNING ON PORT 5000.");
+    } catch {
+      setSolveError({ key: "solverOffline" });
       setIsLoading(false);
       setIsAiLoading(false);
     }
@@ -90,51 +131,13 @@ export default function App() {
   const summary = solveData?.summary;
   const isRaise = handEval?.decision === "RAISE";
 
-  // Category Matrix Statistics
-  const totalProfitableCombos = summary?.profitable_combinations || 0;
-  const sapProfitable = Math.min(52, Math.max(0, totalProfitableCombos));
-  const liengProfitable = Math.min(768, Math.max(0, totalProfitableCombos - 52));
-  const diProfitable = Math.min(288, Math.max(0, totalProfitableCombos - 820));
-  const diemProfitable = Math.min(20992, Math.max(0, totalProfitableCombos - 1108));
+  const zones = handEval?.profitable_fold_zones;
 
-  const categoryMatrix = [
-    {
-      name: "SÁP",
-      desc: "Three of a Kind",
-      classes: 13,
-      combos: 52,
-      profitable: sapProfitable,
-      pct: ((sapProfitable / 52) * 100).toFixed(1),
-      tier: "TIER 1 (NUTS)",
-    },
-    {
-      name: "LIÊNG",
-      desc: "Straight Sequence",
-      classes: 12,
-      combos: 768,
-      profitable: liengProfitable,
-      pct: ((liengProfitable / 768) * 100).toFixed(1),
-      tier: "TIER 2 (STRONG)",
-    },
-    {
-      name: "ĐĨ",
-      desc: "Three Face Cards",
-      classes: 6,
-      combos: 288,
-      profitable: diProfitable,
-      pct: ((diProfitable / 288) * 100).toFixed(1),
-      tier: "TIER 3 (MEDIUM)",
-    },
-    {
-      name: "ĐIỂM",
-      desc: "Points Modulo 10",
-      classes: 424,
-      combos: 20992,
-      profitable: diemProfitable,
-      pct: ((diemProfitable / 20992) * 100).toFixed(1),
-      tier: "TIER 4 (MARGINAL)",
-    },
-  ];
+  // Category Matrix Statistics (computed by the solver per category)
+  const categoryMatrix = (summary?.category_breakdown || []).map((row) => ({
+    ...row,
+    pct: ((row.profitable_combos / row.combos) * 100).toFixed(1),
+  }));
 
   return (
     <div className="terminal-container">
@@ -144,14 +147,30 @@ export default function App() {
           <h1 className="terminal-title">
             <span className="brand-white">LIÊNG</span> <span className="brand-green">SCOPE</span>
           </h1>
-          <p className="terminal-subtitle">GTO SOLVER & COMBINATORIAL ENGINE</p>
+          <p className="terminal-subtitle">{t.subtitle}</p>
         </div>
 
-        <div className="telemetry-status-tag">
-          <span className="radar-beacon"></span>
-          <span className="telemetry-status-text">LIVE SOLVER</span>
-          <span className="telemetry-separator">/</span>
-          <span className="telemetry-classes">455 CLASSES LOADED</span>
+        <div className="header-actions">
+          <div className="telemetry-status-tag">
+            <span className="radar-beacon"></span>
+            <span className="telemetry-status-text">{t.liveSolver}</span>
+            <span className="telemetry-separator">/</span>
+            <span className="telemetry-classes">{t.classesLoaded}</span>
+          </div>
+
+          <button
+            type="button"
+            className="lang-toggle"
+            onClick={() => setLang((cur) => (cur === "en" ? "vi" : "en"))}
+            aria-label={t.langToggleLabel}
+            title={t.langToggleLabel}
+          >
+            {LANGUAGES.map((code) => (
+              <span key={code} className={`lang-option ${lang === code ? "active" : ""}`}>
+                {code.toUpperCase()}
+              </span>
+            ))}
+          </button>
         </div>
       </header>
 
@@ -160,12 +179,12 @@ export default function App() {
         {/* Left Column: Control Telemetry */}
         <section className="terminal-card control-panel">
           <div className="panel-header">
-            <span className="panel-tag">// TELEMETRY CONTROLS</span>
+            <span className="panel-tag">{t.controlsTag}</span>
             <span className="panel-id">SEC-01</span>
           </div>
 
           <div className="form-group">
-            <label className="form-label">CURRENT POT (VND)</label>
+            <label className="form-label">{t.potLabel}</label>
             <div className="input-wrapper">
               <input
                 type="number"
@@ -191,7 +210,7 @@ export default function App() {
           </div>
 
           <div className="form-group">
-            <label className="form-label">BET / RAISE SIZING</label>
+            <label className="form-label">{t.betLabel}</label>
             <div className="input-wrapper">
               <input
                 type="number"
@@ -229,7 +248,7 @@ export default function App() {
 
           <div className="form-group">
             <div className="slider-label-row">
-              <label className="form-label">OPPONENT FOLD FREQUENCY</label>
+              <label className="form-label">{t.foldLabel}</label>
               <span className="slider-value-badge">{Math.round(foldEquity * 100)}%</span>
             </div>
             <input
@@ -242,21 +261,54 @@ export default function App() {
               className="radar-slider"
             />
             <div className="slider-calibrations">
-              <span>0% (CALLING STATION)</span>
+              <span>{t.foldMin}</span>
               <span>50%</span>
-              <span>100% (EXTREME FOLD)</span>
+              <span>{t.foldMax}</span>
             </div>
+
+            <div className="model-row">
+              <span className="form-label model-label">{t.opponentFolds}</span>
+              <div className="preset-chips model-chips" role="group" aria-label={t.opponentFolds}>
+                {["range", "random"].map((model) => (
+                  <button
+                    key={model}
+                    type="button"
+                    className={`preset-chip ${opponentModel === model ? "active" : ""}`}
+                    aria-pressed={opponentModel === model}
+                    onClick={() => setOpponentModel(model)}
+                  >
+                    {model === "range" ? t.modelRange : t.modelRandom}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {zones && (
+              <div className="profit-map">
+                <span className="profit-map-label">{t.profitMap}</span>
+                <div className="profit-map-bar">
+                  {zones.map(([start, end]) => (
+                    <span
+                      key={start}
+                      className="profit-zone"
+                      style={{ left: `${Math.min(start, 0.99) * 100}%`, width: `${Math.max(end - start, 0.01) * 100}%` }}
+                    />
+                  ))}
+                  <span className="profit-marker" style={{ left: `${foldEquity * 100}%` }} />
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="form-group">
-            <label className="form-label">PLAYER HAND (3 CARDS)</label>
+            <label className="form-label">{t.handLabel}</label>
             <div className="input-wrapper">
               <input
                 type="text"
                 className="input-field mono-bold"
                 value={hand}
                 onChange={(e) => setHand(e.target.value)}
-                placeholder="e.g. As Kh Qd"
+                placeholder={t.handPlaceholder}
               />
             </div>
             <div className="preset-chips">
@@ -304,29 +356,29 @@ export default function App() {
             onClick={handleSolve}
             disabled={isLoading}
           >
-            {isLoading ? "[ COMPUTING RANGE... ]" : "[ EXECUTE SOLVER ]"}
+            {isLoading ? t.solveBusy : t.solveIdle}
           </button>
 
-          {error && (
+          {solveError && (
             <div className="terminal-alert">
               <span className="alert-marker">!</span>
-              <span>{error}</span>
+              <span>{t[solveError.key](solveError.detail)}</span>
             </div>
           )}
 
           {/* Engine Specs Sub-Card */}
           <div className="specs-subcard">
             <div className="spec-row">
-              <span className="spec-label">SOLVER ARCHITECTURE</span>
-              <span className="spec-val">MONTE CARLO / CANONICAL</span>
+              <span className="spec-label">{t.specArchitecture}</span>
+              <span className="spec-val">{t.specArchitectureVal}</span>
             </div>
             <div className="spec-row">
-              <span className="spec-label">COMBINATORIAL SPACE</span>
-              <span className="spec-val">22,100 COMBOS (455 CLS)</span>
+              <span className="spec-label">{t.specSpace}</span>
+              <span className="spec-val">{t.specSpaceVal}</span>
             </div>
             <div className="spec-row">
-              <span className="spec-label">ONLINE QUERY COMPLEXITY</span>
-              <span className="spec-val">O(1) CACHED LOOKUP</span>
+              <span className="spec-label">{t.specQuery}</span>
+              <span className="spec-val">{t.specQueryVal}</span>
             </div>
           </div>
         </section>
@@ -337,9 +389,9 @@ export default function App() {
           {handEval && (
             <div className={`verdict-banner ${isRaise ? "verdict-raise" : "verdict-fold"}`}>
               <div className="verdict-col-left">
-                <span className="verdict-label">// RECOMMENDED ACTION</span>
+                <span className="verdict-label">{t.recommendedAction}</span>
                 <h2 className="verdict-title">
-                  {isRaise ? "ACTION: RAISE / ALL-IN" : "ACTION: CHECK / FOLD"}
+                  {isRaise ? t.actionRaise : t.actionFold}
                 </h2>
                 <div className="verdict-meta">
                   <span className="holding-tag">{handEval.hand}</span>
@@ -351,12 +403,12 @@ export default function App() {
               </div>
 
               <div className="verdict-col-right">
-                <span className="verdict-label">// EXPECTED VALUE</span>
+                <span className="verdict-label">{t.expectedValueTag}</span>
                 <div className="verdict-ev">
                   {handEval.ev > 0 ? "+" : ""}{formatMoney(handEval.ev)} <span className="ev-currency">VND</span>
                 </div>
                 <div className="verdict-breakeven">
-                  BREAK-EVEN FOLD EQ: <span className="mono-green">{Math.round(handEval.break_even_fold_equity * 100)}%</span>
+                  {t.profitableWhen} <span className="mono-green">{formatZones(zones)}</span>
                 </div>
               </div>
             </div>
@@ -365,70 +417,76 @@ export default function App() {
           {/* 4-Card Metrics HUD */}
           <div className="hud-metrics-grid">
             <div className="hud-card">
-              <div className="hud-label">RANGE COVERAGE</div>
+              <div className="hud-label">{t.rangeCoverage}</div>
               <div className="hud-value green-glow">
                 {summary?.range_coverage_percent?.toFixed(1) || "0.0"}%
               </div>
               <div className="hud-subtext">
-                {summary?.profitable_combinations?.toLocaleString() || "0"} / 22,100 COMBOS
+                {summary?.profitable_combinations?.toLocaleString(t.locale) || "0"} {t.combosOfTotal}
               </div>
             </div>
 
             <div className="hud-card">
-              <div className="hud-label">SHOWDOWN EQUITY</div>
+              <div className="hud-label">{t.showdownEquity}</div>
               <div className="hud-value white-metric">
-                {handEval ? `${(handEval.showdown_equity * 100).toFixed(1)}%` : "N/A"}
+                {handEval ? `${(handEval.showdown_equity * 100).toFixed(1)}%` : t.notAvailable}
               </div>
-              <div className="hud-subtext">VS UNKNOWN 49-CARD SPECTRUM</div>
+              <div className="hud-subtext">
+                {handEval && summary.opponent_model === "range"
+                  ? `${t.vsCallingRange(Math.round((1 - summary.fold_equity) * 100))} · ${t.vsRandomShort(
+                      `${(handEval.equity_vs_random * 100).toFixed(1)}%`
+                    )}`
+                  : t.showdownEquitySub}
+              </div>
             </div>
 
             <div className="hud-card">
-              <div className="hud-label">EXPECTED VALUE</div>
+              <div className="hud-label">{t.expectedValue}</div>
               <div className={`hud-value ${handEval?.ev > 0 ? "green-metric" : "dim-metric"}`}>
                 {handEval ? `${handEval.ev > 0 ? "+" : ""}${formatMoney(handEval.ev)}` : "0"}
               </div>
-              <div className="hud-subtext">NET VND GAIN PER DECISION</div>
+              <div className="hud-subtext">{t.expectedValueSub}</div>
             </div>
 
             <div className="hud-card">
-              <div className="hud-label">PURE BLUFF THRESHOLD</div>
+              <div className="hud-label">{t.bluffThreshold}</div>
               <div className="hud-value amber-metric">
-                {summary ? `${(summary.pure_bluff_break_even_fold_equity * 100).toFixed(1)}%` : "N/A"}
+                {summary ? `${(summary.pure_bluff_break_even_fold_equity * 100).toFixed(1)}%` : t.notAvailable}
               </div>
-              <div className="hud-subtext">MIN FOLD EQ FOR 0-PT AIR</div>
+              <div className="hud-subtext">{t.bluffThresholdSub}</div>
             </div>
           </div>
 
           {/* Range Breakdown Matrix Table */}
           <div className="terminal-card table-panel">
             <div className="panel-header">
-              <span className="panel-tag">// CATEGORY COVERAGE MATRIX</span>
-              <span className="panel-id">4 CORE HIERARCHIES</span>
+              <span className="panel-tag">{t.matrixTag}</span>
+              <span className="panel-id">{t.matrixId}</span>
             </div>
 
             <div className="table-wrapper">
               <table className="tactical-table">
                 <thead>
                   <tr>
-                    <th>CATEGORY</th>
-                    <th>DESCRIPTION</th>
-                    <th>CLASSES</th>
-                    <th>COMBOS</th>
-                    <th>PROFITABLE</th>
-                    <th>COVERAGE</th>
-                    <th>RADAR STATUS</th>
+                    <th>{t.colCategory}</th>
+                    <th>{t.colDescription}</th>
+                    <th>{t.colClasses}</th>
+                    <th>{t.colCombos}</th>
+                    <th>{t.colProfitable}</th>
+                    <th>{t.colCoverage}</th>
+                    <th>{t.colStatus}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {categoryMatrix.map((cat) => (
-                    <tr key={cat.name}>
+                    <tr key={cat.category}>
                       <td>
-                        <span className={`cat-pill cat-${cat.name}`}>{cat.name}</span>
+                        <span className={`cat-pill cat-${cat.category}`}>{CATEGORY_LABELS[cat.category]}</span>
                       </td>
-                      <td className="desc-cell">{cat.desc}</td>
+                      <td className="desc-cell">{t[CATEGORY_DESC_KEYS[cat.category]]}</td>
                       <td className="mono-num">{cat.classes}</td>
-                      <td className="mono-num">{cat.combos.toLocaleString()}</td>
-                      <td className="mono-num">{cat.profitable.toLocaleString()}</td>
+                      <td className="mono-num">{cat.combos.toLocaleString(t.locale)}</td>
+                      <td className="mono-num">{cat.profitable_combos.toLocaleString(t.locale)}</td>
                       <td className="mono-num highlight-val">{cat.pct}%</td>
                       <td>
                         <span
@@ -441,10 +499,10 @@ export default function App() {
                           }`}
                         >
                           {Number(cat.pct) === 100
-                            ? "100% PUSH"
+                            ? t.statusFull
                             : Number(cat.pct) > 0
-                            ? "PARTIAL"
-                            : "FOLD"}
+                            ? t.statusPartial
+                            : t.statusZero}
                         </span>
                       </td>
                     </tr>
@@ -458,20 +516,20 @@ export default function App() {
           {solveData?.top_hands && (
             <div className="terminal-card table-panel">
               <div className="panel-header">
-                <span className="panel-tag">// TOP PROFITABLE HOLDINGS</span>
-                <span className="panel-id">SAMPLE EQUIVALENCE CLASSES</span>
+                <span className="panel-tag">{t.topHandsTag}</span>
+                <span className="panel-id">{t.topHandsId}</span>
               </div>
 
               <div className="table-wrapper">
                 <table className="tactical-table">
                   <thead>
                     <tr>
-                      <th>CANONICAL ID</th>
-                      <th>CATEGORY</th>
-                      <th>SHOWDOWN EQUITY</th>
-                      <th>EXPECTED VALUE (EV)</th>
-                      <th>MULTIPLICITY</th>
-                      <th>ACTION</th>
+                      <th>{t.colCanonicalId}</th>
+                      <th>{t.colCategory}</th>
+                      <th>{t.colEquity}</th>
+                      <th>{t.colEv}</th>
+                      <th>{t.colMultiplicity}</th>
+                      <th>{t.colAction}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -479,16 +537,16 @@ export default function App() {
                       <tr key={item.canonical_id}>
                         <td className="mono-canonical">{item.canonical_id}</td>
                         <td>
-                          <span className={`cat-pill cat-${item.category}`}>{item.category}</span>
+                          <span className={`cat-pill cat-${item.category}`}>{CATEGORY_LABELS[item.category]}</span>
                         </td>
                         <td className="mono-num">{(item.equity * 100).toFixed(1)}%</td>
                         <td className={`mono-num bold-num ${item.ev > 0 ? "positive-ev" : "negative-ev"}`}>
                           {item.ev > 0 ? "+" : ""}{formatMoney(item.ev)} VND
                         </td>
-                        <td className="dim-cell">{item.multiplicity} combos</td>
+                        <td className="dim-cell">{item.multiplicity} {t.combosSuffix}</td>
                         <td>
                           <span className={`action-badge ${item.is_profitable ? "act-raise" : "act-fold"}`}>
-                            {item.is_profitable ? "RAISE" : "FOLD"}
+                            {item.is_profitable ? t.raise : t.fold}
                           </span>
                         </td>
                       </tr>
@@ -506,25 +564,25 @@ export default function App() {
               className="drawer-toggle-btn"
               onClick={() => setIsNotesOpen(!isNotesOpen)}
             >
-              <span>{isNotesOpen ? "[ − COLLAPSE TELEMETRY NOTES ]" : "[ + MATHEMATICAL TELEMETRY NOTES ]"}</span>
+              <span>{isNotesOpen ? t.notesCollapse : t.notesExpand}</span>
               <span className="drawer-indicator">{isNotesOpen ? "▲" : "▼"}</span>
             </button>
 
             {isNotesOpen && (
               <div className="drawer-content">
                 <div className="drawer-header">
-                  <span className="drawer-title">// GAME-THEORETIC TELEMETRY ADVISORY</span>
+                  <span className="drawer-title">{t.notesTitle}</span>
                   <span className="drawer-sub">OPENROUTER / LLAMA 3.1 8B INSTRUCT</span>
                 </div>
 
                 {isAiLoading ? (
                   <div className="telemetry-loading">
                     <span className="radar-spinner"></span>
-                    <span>&gt; TRANSMITTING GAME-THEORETIC TELEMETRY QUERY...</span>
+                    <span>{t.notesLoading}</span>
                   </div>
                 ) : (
                   <div className="telemetry-body">
-                    {aiAdvice || "No active telemetry payload recorded for this game state."}
+                    {!aiAdvice ? t.notesEmpty : aiAdvice.text ?? t[aiAdvice.key](aiAdvice.detail)}
                   </div>
                 )}
               </div>

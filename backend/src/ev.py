@@ -8,6 +8,7 @@ EV = [P(Fold) * Pot] + [1 - P(Fold)] * [(P(Win|Call) * FinalPot) - BetSize]
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Callable
 
 
 @dataclass(frozen=True)
@@ -130,4 +131,50 @@ def evaluate_action(
         break_even_fold_equity=be_fe,
         is_profitable=is_profitable(ev),
     )
+
+
+def profitable_fold_zones(
+    pot: float,
+    bet_size: float,
+    equity_at: Callable[[float], float],
+    steps: int = 100,
+) -> list[tuple[float, float]]:
+    """Scan opponent fold frequencies and return the intervals where raising is +EV.
+
+    When the opponent folds their weakest hands, a higher fold frequency also means
+    a stronger calling range, so EV is not monotonic in fold equity: a medium hand
+    can be profitable against loose callers, lose in the middle, and become
+    profitable again once folds alone pay for the bet.
+
+    Args:
+        pot: Current pot (must be > 0).
+        bet_size: Hero bet amount (must be > 0).
+        equity_at: Maps a fold frequency in [0.0, 1.0] to Hero's equity when called.
+        steps: Number of grid intervals over [0.0, 1.0]; resolution is 1 / steps.
+
+    Returns:
+        Sorted, non-overlapping (start, end) fold-frequency intervals on the grid
+        where EV > 0. Empty if raising is never profitable.
+
+    Raises:
+        ValueError: If steps < 1 or pot/bet_size violate calculate_ev bounds.
+    """
+    if steps < 1:
+        raise ValueError(f"Steps must be at least 1, got {steps}.")
+
+    zones: list[tuple[float, float]] = []
+    start: float | None = None
+    last = 0.0
+    for i in range(steps + 1):
+        f = i / steps
+        if is_profitable(calculate_ev(pot, bet_size, f, equity_at(f))):
+            if start is None:
+                start = f
+            last = f
+        elif start is not None:
+            zones.append((start, last))
+            start = None
+    if start is not None:
+        zones.append((start, last))
+    return zones
 

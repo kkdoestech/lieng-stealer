@@ -24,8 +24,8 @@ LIÊNG SCOPE is an offline-computed, $O(1)$ real-time Game Theory Optimal (GTO) 
 |  [ Canonical State Compression ] -> 455 Equivalence Classes (Suits Invariant)                     |
 |                                     - Sáp:  13 classes (52 combos)                                |
 |                                     - Liêng: 12 classes (768 combos)                              |
-|                                     - Đĩ:    6 classes (288 combos)                               |
-|                                     - Điểm: 424 classes (20,992 combos)                           |
+|                                     - Đĩ:    6 classes (144 combos)                               |
+|                                     - Điểm: 424 classes (21,136 combos)                           |
 |            |                                                                                      |
 |            v                                                                                      |
 |  [ Monte Carlo Simulation / Exact Enumeration ]                                                   |
@@ -69,7 +69,9 @@ Where:
 * $P$: Current Pot before Hero's wager (Dead Money).
 * $B$: Additional Bet / Raise amount committed by Hero.
 * $P(\text{Fold})$: Opponent fold equity (probability that villain folds to the bet).
-* $P(\text{Win} \mid \text{Call})$: Hero showdown equity against the calling range (evaluated via precomputed $O(1)$ win rates).
+* $P(\text{Win} \mid \text{Call})$: Hero showdown equity when called. Two opponent models are supported (`opponent_model` in the API):
+  * `range`: the opponent folds their **weakest** hands, so a call comes from the strongest $1 - P(\text{Fold})$ of all 22,100 combos. Equity is computed exactly against that calling range, including card removal (`src/calling_range.py`).
+  * `random` (API default): the opponent folds regardless of strength, so equity is against a random hand (precomputed $O(1)$ win rates in `data/winrates.json`).
 * $\text{FinalPot} = P + B + C_{\text{opp}}$: The showdown pot if villain calls (standard heads-up $C_{\text{opp}} = B$, resulting in $\text{FinalPot} = P + 2B$).
 
 **Decision Rule**:
@@ -112,8 +114,8 @@ $$\binom{13 + 3 - 1}{3} = \binom{15}{3} = 455 \text{ canonical hand types}$$
 | :--- | :--- | :--- | :---: | :---: | :---: |
 | **Sáp** (Category 4) | $2\text{-}2\text{-}2 < \dots < A\text{-}A\text{-}A$ | Three of a Kind | 13 | 52 | $\binom{4}{3} = 4$ |
 | **Liêng** (Category 3) | $A\text{-}2\text{-}3 < \dots < Q\text{-}K\text{-}A$ | 3-Card Straight (No wraparound $K\text{-}A\text{-}2$) | 12 | 768 | $4^3 = 64$ |
-| **Đĩ** (Category 2) | $J\text{-}Q\text{-}K$ excl. Sáp/Liêng | 3 Face Cards ($J, Q, K$) | 6 | 288 | Varies |
-| **Điểm** (Category 1) | $0 \dots 9 \pmod{10}$ | Point Total Modulo 10 ($A=1, 10/J/Q/K=0$) | 424 | 20,992 | Varies |
+| **Đĩ** (Category 2) | $J\text{-}Q\text{-}K$ excl. Sáp/Liêng | 3 Face Cards ($J, Q, K$) | 6 | 144 | $\binom{4}{2} \times 4 = 24$ |
+| **Điểm** (Category 1) | $0 \dots 9 \pmod{10}$ | Point Total Modulo 10 ($A=1, 10/J/Q/K=0$) | 424 | 21,136 | Varies |
 | **TOTAL** | | | **455** | **22,100** | |
 
 ---
