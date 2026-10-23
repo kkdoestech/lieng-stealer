@@ -1,16 +1,19 @@
-# React + Vite
+# Liêng Scope — web UI
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+React 19 + Vite page for the Liêng Stealer solver. It talks to the Flask API in `../backend`.
 
-Currently, two official plugins are available:
+```bash
+npm install
+npm run dev      # http://localhost:5173 — /api requests are proxied to http://127.0.0.1:5000
+npm test         # Vitest + Testing Library (App behaviour, i18n parity, number formatting)
+npm run lint     # oxlint; any warning fails
+npm run build    # production files in dist/
+```
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Requires Node 22.22 or newer. Start the backend first (`cd ../backend && python app.py`).
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+- `VITE_API_URL` (build time): where the API lives in production, e.g.
+  `VITE_API_URL=https://api.example.com npm run build`. Without it the page calls `/api` on its
+  own origin. The value ends up in the public JavaScript bundle, so it must never be a secret.
+- UI rules (colours, type, layout, copy) are in [`../DESIGN.md`](../DESIGN.md).
+- All text lives in `src/i18n.js` (English and Vietnamese, same keys; `src/i18n.test.js` checks that).

@@ -20,7 +20,7 @@
 }
 
 .terminal-title {
-  font-size: 1.35rem;
+  font-size: 1.25rem;
   font-weight: 600;
   line-height: 1.2;
   color: var(--text-strong);
@@ -47,7 +47,7 @@
 
 .lang-option {
   padding: 4px 9px;
-  border-radius: 2px;
+  border-radius: var(--radius);
   font-size: 0.87rem;
   color: var(--muted);
 }
@@ -274,15 +274,15 @@
 .profit-map-bar {
   position: relative;
   height: 10px;
-  background: rgba(240, 113, 120, 0.2);
-  border-radius: 2px;
+  background: var(--zone-bad);
+  border-radius: var(--radius);
 }
 
 .profit-zone {
   position: absolute;
   top: 0;
   bottom: 0;
-  background: rgba(170, 217, 76, 0.45);
+  background: var(--zone-good);
 }
 
 .profit-marker {
@@ -307,7 +307,7 @@
 }
 
 .tactical-btn:hover:not(:disabled) {
-  background: #D9A63F;
+  background: var(--accent-hover);
 }
 
 .tactical-btn:disabled {
@@ -560,7 +560,7 @@
 }
 
 .drawer-indicator {
-  font-size: 0.75rem;
+  font-size: 0.87rem;
   color: var(--muted);
 }
 

@@ -1,10 +1,26 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useEffectEvent, useRef } from 'react';
 import './App.css';
 import { STRINGS, LANGUAGES } from './i18n.js';
 import { formatMoney, formatZones } from './format.js';
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
+// Empty by default: requests go to /api on the page's own origin, which the Vite dev server
+// proxies to Flask (vite.config.js). Set VITE_API_URL at build time when the API lives elsewhere.
+const API_BASE = import.meta.env.VITE_API_URL ?? "";
 const LANG_STORAGE_KEY = "lieng-scope-lang";
+
+// Steppers move money fields by 10k and never go below 1k.
+const AMOUNT_STEP = 10000;
+const MIN_AMOUNT = 1000;
+
+const POT_PRESETS = [50000, 100000, 200000, 500000];
+const BET_PRESET_MULTIPLES = [0.5, 1, 2]; // bet = multiple × pot
+const HAND_PRESETS = [
+  { cards: "As Kh Qd", labelKey: "presetLiengQKA" },
+  { cards: "7s 7h 7d", labelKey: "presetSap7" },
+  { cards: "Js Qh Kd", labelKey: "presetLiengJQK" },
+  { cards: "9s 10h Kd", labelKey: "presetDiem9" },
+  { cards: "2s 3h 5d", labelKey: "presetDiem0" },
+];
 
 // Backend category enum -> display label and i18n description key
 const CATEGORY_LABELS = { SAP: "SÁP", LIENG: "LIÊNG", DI: "ĐĨ", DIEM: "ĐIỂM" };
@@ -19,6 +35,92 @@ function loadSavedLang() {
   }
 }
 
+// Map a failed /api/solve response to the message shown under the button ({ key, detail }).
+// The API answers every error with { error, code }; a 5xx without a code did not come from Flask
+// (e.g. the dev proxy could not reach it), so it means the solver is not running.
+function solveErrorFor(status, body) {
+  if (status >= 500) return body.code ? { key: "serverError" } : { key: "solverOffline" };
+  if (body.code === "invalid_hand") return { key: "invalidHand", detail: body.error };
+  return { key: "invalidParams", detail: body.error ?? `HTTP ${status}` };
+}
+
+// One solve + analysis round trip. It holds no state: it reports each step through the callbacks
+// and stops calling them as soon as `signal` is aborted (a newer run started, or the page unmounted).
+async function fetchSolveAndAnalysis(body, signal, { onSolved, onSolveFailed, onAnalysis }) {
+  const post = (path) =>
+    fetch(`${API_BASE}${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body, signal });
+
+  let solveJson;
+  try {
+    const solveRes = await post("/api/solve");
+    if (signal.aborted) return;
+    if (!solveRes.ok) {
+      const errorBody = await solveRes.json().catch(() => ({}));
+      if (!signal.aborted) onSolveFailed(solveErrorFor(solveRes.status, errorBody));
+      return;
+    }
+    try {
+      solveJson = await solveRes.json();
+    } catch {
+      if (!signal.aborted) onSolveFailed({ key: "badResponse" });
+      return;
+    }
+  } catch {
+    if (!signal.aborted) onSolveFailed({ key: "solverOffline" });
+    return;
+  }
+  if (signal.aborted) return;
+  onSolved(solveJson);
+
+  // The server recomputes everything for the analysis from the same inputs.
+  let advice;
+  try {
+    const analyzeRes = await post("/api/analyze");
+    if (signal.aborted) return;
+    if (analyzeRes.ok) {
+      const analyzeJson = await analyzeRes.json();
+      advice = analyzeJson.advice ? { text: analyzeJson.advice, model: analyzeJson.model } : { key: "aiNoAdvice" };
+    } else {
+      advice = { key: analyzeRes.status === 429 ? "aiRateLimited" : "aiUnreachable" };
+    }
+  } catch (aiErr) {
+    advice = { key: "aiTransportFault", detail: aiErr.message };
+  }
+  if (!signal.aborted) onAnalysis(advice);
+}
+
+function Stepper({ id, label, value, onChange }) {
+  return (
+    <div className="input-wrapper stepper">
+      <button
+        type="button"
+        className="stepper-btn"
+        aria-label={`${label} −${AMOUNT_STEP / 1000}k`}
+        onClick={() => onChange(Math.max(MIN_AMOUNT, value - AMOUNT_STEP))}
+      >
+        −
+      </button>
+      <input
+        id={id}
+        type="number"
+        className="input-field"
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        step={AMOUNT_STEP}
+        min={MIN_AMOUNT}
+      />
+      <button
+        type="button"
+        className="stepper-btn"
+        aria-label={`${label} +${AMOUNT_STEP / 1000}k`}
+        onClick={() => onChange(value + AMOUNT_STEP)}
+      >
+        +
+      </button>
+    </div>
+  );
+}
+
 export default function App() {
   const [lang, setLang] = useState(loadSavedLang);
   const t = STRINGS[lang];
@@ -29,14 +131,17 @@ export default function App() {
   const [foldEquity, setFoldEquity] = useState(0.35);
   const [opponentModel, setOpponentModel] = useState("range");
 
-  const [isLoading, setIsLoading] = useState(false);
-  const [isAiLoading, setIsAiLoading] = useState(false);
+  // Both start true: the first solve begins as soon as the page mounts.
+  const [isLoading, setIsLoading] = useState(true);
+  const [isAiLoading, setIsAiLoading] = useState(true);
   const [solveData, setSolveData] = useState(null);
-  // { text } from the server, or { key, detail } for a client-side notice translated at render
+  // { text, model } from the server, or { key, detail } for a client-side notice translated at render
   const [aiAdvice, setAiAdvice] = useState(null);
   const [isNotesOpen, setIsNotesOpen] = useState(false);
   // { key, detail } translated at render, or null
   const [solveError, setSolveError] = useState(null);
+  // The AbortController of the run in progress, so a newer run can cancel it
+  const currentRun = useRef(null);
 
   useEffect(() => {
     document.documentElement.lang = lang;
@@ -47,75 +152,59 @@ export default function App() {
     }
   }, [lang]);
 
-  const handleSolve = async () => {
+  // Start one run with the current inputs; every state change happens in a callback, after the
+  // matching response has arrived.
+  const runSolve = (controller) => {
+    const body = JSON.stringify({
+      pot: Number(pot),
+      bet_size: Number(betSize),
+      fold_equity: Number(foldEquity),
+      hand: hand.trim(),
+      opponent_model: opponentModel,
+    });
+    fetchSolveAndAnalysis(body, controller.signal, {
+      onSolved: (data) => {
+        setSolveError(null);
+        setSolveData(data);
+        setIsLoading(false);
+      },
+      onSolveFailed: (error) => {
+        // Clear the old results: they belong to different inputs than the ones on screen now.
+        setSolveError(error);
+        setSolveData(null);
+        setAiAdvice(null);
+        setIsLoading(false);
+        setIsAiLoading(false);
+      },
+      onAnalysis: (advice) => {
+        setAiAdvice(advice);
+        setIsAiLoading(false);
+      },
+    });
+  };
+
+  // Start a run from a click: cancel any run still in flight, then show the loading state.
+  const startSolve = () => {
+    currentRun.current?.abort();
+    const controller = new AbortController();
+    currentRun.current = controller;
     setIsLoading(true);
     setIsAiLoading(true);
     setSolveError(null);
-
-    try {
-      // 1. Call solve endpoint
-      const solveRes = await fetch(`${API_BASE}/api/solve`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          pot: Number(pot),
-          bet_size: Number(betSize),
-          fold_equity: Number(foldEquity),
-          hand: hand.trim(),
-          opponent_model: opponentModel,
-        }),
-      });
-
-      if (!solveRes.ok) {
-        // The solver is up but rejected the input (e.g. duplicate cards)
-        const errJson = await solveRes.json().catch(() => ({}));
-        setSolveError({ key: "invalidInput", detail: errJson.error || `HTTP ${solveRes.status}` });
-        setIsLoading(false);
-        setIsAiLoading(false);
-        return;
-      }
-
-      const solveJson = await solveRes.json();
-      setSolveData(solveJson);
-      setIsLoading(false);
-
-      // 2. Call analyze endpoint for strategic AI telemetry
-      try {
-        const analyzeRes = await fetch(`${API_BASE}/api/analyze`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            pot: Number(pot),
-            bet_size: Number(betSize),
-            fold_equity: Number(foldEquity),
-            hand: hand.trim(),
-            opponent_model: opponentModel,
-            hand_evaluation: solveJson.hand_evaluation,
-            range_coverage_percent: solveJson.summary?.range_coverage_percent,
-          }),
-        });
-
-        if (analyzeRes.ok) {
-          const analyzeJson = await analyzeRes.json();
-          setAiAdvice(analyzeJson.advice ? { text: analyzeJson.advice } : { key: "aiNoAdvice" });
-        } else {
-          setAiAdvice({ key: "aiUnreachable" });
-        }
-      } catch (aiErr) {
-        setAiAdvice({ key: "aiTransportFault", detail: aiErr.message });
-      } finally {
-        setIsAiLoading(false);
-      }
-    } catch {
-      setSolveError({ key: "solverOffline" });
-      setIsLoading(false);
-      setIsAiLoading(false);
-    }
+    runSolve(controller);
   };
 
-  // Run initial solve on mount
+  // The first run on mount. It reads the current inputs without making them effect dependencies.
+  const startFirstRun = useEffectEvent((controller) => {
+    currentRun.current = controller;
+    runSolve(controller);
+  });
+
   useEffect(() => {
-    handleSolve();
+    const controller = new AbortController();
+    startFirstRun(controller);
+    // In development StrictMode mounts twice; aborting here cancels the first, duplicate request.
+    return () => controller.abort();
   }, []);
 
   const handEval = solveData?.hand_evaluation;
@@ -132,12 +221,9 @@ export default function App() {
 
   return (
     <div className="terminal-container">
-      {/* Tactical Header & Telemetry Status */}
       <header className="terminal-header">
-        <div className="brand-group">
-          <h1 className="terminal-title">
-            <span className="brand-white">LIÊNG</span> <span className="brand-green">SCOPE</span>
-          </h1>
+        <div>
+          <h1 className="terminal-title">LIÊNG SCOPE</h1>
           <p className="terminal-subtitle">{t.subtitle}</p>
         </div>
 
@@ -158,45 +244,18 @@ export default function App() {
         </div>
       </header>
 
-      {/* Main Tactical Grid */}
       <main className="terminal-grid">
-        {/* Left Column: Control Telemetry */}
-        <section className="terminal-card control-panel">
+        {/* Left column: inputs */}
+        <section className="control-panel">
           <div className="panel-header">
             <h2 className="panel-tag">{t.controlsTag}</h2>
           </div>
 
           <div className="form-group">
             <label className="form-label" htmlFor="pot-input">{t.potLabel}</label>
-            <div className="input-wrapper stepper">
-              <button
-                type="button"
-                className="stepper-btn"
-                aria-label={`${t.potLabel} −10k`}
-                onClick={() => setPot((v) => Math.max(1000, v - 10000))}
-              >
-                −
-              </button>
-              <input
-                id="pot-input"
-                type="number"
-                className="input-field"
-                value={pot}
-                onChange={(e) => setPot(Number(e.target.value))}
-                step="10000"
-                min="1000"
-              />
-              <button
-                type="button"
-                className="stepper-btn"
-                aria-label={`${t.potLabel} +10k`}
-                onClick={() => setPot((v) => v + 10000)}
-              >
-                +
-              </button>
-            </div>
+            <Stepper id="pot-input" label={t.potLabel} value={pot} onChange={setPot} />
             <div className="preset-chips">
-              {[50000, 100000, 200000, 500000].map((v) => (
+              {POT_PRESETS.map((v) => (
                 <button
                   key={v}
                   type="button"
@@ -211,55 +270,21 @@ export default function App() {
 
           <div className="form-group">
             <label className="form-label" htmlFor="bet-input">{t.betLabel}</label>
-            <div className="input-wrapper stepper">
-              <button
-                type="button"
-                className="stepper-btn"
-                aria-label={`${t.betLabel} −10k`}
-                onClick={() => setBetSize((v) => Math.max(1000, v - 10000))}
-              >
-                −
-              </button>
-              <input
-                id="bet-input"
-                type="number"
-                className="input-field"
-                value={betSize}
-                onChange={(e) => setBetSize(Number(e.target.value))}
-                step="10000"
-                min="1000"
-              />
-              <button
-                type="button"
-                className="stepper-btn"
-                aria-label={`${t.betLabel} +10k`}
-                onClick={() => setBetSize((v) => v + 10000)}
-              >
-                +
-              </button>
-            </div>
+            <Stepper id="bet-input" label={t.betLabel} value={betSize} onChange={setBetSize} />
             <div className="preset-chips">
-              <button
-                type="button"
-                className={`preset-chip ${betSize === Math.round(pot * 0.5) ? "active" : ""}`}
-                onClick={() => setBetSize(Math.round(pot * 0.5))}
-              >
-                0.5x Pot
-              </button>
-              <button
-                type="button"
-                className={`preset-chip ${betSize === pot ? "active" : ""}`}
-                onClick={() => setBetSize(pot)}
-              >
-                1.0x Pot
-              </button>
-              <button
-                type="button"
-                className={`preset-chip ${betSize === pot * 2 ? "active" : ""}`}
-                onClick={() => setBetSize(pot * 2)}
-              >
-                2.0x Pot
-              </button>
+              {BET_PRESET_MULTIPLES.map((multiple) => {
+                const amount = Math.round(pot * multiple);
+                return (
+                  <button
+                    key={multiple}
+                    type="button"
+                    className={`preset-chip ${betSize === amount ? "active" : ""}`}
+                    onClick={() => setBetSize(amount)}
+                  >
+                    {t.betPresetLabel(multiple.toLocaleString(t.locale, { minimumFractionDigits: 1 }))}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -331,48 +356,23 @@ export default function App() {
               />
             </div>
             <div className="preset-chips">
-              <button
-                type="button"
-                className={`preset-chip ${hand === "As Kh Qd" ? "active" : ""}`}
-                onClick={() => setHand("As Kh Qd")}
-              >
-                Liêng Q-K-A
-              </button>
-              <button
-                type="button"
-                className={`preset-chip ${hand === "7s 7h 7d" ? "active" : ""}`}
-                onClick={() => setHand("7s 7h 7d")}
-              >
-                Sáp 7
-              </button>
-              <button
-                type="button"
-                className={`preset-chip ${hand === "Js Qh Kd" ? "active" : ""}`}
-                onClick={() => setHand("Js Qh Kd")}
-              >
-                Liêng J-Q-K
-              </button>
-              <button
-                type="button"
-                className={`preset-chip ${hand === "9s 10h Kd" ? "active" : ""}`}
-                onClick={() => setHand("9s 10h Kd")}
-              >
-                9 Điểm
-              </button>
-              <button
-                type="button"
-                className={`preset-chip ${hand === "2s 3h 5d" ? "active" : ""}`}
-                onClick={() => setHand("2s 3h 5d")}
-              >
-                0 Điểm (Bù)
-              </button>
+              {HAND_PRESETS.map(({ cards, labelKey }) => (
+                <button
+                  key={cards}
+                  type="button"
+                  className={`preset-chip ${hand === cards ? "active" : ""}`}
+                  onClick={() => setHand(cards)}
+                >
+                  {t[labelKey]}
+                </button>
+              ))}
             </div>
           </div>
 
           <button
             type="button"
             className="tactical-btn"
-            onClick={handleSolve}
+            onClick={startSolve}
             disabled={isLoading}
           >
             {isLoading ? t.solveBusy : t.solveIdle}
@@ -387,26 +387,26 @@ export default function App() {
           {/* Engine specs footnote */}
           <div className="specs-subcard">
             <div className="spec-row">
-              <span className="spec-label">{t.specArchitecture}</span>
+              <span>{t.specArchitecture}</span>
               <span className="spec-val">{t.specArchitectureVal}</span>
             </div>
             <div className="spec-row">
-              <span className="spec-label">{t.specSpace}</span>
+              <span>{t.specSpace}</span>
               <span className="spec-val">{t.specSpaceVal}</span>
             </div>
             <div className="spec-row">
-              <span className="spec-label">{t.specQuery}</span>
+              <span>{t.specQuery}</span>
               <span className="spec-val">{t.specQueryVal}</span>
             </div>
           </div>
         </section>
 
-        {/* Right Column: Strategic HUD & Matrix */}
+        {/* Right column: results */}
         <section className="results-container">
-          {/* Verdict Banner */}
+          {/* Verdict */}
           {handEval && (
             <div className={`verdict-banner ${isRaise ? "verdict-raise" : "verdict-fold"}`}>
-              <div className="verdict-col-left">
+              <div>
                 <span className="verdict-label">{t.recommendedAction}</span>
                 <h2 className="verdict-title">
                   {isRaise ? t.actionRaise : t.actionFold}
@@ -414,7 +414,7 @@ export default function App() {
                 <div className="verdict-meta">
                   <span className="holding-tag">{handEval.hand}</span>
                   <span className="holding-sep">·</span>
-                  <span className="holding-class">{handEval.canonical_id}</span>
+                  <span>{handEval.canonical_id}</span>
                   <span className="holding-sep">·</span>
                   <span className="holding-score">{handEval.score_name}</span>
                 </div>
@@ -423,7 +423,7 @@ export default function App() {
               <div className="verdict-col-right">
                 <span className="verdict-label">{t.expectedValueTag}</span>
                 <div className="verdict-ev">
-                  {handEval.ev > 0 ? "+" : ""}{formatMoney(handEval.ev, t.locale)} <span className="ev-currency">VND</span>
+                  {handEval.ev > 0 ? "+" : ""}{formatMoney(handEval.ev, t.locale)} <span className="ev-currency">{t.currency}</span>
                 </div>
                 <div className="verdict-breakeven">
                   {t.profitableWhen} <span className="mono-green">{formatZones(zones)}</span>
@@ -432,11 +432,11 @@ export default function App() {
             </div>
           )}
 
-          {/* 4-Card Metrics HUD */}
+          {/* Summary figures */}
           <div className="hud-metrics-grid">
             <div className="hud-card">
-              <div className="hud-label">{t.rangeCoverage}</div>
-              <div className="hud-value green-glow">
+              <div>{t.rangeCoverage}</div>
+              <div className="hud-value">
                 {summary?.range_coverage_percent?.toFixed(1) || "0.0"}%
               </div>
               <div className="hud-subtext">
@@ -445,8 +445,8 @@ export default function App() {
             </div>
 
             <div className="hud-card">
-              <div className="hud-label">{t.showdownEquity}</div>
-              <div className="hud-value white-metric">
+              <div>{t.showdownEquity}</div>
+              <div className="hud-value">
                 {handEval ? `${(handEval.showdown_equity * 100).toFixed(1)}%` : t.notAvailable}
               </div>
               <div className="hud-subtext">
@@ -459,24 +459,24 @@ export default function App() {
             </div>
 
             <div className="hud-card">
-              <div className="hud-label">{t.expectedValue}</div>
-              <div className={`hud-value ${handEval?.ev > 0 ? "green-metric" : "dim-metric"}`}>
+              <div>{t.expectedValue}</div>
+              <div className={`hud-value ${handEval?.ev > 0 ? "green-metric" : ""}`}>
                 {handEval ? `${handEval.ev > 0 ? "+" : ""}${formatMoney(handEval.ev, t.locale)}` : "0"}
               </div>
               <div className="hud-subtext">{t.expectedValueSub}</div>
             </div>
 
             <div className="hud-card">
-              <div className="hud-label">{t.bluffThreshold}</div>
-              <div className="hud-value amber-metric">
+              <div>{t.bluffThreshold}</div>
+              <div className="hud-value">
                 {summary ? `${(summary.pure_bluff_break_even_fold_equity * 100).toFixed(1)}%` : t.notAvailable}
               </div>
               <div className="hud-subtext">{t.bluffThresholdSub}</div>
             </div>
           </div>
 
-          {/* Range Breakdown Matrix Table */}
-          <div className="terminal-card table-panel">
+          {/* Coverage by category */}
+          <div>
             <div className="panel-header">
               <h2 className="panel-tag">{t.matrixTag}</h2>
             </div>
@@ -495,43 +495,30 @@ export default function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {categoryMatrix.map((cat) => (
-                    <tr key={cat.category}>
-                      <td>
-                        <span className={`cat-pill cat-${cat.category}`}>{CATEGORY_LABELS[cat.category]}</span>
-                      </td>
-                      <td className="desc-cell">{t[CATEGORY_DESC_KEYS[cat.category]]}</td>
-                      <td className="mono-num">{cat.classes}</td>
-                      <td className="mono-num">{cat.combos.toLocaleString(t.locale)}</td>
-                      <td className="mono-num">{cat.profitable_combos.toLocaleString(t.locale)}</td>
-                      <td className="mono-num highlight-val">{cat.pct}%</td>
-                      <td>
-                        <span
-                          className={`status-chip ${
-                            Number(cat.pct) === 100
-                              ? "chip-full"
-                              : Number(cat.pct) > 0
-                              ? "chip-partial"
-                              : "chip-zero"
-                          }`}
-                        >
-                          {Number(cat.pct) === 100
-                            ? t.statusFull
-                            : Number(cat.pct) > 0
-                            ? t.statusPartial
-                            : t.statusZero}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
+                  {categoryMatrix.map((cat) => {
+                    const pct = Number(cat.pct);
+                    return (
+                      <tr key={cat.category}>
+                        <td>{CATEGORY_LABELS[cat.category]}</td>
+                        <td className="desc-cell">{t[CATEGORY_DESC_KEYS[cat.category]]}</td>
+                        <td className="mono-num">{cat.classes}</td>
+                        <td className="mono-num">{cat.combos.toLocaleString(t.locale)}</td>
+                        <td className="mono-num">{cat.profitable_combos.toLocaleString(t.locale)}</td>
+                        <td className="mono-num">{cat.pct}%</td>
+                        <td className={pct === 100 ? "chip-full" : pct > 0 ? "" : "chip-zero"}>
+                          {pct === 100 ? t.statusFull : pct > 0 ? t.statusPartial : t.statusZero}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           </div>
 
-          {/* Top Canonical Holdings Table */}
+          {/* Most profitable hands */}
           {solveData?.top_hands && (
-            <div className="terminal-card table-panel">
+            <div>
               <div className="panel-header">
                 <h2 className="panel-tag">{t.topHandsTag}</h2>
               </div>
@@ -552,18 +539,14 @@ export default function App() {
                     {solveData.top_hands.slice(0, 10).map((item) => (
                       <tr key={item.canonical_id}>
                         <td className="mono-canonical">{item.canonical_id}</td>
-                        <td>
-                          <span className={`cat-pill cat-${item.category}`}>{CATEGORY_LABELS[item.category]}</span>
-                        </td>
-                        <td className="mono-num">{(item.equity * 100).toFixed(1)}%</td>
+                        <td>{CATEGORY_LABELS[item.category]}</td>
+                        <td className="mono-num">{(item.showdown_equity * 100).toFixed(1)}%</td>
                         <td className={`mono-num bold-num ${item.ev > 0 ? "positive-ev" : "negative-ev"}`}>
-                          {item.ev > 0 ? "+" : ""}{formatMoney(item.ev, t.locale)} VND
+                          {item.ev > 0 ? "+" : ""}{formatMoney(item.ev, t.locale)} {t.currency}
                         </td>
                         <td className="dim-cell">{item.multiplicity} {t.combosSuffix}</td>
-                        <td>
-                          <span className={`action-badge ${item.is_profitable ? "act-raise" : "act-fold"}`}>
-                            {item.is_profitable ? t.raise : t.fold}
-                          </span>
+                        <td className={item.is_profitable ? "act-raise" : "act-fold"}>
+                          {item.is_profitable ? t.raise : t.fold}
                         </td>
                       </tr>
                     ))}
@@ -573,7 +556,7 @@ export default function App() {
             </div>
           )}
 
-          {/* Collapsible Mathematical Telemetry Notes Drawer */}
+          {/* Analysis notes (collapsed by default) */}
           <div className="notes-drawer-container">
             <button
               type="button"
@@ -588,7 +571,7 @@ export default function App() {
               <div className="drawer-content">
                 <div className="drawer-header">
                   <span className="drawer-title">{t.notesTitle}</span>
-                  <span className="drawer-sub">OpenRouter · Llama 3.1 8B Instruct</span>
+                  {aiAdvice?.model && <span className="drawer-sub">{aiAdvice.model}</span>}
                 </div>
 
                 {isAiLoading ? (
