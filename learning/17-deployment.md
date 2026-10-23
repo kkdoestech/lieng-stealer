@@ -118,11 +118,11 @@ VITE_API_URL=https://api.example.com npm run build
 Expected output (file hashes differ):
 
 ```
-✓ 18 modules transformed.
+✓ 19 modules transformed.
 dist/index.html                   0.72 kB │ gzip:  0.41 kB
 dist/assets/index-58mHjLMI.css   13.86 kB │ gzip:  3.15 kB
-dist/assets/index-C98sTgSj.js   239.88 kB │ gzip: 74.84 kB
-✓ built in 170ms
+dist/assets/index-B14bk0Nt.js   239.91 kB │ gzip: 74.84 kB
+✓ built in 205ms
 ```
 
 Vite has **bundled** all your JSX, React itself and the CSS into a few optimised files, with a hash in
@@ -133,7 +133,7 @@ grep -o "https://api.example.com" dist/assets/*.js
 ```
 
 ```
-dist/assets/index-C98sTgSj.js:https://api.example.com
+dist/assets/index-B14bk0Nt.js:https://api.example.com
 ```
 
 `npm run preview` serves `dist/` locally so you can test the production build. Instead of passing the
@@ -189,10 +189,10 @@ A full check, from a clean terminal session:
 ```bash
 # 1. Backend tests
 cd backend && source .venv/bin/activate
-python -m pytest -q                                  # → 76 passed
+python -m pytest -q                                  # → 93 passed
 
-# 2. Data is reproducible
-python -m src.generator --exact --output /tmp/check.json
+# 2. Data is reproducible (exact enumeration is the default)
+python -m src.generator --output /tmp/check.json
 cmp /tmp/check.json data/winrates.json && echo IDENTICAL
 
 # 3. CLI
@@ -201,8 +201,9 @@ python -m src.cli --hand "As Kh Qd" | tail -n 9      # → ACTION: RAISE / ALL-I
 # 4. Production backend (leave running)
 PORT=5000 gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
 
-# 5. In a second terminal: production frontend against it
+# 5. In a second terminal: frontend tests, then the production frontend against the backend
 cd frontend
+npm test                                              # → 6 passed
 npm run build && npm run preview                      # → http://localhost:4173
 ```
 

@@ -1,6 +1,6 @@
 # LIÊNG SCOPE | Real-Time GTO Decision Solver
 
-`[ Python 3.11 ]` `[ Flask ]` `[ React 18 ]` `[ Vite ]` `[ 58 Tests Passing ]` `[ Zero External Solvers ]`
+`[ Python 3.11 ]` `[ Flask ]` `[ React 19 ]` `[ Vite ]` `[ 93 Backend + 6 Frontend Tests Passing ]` `[ Zero External Solvers ]`
 
 > High-density combinatorial evaluator and expected value engine for imperfect-information 3-card poker variants.
 
@@ -45,13 +45,13 @@ LIÊNG SCOPE is an offline-computed, $O(1)$ real-time Game Theory Optimal (GTO) 
 |                            v                                                                      |
 |               [ Flask REST API Backend ]                                                          |
 |               - Port 5000 / JSON Serialization                                                    |
-|               - Endpoints: /health, /api/evaluate, /api/range, /api/solve                         |
+|               - Endpoints: /health, /api/evaluate, /api/range, /api/solve, /api/analyze           |
 |                            |                                                                      |
 |                            v                                                                      |
 |            [ Reactive Tactical HUD Terminal ]                                                     |
-|            - React 18 + Vite SPA                                                                  |
+|            - React 19 + Vite SPA, English / Vietnamese UI                                         |
 |            - EPL SCOPE Dark Radar Theme (JetBrains Mono)                                          |
-|            - Decision Banner, 4-Card HUD, Range Matrix & Top Holdings                             |
+|            - Decision Banner, Profit Map, 4-Card HUD, Range Matrix & Top Holdings                 |
 +---------------------------------------------------------------------------------------------------+
 ```
 
@@ -127,6 +127,8 @@ lieng-stealer/
 ├── DESIGN.md                  # Persistent tactical UI/UX specification (EPL SCOPE)
 ├── AGENTS.md                  # Architectural guardrails, latency budgets & constraints
 ├── README.md                  # Project documentation & mathematical specification
+├── LICENSE                    # MIT License
+├── learning/                  # Step-by-step guide to rebuild this project from scratch
 │
 ├── backend/                   # Python 3.11 GTO Solver Service
 │   ├── app.py                 # Flask REST API with CORS and OpenRouter integration
@@ -138,29 +140,35 @@ lieng-stealer/
 │   │   ├── __init__.py
 │   │   ├── evaluator.py       # Pure functional 3-card hand evaluator & comparator
 │   │   ├── hands.py           # Card & Hand immutable models, canonical compression
-│   │   ├── ev.py              # Pure Expected Value & break-even equity equations
+│   │   ├── ev.py              # Pure Expected Value, break-even equity & profitable fold zones
+│   │   ├── calling_range.py   # Opponent models: exact equity vs the opponent's calling range
 │   │   ├── range_finder.py    # Full-range combinatorial scanner & coverage resolver
 │   │   ├── db.py              # Thread-safe in-memory win rate database
 │   │   ├── generator.py       # Combinatorial generator for Monte Carlo / enumeration
-│   │   ├── cli.py             # High-speed terminal CLI for head-to-head simulations
+│   │   ├── cli.py             # Terminal CLI (both opponent models, interactive mode)
 │   │   └── exceptions.py      # Domain exception hierarchy (LiengError)
 │   └── tests/
 │       ├── test_evaluator.py  # 18 unit tests for strict hand hierarchies & edge cases
 │       ├── test_hands.py      # Tests for card parsing and canonical mapping
 │       ├── test_ev.py         # Tests for EV equations and bluff thresholds
 │       ├── test_db.py         # In-memory database query speed and validation
-│       ├── test_range_finder.py # Range coverage and combinatorial filtering tests
+│       ├── test_range_finder.py # Range coverage, opponent models and tie ordering
+│       ├── test_calling_range.py # Calling-range model: card removal, exactness, monotonicity
+│       ├── test_cli.py        # CLI decisions per opponent model and invalid-input handling
 │       ├── test_generator.py  # Combinatorial generation completeness tests
 │       ├── test_dynamic_scenarios.py # Dynamic stack & pot edge-case solver scenarios
 │       └── test_api.py        # REST API endpoint integration tests
 │
-└── frontend/                  # React 18 + Vite Tactical Radar Dashboard
+└── frontend/                  # React 19 + Vite Tactical Radar Dashboard
     ├── index.html             # HTML shell with JetBrains Mono typography
-    ├── package.json           # Frontend dependencies and build scripts
+    ├── package.json           # Frontend dependencies and scripts (dev, build, lint, test)
     ├── vite.config.js         # Vite bundler configuration
     ├── src/
     │   ├── main.jsx           # Application entrypoint
     │   ├── App.jsx            # Tactical radar terminal layout & telemetry controls
+    │   ├── i18n.js            # English / Vietnamese UI texts
+    │   ├── format.js          # Pure number / zone formatting helpers
+    │   ├── *.test.js          # Node built-in test runner tests (npm test)
     │   ├── App.css            # EPL SCOPE dark terminal styling & responsive HUD grid
     │   └── index.css          # Design tokens, CSS variables, and 24px canvas grid
     └── public/                # Static assets & SVG indicators
@@ -172,7 +180,7 @@ lieng-stealer/
 
 ### Prerequisites
 - **Python 3.11+** installed
-- **Node.js 18+** and **npm** installed
+- **Node.js 20.19+ or 22.12+** (required by Vite 8) and **npm** installed
 
 ### 1. Clone & Setup Workspace
 ```bash
@@ -227,6 +235,23 @@ All request and response bodies use standard `application/json`.
 | `/api/solve` | `POST` | Combined single-hand decision and full range scanner. |
 | `/api/analyze` | `POST` | Strategic game-theoretic analysis powered by OpenRouter LLM. |
 
+Every `POST` endpoint validates `pot` (> 0), `bet_size` (or `bet`, > 0) and `fold_equity` (0–1) and
+answers **`400`** with `{"error": "..."}` for invalid input. They also accept an optional
+**`opponent_model`**:
+
+| `opponent_model` | Meaning |
+| :--- | :--- |
+| `random` *(API default)* | The opponent folds regardless of hand strength; equity is against a random hand. |
+| `range` *(web UI default)* | The opponent folds their weakest hands; equity is against the strongest `1 - fold_equity` of all combos. |
+
+Single-hand results report two different break-even notions:
+
+| Field | Meaning |
+| :--- | :--- |
+| `break_even_fold_equity` | Exact fold frequency where EV = 0 (random model). `null` under `range`, where EV is not monotonic in fold equity. |
+| `profitable_from_fold_equity` | First fold frequency (on a 1% grid) from which raising stays +EV up to 100%. |
+| `profitable_fold_zones` | (`/api/solve` only) Every `[start, end]` fold-frequency interval where raising is +EV, on a 1% grid. |
+
 ---
 
 ### POST `/api/evaluate`
@@ -246,19 +271,26 @@ Evaluates single-hand expected value, showdown equity, and recommended action.
 #### Response Body (`200 OK`)
 ```json
 {
-  "hand": "A♠ K♥ Q♦",
+  "hand": "As Kh Qd",
   "canonical_id": "Q-K-A",
   "category": "LIENG",
   "pot": 100000.0,
   "bet": 50000.0,
   "fold_equity": 0.35,
+  "opponent_model": "random",
   "showdown_equity": 0.9969,
+  "equity_vs_random": 0.9969,
   "ev": 132097.0,
   "break_even_fold_equity": 0.0,
+  "profitable_from_fold_equity": 0.0,
   "recommended_action": "RAISE",
   "is_profitable": true
 }
 ```
+
+With `"opponent_model": "range"`, a medium hand such as `"Ks Qh 3d"` (pot = bet = 100000, `fold_equity`
+0.35) returns `"showdown_equity": 0.0108` (vs `"equity_vs_random": 0.36`), `"recommended_action":
+"CHECK/FOLD"`, `"break_even_fold_equity": null` and `"profitable_from_fold_equity": 0.51`.
 
 ---
 
@@ -281,8 +313,9 @@ Calculates global range coverage percentage, profitable combination counts, and 
   "pot": 100000.0,
   "bet": 50000.0,
   "fold_equity": 0.35,
+  "opponent_model": "random",
   "final_pot": 200000.0,
-  "pure_bluff_break_even_fold_equity": 0.3333333333333333,
+  "pure_bluff_break_even_fold_equity": 0.3333,
   "total_combinations": 22100,
   "profitable_combinations": 22100,
   "range_coverage_percent": 100.0,
@@ -310,28 +343,38 @@ The backend test suite is executed using `pytest`. The suite tests strict total 
 ```bash
 cd backend
 python -m pytest tests/ -v
+
+cd ../frontend
+npm test          # Node's built-in test runner: formatting helpers and i18n dictionaries
 ```
 
-### Test Coverage Summary (58 Tests Passing)
+### Test Coverage Summary (93 Backend + 6 Frontend Tests Passing)
 * `test_evaluator.py` (18 tests):
   - Strict total ordering: $\text{Sáp} > \text{Liêng} > \text{Đĩ} > \text{Điểm}$.
   - Straight validation: $A\text{-}2\text{-}3$ is lowest Liêng, $Q\text{-}K\text{-}A$ is highest Liêng, $K\text{-}A\text{-}2$ wraparound rejection.
   - Modulo 10 points boundary cases (19 pts $\equiv$ 9 pts, 20 pts $\equiv$ 0 pts Bù).
 * `test_hands.py` (5 tests):
   - Card string deserialization, rank sorting, and canonical multiset mapping ($22,100 \rightarrow 455$).
-* `test_ev.py` (9 tests):
+* `test_ev.py` (13 tests):
   - Positive, zero, and negative EV branching.
   - Bluff tipping-point calculation against analytical $\alpha$.
+  - Profitable fold-frequency zones, including two separate zones against a calling range.
+* `test_calling_range.py` (9 tests):
+  - Card-removal tables (every row sums to $\binom{49}{3} = 18,424$), exact match with `winrates.json` at 0% folds, monotonicity, latency budget.
 * `test_db.py` (6 tests):
   - Database preloading verification, $O(1)$ lookup latency ($< 5\mu\text{s}$), and missing card exception handling.
-* `test_range_finder.py` (4 tests):
-  - Full range solver sorting, combination multiplicity weighting, and range coverage metrics.
-* `test_generator.py` (5 tests):
-  - Combinatorial completeness: exact $\binom{52}{3} = 22,100$ hands and canonical partition sums.
-* `test_dynamic_scenarios.py` (5 tests):
-  - Complex multi-street parameter permutations and edge-case pot odds.
-* `test_api.py` (6 tests):
-  - HTTP endpoint integration, JSON payload schema validation, and error response codes.
+* `test_range_finder.py` (6 tests):
+  - Full range solver sorting, combination multiplicity weighting, range coverage metrics, opponent models, and strength tie-breaking.
+* `test_generator.py` (7 tests):
+  - Exact equities, rate invariants, Monte Carlo convergence, database schema, and exact enumeration as the command-line default.
+* `test_dynamic_scenarios.py` (6 tests):
+  - Monster value raise, junk-hand fold, pure bluff, coverage sweep, API schema, and one hand under both opponent models.
+* `test_api.py` (17 tests):
+  - HTTP endpoint integration, opponent models, break-even fields, category breakdown, and `400` responses for invalid input (including `/api/analyze`).
+* `test_cli.py` (6 tests):
+  - CLI decisions per opponent model, interactive mode, and exit code 2 with a readable message for invalid input.
+* Frontend `npm test` (6 tests):
+  - Locale-aware money formatting, profit-zone formatting, and English/Vietnamese dictionary parity.
 
 ---
 
@@ -339,7 +382,7 @@ python -m pytest tests/ -v
 
 | Tier | Platform | Build Command | Runtime Command | Target Configuration |
 | :--- | :--- | :--- | :--- | :--- |
-| **Backend API** | [Railway](https://railway.app) / Render | `pip install -r requirements.txt` | `gunicorn -w 4 -b 0.0.0.0:$PORT app:app` | `backend/Procfile` |
+| **Backend API** | [Railway](https://railway.app) / Render | `pip install -r requirements.txt` | `gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120` | `backend/Procfile` |
 | **Frontend SPA** | [Vercel](https://vercel.com) | `npm run build` | Static Edge CDN (`dist/`) | Vite production output |
 
 Set `VITE_API_URL` in production environment variables to bind the React frontend SPA to the deployed Flask API.

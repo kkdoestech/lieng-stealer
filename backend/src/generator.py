@@ -149,8 +149,8 @@ def generate_winrates_database(
     return results
 
 
-def main(args: Sequence[str] | None = None) -> None:
-    """CLI entry point for generator."""
+def build_parser() -> argparse.ArgumentParser:
+    """Build the generator's command-line parser (exact enumeration by default)."""
     parser = argparse.ArgumentParser(
         description="Liêng Stealer - Precompute Showdown Equities Database."
     )
@@ -158,12 +158,20 @@ def main(args: Sequence[str] | None = None) -> None:
         "--samples",
         type=int,
         default=10000,
-        help="Number of Monte Carlo samples per hand (default: 10000).",
+        help="Number of Monte Carlo samples per hand, with --monte-carlo (default: 10000).",
     )
     parser.add_argument(
         "--exact",
+        dest="exact",
         action="store_true",
-        help="Run exact combinatorial enumeration over all C(49, 3) = 18,424 hands.",
+        default=True,
+        help="Run exact combinatorial enumeration over all C(49, 3) = 18,424 hands (default).",
+    )
+    parser.add_argument(
+        "--monte-carlo",
+        dest="exact",
+        action="store_false",
+        help="Estimate equities from --samples random opponent hands instead of exact enumeration.",
     )
     parser.add_argument(
         "--output",
@@ -177,8 +185,12 @@ def main(args: Sequence[str] | None = None) -> None:
         default=os.cpu_count() or 1,
         help=f"Number of parallel worker processes (default: {os.cpu_count() or 1}).",
     )
+    return parser
 
-    parsed = parser.parse_args(args)
+
+def main(args: Sequence[str] | None = None) -> None:
+    """CLI entry point for generator."""
+    parsed = build_parser().parse_args(args)
     mode = "Exact Combinatorial Enumeration" if parsed.exact else f"Monte Carlo ({parsed.samples} samples)"
     print(f"Starting equity generation in {mode} across {parsed.workers} workers...")
 

@@ -14,6 +14,7 @@ import pytest
 
 from src.evaluator import HandCategory
 from src.generator import (
+    build_parser,
     compute_hand_equity,
     generate_winrates_database,
 )
@@ -109,3 +110,15 @@ class TestGeneratorEngine:
             assert profile["samples"] == 18424
             assert profile["category"] in {"SAP", "LIENG", "DI", "DIEM"}
             assert profile["multiplicity"] in {4, 24, 64}
+
+
+class TestGeneratorCommandLine:
+    """The command line must produce the exact database by default (the tests above require it)."""
+
+    def test_defaults_to_exact_enumeration(self) -> None:
+        assert build_parser().parse_args([]).exact is True
+
+    def test_monte_carlo_is_opt_in(self) -> None:
+        args = build_parser().parse_args(["--monte-carlo", "--samples", "500"])
+        assert args.exact is False
+        assert args.samples == 500

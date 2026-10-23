@@ -107,6 +107,7 @@ from src.calling_range import CallingRangeModel, OpponentModel
 from src.db import HandStats, WinRateDB
 from src.evaluator import HandCategory
 from src.ev import calculate_ev, is_profitable
+from src.hands import generate_all_canonical_hands
 
 TOTAL_COMBINATIONS: Final[int] = 22100
 
@@ -152,6 +153,8 @@ class RangeFinder:
             db.load()
         self._db = db
         self._calling_model = calling_model
+        # Showdown strength of each class, used to order hands whose EV and equity tie
+        self._strength = {h.canonical_id: h.score.score_tuple for h in generate_all_canonical_hands()}
 ```
 
 This is **dependency injection** from chapter 8: the finder doesn't create or find its data sources,
@@ -159,6 +162,10 @@ it **receives** them. The calling-range model is **optional** (`= None`): code t
 random model (the CLI, the old tests) can keep writing `RangeFinder(db)`. Adding a parameter with a
 default value is a classic way to extend a class **without breaking existing callers** (backward
 compatibility).
+
+The last line precomputes a small lookup table: canonical ID → **showdown strength** (`score_tuple`,
+chapter 5), built once from `generate_all_canonical_hands()` (chapter 6) in about 5 ms. The next step uses
+it to order hands whose EV is exactly equal.
 
 > ⚠️ **Pitfall: a hidden side effect in a constructor.** If the database isn't loaded yet, the
 > constructor quietly calls `db.load()` with the **default path** (`"data/winrates.json"`, plus the
@@ -229,8 +236,8 @@ compatibility).
                 )
             )
 
-        # Sort descending by EV (highest profit first); tie-break by equity
-        records.sort(key=lambda r: (r.ev, r.equity), reverse=True)
+        # Sort descending by EV (highest profit first); tie-break by equity, then hand strength
+        records.sort(key=lambda r: (r.ev, r.equity, self._strength[r.canonical_id]), reverse=True)
         return records
 ```
 
@@ -246,18 +253,19 @@ compatibility).
 - Then, as before: build one record per hand, reusing `calculate_ev` and `is_profitable` from chapter 10.
   **No new maths, just orchestration.** The record stores the equity actually used, so tables and the
   UI show the model's equity.
-- `records.sort(key=lambda r: (r.ev, r.equity), reverse=True)` sorts in place by a **tuple key**: by EV,
-  and if two EVs are equal, by equity. That matters at `f = 1.0`, where every hand has EV = `P`. The
-  equity tie-break still lists the strongest hands first.
+- `records.sort(key=lambda r: (r.ev, r.equity, self._strength[r.canonical_id]), reverse=True)` sorts in
+  place by a **tuple key**: by EV; if two EVs are equal, by equity; if those are equal too, by hand
+  strength. That matters at `f = 1.0`, where every hand has EV = `P`, and under the range model (below).
 - The function doesn't modify the database or any global; it returns a fresh list.
 
-> ⚠️ **Pitfall: the "threshold hand" can be arbitrary.** Under the range model many weak hands have
-> equity exactly **0** (they can't beat anything that calls), so they all get the **same** EV, e.g.
-> `0.35 × 100,000 − 0.65 × 50,000 = +2,500`. Both sort keys tie, and Python's sort is **stable**: tied
-> items keep their original order, which is the database's insertion order. The "weakest profitable
-> hand" reported by the API (`threshold_hand`) then comes out as `A-A-K` at `f = 0.35`, a meaningless
-> choice among hundreds of equal hands. A third tie-break key (e.g. hand strength) would make the order
-> meaningful.
+> ✅ **How the code fixed this (before → after).** Under the range model many weak hands have equity
+> exactly **0** (they can't beat anything that calls), so they all get the **same** EV, e.g.
+> `0.35 × 100,000 − 0.65 × 50,000 = +2,500`. The first version sorted by `(ev, equity)` only: both keys
+> tied, and Python's **stable** sort kept the database's insertion order, so the "weakest profitable hand"
+> reported by the API (`threshold_hand`) came out as `A-A-K` at `f = 0.35`, an arbitrary pick among
+> hundreds of equal hands. With strength as the third key, tied hands are listed strongest-first, and the
+> last one is truly the weakest: `4-3-3`, the weakest of all 455 hands (chapter 6). **Lesson:** when a
+> sort can tie, decide the tie-break on purpose; "whatever order they came in" is a hidden dependency.
 
 🧪 **Mini-check** (a calling station: `f = 0`)
 
@@ -326,9 +334,10 @@ calling range, `K-8-3` no longer has 15.6% equity, so only hands down to `K-Q-4`
         pot: float,
         bet_size: float,
         fold_equity: float,
+        opponent_model: OpponentModel = OpponentModel.RANDOM,
     ) -> list[HandEVRecord]:
         """Return only hands where Raise / All-in has positive expected value (EV > 0)."""
-        all_records = self.solve_range(pot, bet_size, fold_equity)
+        all_records = self.solve_range(pot, bet_size, fold_equity, opponent_model)
         return [r for r in all_records if r.is_raise_profitable]
 
     def calculate_range_coverage(
@@ -352,6 +361,7 @@ calling range, `K-8-3` no longer has 15.6% equity, so only hands down to `K-Q-4`
         combos = sum(r.multiplicity for r in profitable_records if r.is_raise_profitable)
         coverage = (combos / TOTAL_COMBINATIONS) * 100.0
         return round(min(100.0, max(0.0, coverage)), 2)
+
 ```
 
 **How it works**
@@ -367,12 +377,12 @@ calling range, `K-8-3` no longer has 15.6% equity, so only hands down to `K-Q-4`
 > (`coverage(records)`), or not re-filter. When a function doesn't trust its own parameter name, the
 > name is probably wrong.
 
-> ⚠️ **Pitfall: a method left behind.** `solve_range` learned the `opponent_model` parameter, but
-> `get_profitable_range` did not: it always calls `solve_range(pot, bet_size, fold_equity)`, i.e. the
-> **random** model. Nothing breaks today (the API filters `solve_range` results itself), but a future
-> caller asking for "the profitable range against a calling range" would silently get the wrong answer.
-> When you add a parameter to a function, check every function that wraps it. The fix is one line:
-> accept `opponent_model: OpponentModel = OpponentModel.RANDOM` and pass it through.
+> ✅ **How the code fixed this (before → after).** When `solve_range` learned the `opponent_model`
+> parameter, `get_profitable_range` was first left behind: it always called
+> `solve_range(pot, bet_size, fold_equity)`, i.e. the **random** model. Nothing broke at once (the API
+> filters `solve_range` results itself), but a caller asking for "the profitable range against a calling
+> range" silently got the random-model answer. Now it accepts `opponent_model` (same default) and passes
+> it through. **Lesson:** when you add a parameter to a function, check every function that wraps it.
 
 ---
 
@@ -388,10 +398,12 @@ Verifies:
 - When fold equity is 100%, all 22,100 combinations yield positive EV and coverage is 100.0%
 - When fold equity is 0%, only hands exceeding the required pot odds threshold are profitable
 - Monotonicity: Increasing fold equity strictly increases or maintains range coverage
+- Opponent models: get_profitable_range honours the model; equal-EV hands are ordered by strength
 """
 
 import pytest
 
+from src.calling_range import CallingRangeModel, OpponentModel
 from src.db import WinRateDB
 from src.range_finder import TOTAL_COMBINATIONS, RangeFinder
 
@@ -400,6 +412,11 @@ from src.range_finder import TOTAL_COMBINATIONS, RangeFinder
 def loaded_finder() -> RangeFinder:
     db = WinRateDB("data/winrates.json")
     return RangeFinder(db)
+
+
+@pytest.fixture(scope="module")
+def finder_with_model() -> RangeFinder:
+    return RangeFinder(WinRateDB("data/winrates.json"), CallingRangeModel())
 
 
 class TestRangeFinder:
@@ -482,9 +499,42 @@ that must hold whatever the data is (sorted order, the 25% threshold, coverage n
 grows). Such tests survive regenerating the data with a different method.
 
 All four tests use `RangeFinder(db)` without a calling model, i.e. the default random model, and still
-pass unchanged: the backward compatibility from Step 11.2 in action. The range model is tested through
-the API in chapter 13 (`test_evaluate_and_range_accept_opponent_model` checks that range-model coverage
-is lower than random-model coverage).
+pass unchanged: the backward compatibility from Step 11.2 in action.
+
+Two more tests cover the opponent models directly. They use a second fixture, `finder_with_model`, so
+they get a finder **with** a `CallingRangeModel`:
+
+📄 **File:** `backend/tests/test_range_finder.py` — *add to the end*
+
+```python
+
+
+class TestOpponentModels:
+    """Test suite for the opponent-model parameter of RangeFinder."""
+
+    def test_profitable_range_respects_opponent_model(self, finder_with_model: RangeFinder) -> None:
+        """A pot-sized bet at 35% folds: 387 classes profit vs random callers, only 250 vs a calling range."""
+        random_range = finder_with_model.get_profitable_range(100000.0, 100000.0, 0.35)
+        calling_range = finder_with_model.get_profitable_range(
+            100000.0, 100000.0, 0.35, opponent_model=OpponentModel.RANGE
+        )
+        assert len(random_range) == 387
+        assert len(calling_range) == 250
+
+    def test_equal_ev_hands_are_ordered_strongest_first(self, finder_with_model: RangeFinder) -> None:
+        """At 35% folds every weak hand has 0 equity vs the calling range, so EV ties; strength must break them."""
+        records = finder_with_model.solve_range(100000.0, 50000.0, 0.35, OpponentModel.RANGE)
+        # The three weakest canonical hands, weakest last (chapter 6: 4-3-3 is the weakest of all 455)
+        assert [r.canonical_id for r in records[-3:]] == ["5-3-2", "4-4-2", "4-3-3"]
+```
+
+**Each test names the bug it catches:**
+
+- `test_profitable_range_respects_opponent_model`: if `get_profitable_range` ignored the model again,
+  both calls would return 387 hand types, not 387 vs 250 (the numbers from this chapter's mini-check).
+- `test_equal_ev_hands_are_ordered_strongest_first`: if the strength tie-break disappeared, the last three
+  records would be the arbitrary `A-A-Q, A-K-K, A-A-K` instead of the three weakest hands of chapter 6.
+  The expected order is written by hand from chapter 6's facts, **not** computed with the code under test.
 
 ---
 
@@ -497,11 +547,11 @@ python -m pytest -q
 Expected output:
 
 ```
-............................................................             [100%]
-60 passed in 2.30s
+................................................................         [100%]
+64 passed in 2.30s
 ```
 
-That's the whole **core engine**: 60 tests over evaluator, hands, generator, database, calling range,
+That's the whole **core engine**: 64 tests over evaluator, hands, generator, database, calling range,
 EV and range finder. Commit:
 
 ```bash
@@ -510,7 +560,8 @@ git add . && git commit -m "feat: range finder with opponent models"
 
 ## Recap
 
-- `solve_range` computes EV for all 455 types and sorts them by `(ev, equity)`, best first, in ~1–2 ms.
+- `solve_range` computes EV for all 455 types and sorts them by `(ev, equity, strength)`, best first, in
+  ~1–2 ms. The strength tie-break makes the order fully deterministic.
 - `opponent_model` picks the equity source: `RANDOM` → `winrates.json`, `RANGE` → the injected
   `CallingRangeModel` (one `equity_table` call per solve). The model is an optional constructor argument,
   so old callers keep working.
@@ -518,7 +569,7 @@ git add . && git commit -m "feat: range finder with opponent models"
   above a threshold equity"**. The range model keeps the threshold but lowers equities, shrinking the
   range (e.g. 84.65% → 54.57% coverage for a pot-sized bet at 35% folds).
 - **Coverage** is weighted by multiplicity: profitable real hands / 22,100.
-- Pitfalls: the constructor silently loads a default file; the coverage function re-filters its input;
-  `get_profitable_range` ignores the opponent model; ties at equity 0 make `threshold_hand` arbitrary.
+- ✅ Fixed: `get_profitable_range` now honours the opponent model; equal-EV hands are ordered by strength.
+- Pitfalls: the constructor silently loads a default file; the coverage function re-filters its input.
 
 **Next:** [12 — The command-line interface](12-cli.md)

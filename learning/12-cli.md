@@ -1,9 +1,10 @@
 # 12 — The Command-Line Interface
 
 > **Goal:** give the engine a usable face in the terminal: options like `--pot 100000 --hand "As Kh Qd"`,
-> nicely formatted panels and tables, and an interactive question-and-answer mode.
-> **You will build:** `backend/src/cli.py`.
-> **Time:** ~1 hour.
+> a choice of opponent model, nicely formatted panels and tables, an interactive question-and-answer mode,
+> and clean error messages.
+> **You will build:** `backend/src/cli.py` and `backend/tests/test_cli.py` (6 tests).
+> **Time:** ~1.5 hours.
 > **Prerequisites:** [11](11-range-finder.md).
 
 ---
@@ -90,11 +91,18 @@ if sys.stdout and hasattr(sys.stdout, "reconfigure"):
     except Exception:
         pass
 
+from src.calling_range import CallingRangeModel, OpponentModel
 from src.db import WinRateDB
 from src.evaluator import Hand, HandCategory
 from src.ev import calculate_break_even_fold_equity, calculate_ev, evaluate_action
+from src.exceptions import LiengError
 from src.hands import to_canonical
 from src.range_finder import HandEVRecord, RangeFinder
+
+MODEL_DESCRIPTIONS = {
+    OpponentModel.RANDOM: "folds at random (random)",
+    OpponentModel.RANGE: "folds weakest hands first (range)",
+}
 
 try:
     from rich import box
@@ -118,6 +126,8 @@ except ImportError:
 - **Optional rich:** if any rich import fails, `HAS_RICH = False` and every render function uses its
   plain-text branch instead.
 - `Console(legacy_windows=False)` tells rich to use modern terminal features even on Windows.
+- The engine imports now include the **opponent models** (chapter 9) and `LiengError` (chapter 4), used to
+  report bad input cleanly. `MODEL_DESCRIPTIONS` maps each `OpponentModel` to the text the banner shows.
 
 > ⚠️ **Pitfall: import-time side effects and a swallowed error.** Two things happen merely because
 > someone *imports* this module: stdout is reconfigured, and a global `_console` object is created.
@@ -157,6 +167,7 @@ def render_banner(
     bet_size: float,
     fold_equity: float,
     be_bluff_fe: float,
+    opponent_model: OpponentModel = OpponentModel.RANDOM,
 ) -> None:
     """Render the game state banner."""
     if HAS_RICH:
@@ -165,6 +176,7 @@ def render_banner(
             f"[bold cyan]Pot Size (Dead Money):[/] {format_currency(pot)}\n"
             f"[bold cyan]Bet / Raise Sizing:[/] {format_currency(bet_size)}\n"
             f"[bold cyan]Opponent Fold Equity:[/] {fold_equity * 100:.1f}%\n"
+            f"[bold cyan]Opponent Model:[/] {MODEL_DESCRIPTIONS[opponent_model]}\n"
             f"[bold yellow]Pure Bluff Break-Even Fold Equity:[/] {be_bluff_fe * 100:.1f}%\n"
             f"[bold cyan]Final Pot (if called):[/] {format_currency(pot + 2.0 * bet_size)}"
         )
@@ -176,6 +188,7 @@ def render_banner(
         print(f" Pot Size (Dead Money):       {format_currency(pot)}")
         print(f" Bet / Raise Sizing:          {format_currency(bet_size)}")
         print(f" Opponent Fold Equity:        {fold_equity * 100:.1f}%")
+        print(f" Opponent Model:              {MODEL_DESCRIPTIONS[opponent_model]}")
         print(f" Pure Bluff Break-Even FE:    {be_bluff_fe * 100:.1f}%")
         print(f" Final Pot (if called):       {format_currency(pot + 2.0 * bet_size)}")
         print("=" * 60)
@@ -188,6 +201,8 @@ def render_banner(
 - Adjacent string literals inside parentheses are **joined automatically** by Python:
   `("a" "b")` is `"ab"`. That's how the multi-line `content` is built.
 - `"=" * 60` repeats a string: a line of 60 `=` signs.
+- The new `opponent_model` parameter has a default (`RANDOM`), so older calls keep working; the banner
+  prints `MODEL_DESCRIPTIONS[opponent_model]`, so the reader always knows which model the numbers assume.
 
 ---
 
@@ -254,11 +269,22 @@ def render_single_hand_decision(
     pot: float,
     bet_size: float,
     fold_equity: float,
+    calling_model: CallingRangeModel | None = None,
 ) -> None:
-    """Evaluate and render recommendation for a specific player hand."""
+    """Evaluate and render recommendation for a specific player hand.
+
+    With a calling_model, equity is measured against the opponent's calling range;
+    otherwise against a random hand.
+    """
     hand = Hand.from_str(hand_str)
     stats = db.get_by_cards(hand.cards)
-    ev_result = evaluate_action(pot, bet_size, fold_equity, stats.equity)
+    canonical_id = to_canonical(hand.cards).canonical_id
+    equity = calling_model.equity(canonical_id, fold_equity) if calling_model else stats.equity
+    ev_result = evaluate_action(pot, bet_size, fold_equity, equity)
+    # Under the range model EV is not monotonic in fold equity, so no single break-even exists
+    break_even_text = (
+        f"{ev_result.break_even_fold_equity * 100:.2f}%" if calling_model is None else "n/a (range model)"
+    )
 
     status_color = "green" if ev_result.is_profitable else "red"
     action_text = "RAISE / ALL-IN RECOMMENDED" if ev_result.is_profitable else "CHECK / FOLD RECOMMENDED"
@@ -267,27 +293,36 @@ def render_single_hand_decision(
         console = _console or Console(legacy_windows=False)
         content = (
             f"[bold]Hand Evaluated:[/] {hand} ([italic]{hand.score}[/])\n"
-            f"[bold]Canonical Class:[/] {to_canonical(hand.cards).canonical_id} ([cyan]{stats.category.display_name}[/])\n"
-            f"[bold]Showdown Equity:[/] {stats.equity * 100:.2f}%\n"
+            f"[bold]Canonical Class:[/] {canonical_id} ([cyan]{stats.category.display_name}[/])\n"
+            f"[bold]Showdown Equity:[/] {equity * 100:.2f}%\n"
             f"[bold]Expected Value (EV):[/] [{status_color}]{'+' if ev_result.ev > 0 else ''}{format_currency(ev_result.ev)}[/]\n"
-            f"[bold]Break-Even Fold Equity:[/] {ev_result.break_even_fold_equity * 100:.2f}%\n\n"
+            f"[bold]Break-Even Fold Equity:[/] {break_even_text}\n\n"
             f"[bold {status_color} reverse] >>> ACTION: {action_text} <<< [/]"
         )
         console.print(Panel(content, title="[bold magenta]HAND EVALUATION & ACTION[/]", border_style=status_color))
     else:
         print("\n================ HAND EVALUATION ================")
         print(f" Hand:               {hand} ({hand.score})")
-        print(f" Canonical Class:    {to_canonical(hand.cards).canonical_id} ({stats.category.display_name})")
-        print(f" Showdown Equity:    {stats.equity * 100:.2f}%")
+        print(f" Canonical Class:    {canonical_id} ({stats.category.display_name})")
+        print(f" Showdown Equity:    {equity * 100:.2f}%")
         print(f" Expected Value:     {format_currency(ev_result.ev)}")
-        print(f" Break-Even FE:      {ev_result.break_even_fold_equity * 100:.2f}%")
+        print(f" Break-Even FE:      {break_even_text}")
         print(f" >>> ACTION: {action_text} <<<")
         print("=================================================\n")
 ```
 
-**How it works**: this is the complete pipeline for one hand in four lines:
-**text → `Hand` → `HandStats` (O(1) lookup) → `EVResult`**. The rest is formatting. The colour (green or
-red) and the action text are chosen once and reused, so they can't disagree.
+**How it works**: this is the complete pipeline for one hand in a few lines:
+**text → `Hand` → `HandStats` (O(1) lookup) → equity for the chosen model → `EVResult`**. The rest is
+formatting.
+
+- **Which equity?** With a `calling_model`, `calling_model.equity(canonical_id, fold_equity)` (chapter 9);
+  without one, the random-hand `stats.equity`. The optional parameter defaults to `None`, so the random
+  model needs no model object at all.
+- **Break-even under the range model:** a single break-even fold equity only makes sense when equity stays
+  the same as folds change (random model). Under the range model EV isn't monotonic (chapter 10), so the
+  panel says `n/a (range model)` instead of printing a misleading number. This matches the API's
+  `break_even_fold_equity: null` (chapter 13).
+- The colour (green or red) and the action text are chosen once and reused, so they can't disagree.
 
 ---
 
@@ -395,22 +430,25 @@ def run_solver(
     fold_equity: float,
     hand_str: str | None = None,
     db_path: str = "data/winrates.json",
+    opponent_model: OpponentModel = OpponentModel.RANDOM,
 ) -> None:
     """Execute the range solver pipeline and render visual reports."""
     db = WinRateDB(db_path)
-    finder = RangeFinder(db)
+    # Build the calling-range tables (~50 ms) only when the range model is requested
+    calling_model = CallingRangeModel() if opponent_model is OpponentModel.RANGE else None
+    finder = RangeFinder(db, calling_model)
 
     be_bluff = calculate_break_even_fold_equity(pot, bet_size, win_rate_when_called=0.0)
-    records = finder.solve_range(pot, bet_size, fold_equity)
+    records = finder.solve_range(pot, bet_size, fold_equity, opponent_model)
     profitable = [r for r in records if r.is_raise_profitable]
     coverage = finder.calculate_range_coverage(profitable)
 
-    render_banner(pot, bet_size, fold_equity, be_bluff)
+    render_banner(pot, bet_size, fold_equity, be_bluff, opponent_model)
     render_tactical_overview(records, coverage)
     render_categorized_heatmap(records)
 
     if hand_str:
-        render_single_hand_decision(hand_str, db, pot, bet_size, fold_equity)
+        render_single_hand_decision(hand_str, db, pot, bet_size, fold_equity, calling_model)
 
 
 def interactive_mode(db_path: str = "data/winrates.json") -> None:
@@ -426,34 +464,35 @@ def interactive_mode(db_path: str = "data/winrates.json") -> None:
         fe_str = input("Enter Opponent Fold Probability [0.0 - 1.0] (e.g. 0.35): ").strip()
         fold_equity = float(fe_str) if fe_str else 0.35
 
+        model_str = input("Opponent folds 'random' or 'range' (weakest hands first)? [random]: ").strip()
+        opponent_model = OpponentModel(model_str.lower()) if model_str else OpponentModel.RANDOM
+
         hand_str = input("Enter your hand (e.g. 'As Kh Qd' or press Enter to skip): ").strip()
-        run_solver(pot, bet, fold_equity, hand_str=hand_str or None, db_path=db_path)
-    except (ValueError, KeyboardInterrupt) as err:
+        run_solver(pot, bet, fold_equity, hand_str=hand_str or None, db_path=db_path, opponent_model=opponent_model)
+    except (ValueError, LiengError, KeyboardInterrupt) as err:
         print(f"\nExiting session: {err}")
 ```
 
 **How it works**
 
-- `run_solver` is the **composition root**: the one place that creates the objects (`WinRateDB`, then
-  `RangeFinder(db)`, injected) and wires the pipeline together. Look how short it is: all the real work
-  lives in the engine modules.
+- `run_solver` is the **composition root**: the one place that creates the objects (`WinRateDB`, the
+  optional `CallingRangeModel`, then `RangeFinder(db, calling_model)`, injected) and wires the pipeline
+  together. Look how short it is: all the real work lives in the engine modules.
+- **Build only what you need:** the calling-range tables cost ~50 ms (chapter 9), so they're built only
+  when the range model is requested (`… if opponent_model is OpponentModel.RANGE else None`). The default
+  random-model run stays as fast as before.
 - The **pure-bluff break-even** is just `calculate_break_even_fold_equity` with `win_rate_when_called=0.0`.
-- `interactive_mode` asks four questions. Pressing Enter accepts a default (`if pot_str else 100000.0`).
-  `hand_str or None` turns an empty string into `None` ("no hand").
+- `interactive_mode` asks five questions. Pressing Enter accepts a default (`if pot_str else 100000.0`;
+  for the model, `random`). `OpponentModel(model_str.lower())` turns the text into the enum, or raises
+  `ValueError` for anything else. `hand_str or None` turns an empty string into `None` ("no hand").
 - `KeyboardInterrupt` is what Ctrl-C raises; catching it exits politely instead of printing a traceback.
 
-> ⚠️ **Pitfall: not every user error is handled.** The `except` catches `ValueError` (e.g. typing
-> "abc" for the pot) but **not** `LiengError`. Type `Xx Kh Qd` as the hand and the program crashes with a
-> full traceback ending in `src.exceptions.InvalidCardError: Invalid rank 'X'…`. The same happens with
-> `--hand "Xx Kh Qd"` on the command line. The custom hierarchy from chapter 4 was built precisely so
-> you could write `except LiengError as err: print(f"Invalid input: {err}")`. **Use it.**
-
-> 💡 **The CLI only knows the random model.** `run_solver` builds `RangeFinder(db)` without a
-> `CallingRangeModel`, and `render_single_hand_decision` uses `stats.equity` (random-hand equity). So the
-> CLI's answers match the API's `opponent_model: "random"`, not the web page's default (`range`). Adding
-> it is a good exercise: an `--opponent-model {random,range}` option (argparse `choices=`), a
-> `CallingRangeModel()` passed into `RangeFinder`, and `model.equity(cid, f)` for the single hand. Note
-> also that building the model costs ~60 ms, which matters for a command meant to answer in < 50 ms.
+> ✅ **How the code fixed this (before → after).** The first version caught only `ValueError` here and
+> nowhere else: typing `Xx Kh Qd` (interactively or with `--hand`) crashed with a full traceback ending in
+> `src.exceptions.InvalidCardError: Invalid rank 'X'…`. Now interactive mode also catches `LiengError` (the
+> custom family from chapter 4, built exactly for this), and `main` turns bad input into one clear line
+> (Step 12.8). The first version also offered **only the random model**; `--opponent-model` and the
+> interactive question fix that.
 
 ---
 
@@ -489,6 +528,12 @@ def main(argv: Sequence[str] | None = None) -> None:
         default="data/winrates.json",
         help="Path to winrates database (default: data/winrates.json)",
     )
+    parser.add_argument(
+        "--opponent-model",
+        choices=[m.value for m in OpponentModel],
+        default=OpponentModel.RANDOM.value,
+        help="How the opponent folds: 'random' or 'range' (weakest hands first). Default: random",
+    )
 
     args = parser.parse_args(argv)
 
@@ -498,7 +543,19 @@ def main(argv: Sequence[str] | None = None) -> None:
         pot = args.pot if args.pot is not None else 100000.0
         bet = args.bet if args.bet is not None else 50000.0
         fold_equity = args.fold_equity if args.fold_equity is not None else 0.35
-        run_solver(pot=pot, bet_size=bet, fold_equity=fold_equity, hand_str=args.hand, db_path=args.db)
+        try:
+            run_solver(
+                pot=pot,
+                bet_size=bet,
+                fold_equity=fold_equity,
+                hand_str=args.hand,
+                db_path=args.db,
+                opponent_model=OpponentModel(args.opponent_model),
+            )
+        except (LiengError, ValueError) as err:
+            # Bad hand text or out-of-range numbers: a clear message and the usage-error exit code
+            print(f"Invalid input: {err}", file=sys.stderr)
+            sys.exit(2)
 
 
 if __name__ == "__main__":
@@ -513,6 +570,13 @@ if __name__ == "__main__":
   all** (→ interactive mode) or at least one option (→ fill the missing ones with defaults and run).
 - `x if x is not None else default` (not `x or default`): with `or`, a legitimate `--fold-equity 0`
   would be treated as "missing", because `0.0` is falsy. That's a classic bug to avoid.
+- `--opponent-model` uses `choices=[m.value for m in OpponentModel]`: argparse itself rejects anything
+  else (with a usage message and exit code 2), and the list comes from the enum, so it can't go stale.
+- **Errors become a message and an exit code.** `run_solver` is wrapped in `try/except (LiengError,
+  ValueError)`: a bad hand (`LiengError`) or an impossible number such as a negative pot (`ValueError` from
+  `ev.py`) prints `Invalid input: …` on **standard error** (`file=sys.stderr`, the channel for error
+  messages) and exits with status **2**, the conventional "you used the command wrongly" code (argparse
+  uses it too). Scripts that call the CLI can check `$?` instead of parsing a traceback.
 
 ---
 
@@ -531,6 +595,7 @@ Expected output (colours not shown; the category table between the panels is omi
 │ Pot Size (Dead Money): 100,000                                               │
 │ Bet / Raise Sizing: 50,000                                                   │
 │ Opponent Fold Equity: 35.0%                                                  │
+│ Opponent Model: folds at random (random)                                     │
 │ Pure Bluff Break-Even Fold Equity: 33.3%                                     │
 │ Final Pot (if called): 200,000                                               │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -573,11 +638,129 @@ decision panel:
 │  >>> ACTION: CHECK / FOLD RECOMMENDED <<<                                    │
 ```
 
-Try interactive mode too (`python -m src.cli` with no options) and press Enter four times to accept the
-defaults. The test suite is unchanged (**60 passed**): the CLI has no automated tests. Commit:
+Now the **same medium hand under both opponent models** (pot-sized bet, 35% folds):
 
 ```bash
-git add . && git commit -m "feat: rich CLI with interactive mode"
+python -m src.cli --pot 100000 --bet 100000 --fold-equity 0.35 --hand "Ks Qh 3d"
+python -m src.cli --pot 100000 --bet 100000 --fold-equity 0.35 --hand "Ks Qh 3d" --opponent-model range
+```
+
+The first panel shows `Showdown Equity: 36.00%`, `+40,200` and **RAISE / ALL-IN RECOMMENDED**. The second
+shows `Opponent Model: folds weakest hands first (range)` in the banner, then `Showdown Equity: 1.08%`,
+`-27,894`, `Break-Even Fold Equity: n/a (range model)` and **CHECK / FOLD RECOMMENDED**.
+
+And a typo:
+
+```bash
+python -m src.cli --hand "Xx Kh Qd"; echo "exit code: $?"
+```
+
+After the report, the last lines are:
+
+```
+Invalid input: Invalid rank 'X'. Must be 2-10, T, J, Q, K, or A.
+exit code: 2
+```
+
+Try interactive mode too (`python -m src.cli` with no options) and press Enter five times to accept the
+defaults.
+
+---
+
+## Step 12.9 — Tests for the CLI
+
+A command-line program is still code with behaviour worth protecting. pytest's built-in **`capsys`**
+fixture captures everything printed to standard output and standard error, so a test can call `main([...])`
+and inspect the text.
+
+📄 **File:** `backend/tests/test_cli.py` — *create this file*
+
+```python
+"""Unit tests for the command-line interface (src/cli.py).
+
+Verifies:
+- The default opponent model stays random (backward compatible)
+- --opponent-model range flips a medium hand from raise to fold
+- Invalid input exits with status 2 and a readable message instead of a traceback
+"""
+
+import pytest
+
+from src.cli import main
+
+# K-Q-3 with a pot-sized bet at 35% folds: equity 0.36 vs a random hand, 0.0108 vs a calling range
+MEDIUM_HAND = ["--pot", "100000", "--bet", "100000", "--fold-equity", "0.35", "--hand", "Ks Qh 3d"]
+
+
+def test_default_model_is_random(capsys):
+    main(MEDIUM_HAND)
+    assert "RAISE / ALL-IN RECOMMENDED" in capsys.readouterr().out
+
+
+def test_range_model_recommends_fold(capsys):
+    main(MEDIUM_HAND + ["--opponent-model", "range"])
+    assert "CHECK / FOLD RECOMMENDED" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("argv", [["--hand", "Xx Kh Qd"], ["--pot", "-5"]])
+def test_invalid_input_exits_with_message(capsys, argv):
+    with pytest.raises(SystemExit) as exc:
+        main(argv)
+    assert exc.value.code == 2
+    assert "Invalid input" in capsys.readouterr().err
+```
+
+**How it works**
+
+- `main(MEDIUM_HAND)` runs the real CLI in-process: no subprocess, no mocks. `capsys.readouterr()` returns
+  what was printed, split into `.out` and `.err`.
+- The expected decisions come from earlier chapters (36% random equity → raise; 1.08% against the calling
+  range → fold), not from the CLI itself.
+- `pytest.raises(SystemExit)` catches the `sys.exit(2)`; `exc.value.code` is the exit status. The test
+  checks both the status **and** that the message went to `.err` (standard error).
+- `@pytest.mark.parametrize` runs one test function with several inputs: here a bad hand and a negative pot.
+
+📄 **File:** `backend/tests/test_cli.py` — *add to the end*
+
+```python
+
+
+def _answer_prompts(monkeypatch, answers):
+    """Feed interactive-mode prompts from a list instead of the keyboard."""
+    replies = iter(answers)
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(replies))
+
+
+def test_interactive_mode_asks_for_opponent_model(monkeypatch, capsys):
+    _answer_prompts(monkeypatch, ["100000", "100000", "0.35", "range", "Ks Qh 3d"])
+    main([])
+    assert "CHECK / FOLD RECOMMENDED" in capsys.readouterr().out
+
+
+def test_interactive_mode_reports_invalid_hand(monkeypatch, capsys):
+    _answer_prompts(monkeypatch, ["100000", "100000", "0.35", "", "Xx Kh Qd"])
+    main([])
+    assert "Exiting session: Invalid rank 'X'" in capsys.readouterr().out
+```
+
+- `monkeypatch.setattr("builtins.input", …)` replaces the built-in `input()` for the duration of one test
+  only, with a function that returns prepared answers from an **iterator** (`next(replies)`). This is a
+  small, honest test double: it replaces the keyboard, the only part that can't run in a test, while
+  everything else stays real.
+- The second test answers `""` to the model question (the default, random) and then types a bad hand: it
+  passes only because interactive mode catches `LiengError`. Remove `LiengError` from that `except` and
+  this test fails. That's how you know a test protects the fix.
+
+✅ **Checkpoint**
+
+```bash
+python -m pytest tests/test_cli.py -v
+```
+
+Expected: **6 passed** (the parametrized test counts twice). The whole suite now has 70 tests. Commit:
+
+```bash
+git add . && git commit -m "feat: CLI with opponent models, clean errors and tests"
 ```
 
 ## Recap
@@ -585,7 +768,10 @@ git add . && git commit -m "feat: rich CLI with interactive mode"
 - The CLI is pure presentation: `main` (argparse) → `run_solver` (wires DB + finder) → four render functions.
 - Each renderer has a **rich** branch and a **plain** fallback, chosen by `HAS_RICH`.
 - Defaults of `None` distinguish "no options given" (interactive mode) from "some options given".
-- Pitfalls: import-time side effects and a swallowed exception; `LiengError` not caught for bad hands;
-  hard-coded category totals; only the random opponent model is available.
+- `--opponent-model {random,range}` and an interactive question choose the opponent model; the calling-range
+  tables are built only when needed.
+- Bad input prints `Invalid input: …` on stderr and exits with status 2; interactive mode catches `LiengError`.
+- `capsys` and `monkeypatch` make a CLI testable in-process.
+- Pitfalls: import-time side effects and a swallowed exception; hard-coded category totals.
 
 **Next:** [13 — The Flask web API](13-flask-api.md)

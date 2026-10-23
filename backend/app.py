@@ -89,17 +89,30 @@ def _evaluate_hand(
     canonical_id: str,
     random_equity: float,
     params: GameParams,
-) -> tuple[EVResult, list[tuple[float, float]], float]:
-    """Return the EV result, profitable fold-frequency zones, and break-even fold equity."""
+) -> tuple[EVResult, list[tuple[float, float]]]:
+    """Return the EV result and the profitable fold-frequency zones."""
     equity_at = _equity_function(canonical_id, random_equity, params.opponent_model)
     ev_res = evaluate_action(params.pot, params.bet_size, params.fold_equity, equity_at(params.fold_equity))
     zones = profitable_fold_zones(params.pot, params.bet_size, equity_at)
-    if params.opponent_model is OpponentModel.RANGE:
-        # EV is not monotonic in fold equity here; report where raising stays +EV for good
-        break_even = zones[-1][0] if zones else 1.0
-    else:
-        break_even = ev_res.break_even_fold_equity
-    return ev_res, zones, break_even
+    return ev_res, zones
+
+
+def _break_even_fields(
+    ev_res: EVResult,
+    zones: list[tuple[float, float]],
+    model: OpponentModel,
+) -> dict[str, float | None]:
+    """Describe when raising pays off, with one unambiguous meaning per field.
+
+    break_even_fold_equity: exact fold frequency where EV = 0 (random model only; under
+        RANGE, EV is not monotonic in fold equity, so no single break-even point exists).
+    profitable_from_fold_equity: first 1%-grid fold frequency from which raising stays +EV.
+        The last zone always ends at 1.0, because EV there equals the pot.
+    """
+    return {
+        "break_even_fold_equity": ev_res.break_even_fold_equity if model is OpponentModel.RANDOM else None,
+        "profitable_from_fold_equity": zones[-1][0],
+    }
 
 
 def _category_breakdown(records: Sequence[HandEVRecord]) -> list[dict[str, Any]]:
@@ -163,7 +176,7 @@ def solve_api() -> Any:
         except LiengError as err:
             return jsonify({"error": f"Invalid hand: {err}"}), 400
 
-        ev_res, zones, break_even = _evaluate_hand(canonical.canonical_id, stats.equity, params)
+        ev_res, zones = _evaluate_hand(canonical.canonical_id, stats.equity, params)
         hand_eval_result = {
             "hand": str(player_hand),
             "score_name": str(player_hand.score),
@@ -173,7 +186,7 @@ def solve_api() -> Any:
             "showdown_equity": ev_res.win_rate_when_called,
             "equity_vs_random": stats.equity,
             "ev": ev_res.ev,
-            "break_even_fold_equity": break_even,
+            **_break_even_fields(ev_res, zones, params.opponent_model),
             "profitable_fold_zones": [[start, end] for start, end in zones],
             "is_profitable": ev_res.is_profitable,
             "decision": "RAISE" if ev_res.is_profitable else "CHECK/FOLD",
@@ -242,7 +255,7 @@ def evaluate_api() -> Any:
     except LiengError as err:
         return jsonify({"error": f"Invalid hand: {err}"}), 400
 
-    ev_res, _, break_even = _evaluate_hand(canonical.canonical_id, stats.equity, params)
+    ev_res, zones = _evaluate_hand(canonical.canonical_id, stats.equity, params)
     return jsonify({
         "hand": str(player_hand),
         "canonical_id": canonical.canonical_id,
@@ -254,7 +267,7 @@ def evaluate_api() -> Any:
         "showdown_equity": ev_res.win_rate_when_called,
         "equity_vs_random": stats.equity,
         "ev": ev_res.ev,
-        "break_even_fold_equity": break_even,
+        **_break_even_fields(ev_res, zones, params.opponent_model),
         "recommended_action": "RAISE" if ev_res.is_profitable else "CHECK/FOLD",
         "is_profitable": ev_res.is_profitable,
     }), 200
@@ -303,19 +316,25 @@ def range_api() -> Any:
 def analyze_api() -> Any:
     """Query OpenRouter LLM for strategic game-theoretic commentary."""
     data = request.get_json(silent=True) or {}
+    params = _parse_game_params(data)
+    pot, bet_size, fold_equity = params.pot, params.bet_size, params.fold_equity
 
-    pot = data.get("pot", 100000.0)
-    bet_size = data.get("bet_size", 50000.0)
-    fold_equity = data.get("fold_equity", 0.35)
     hand = data.get("hand", "None")
     hand_eval = data.get("hand_evaluation") or {}
+    if not isinstance(hand_eval, dict):
+        raise InvalidGameParamsError("hand_evaluation must be a JSON object.")
+    try:
+        hand_ev = float(hand_eval.get("ev", 0))
+        hand_equity = float(hand_eval.get("showdown_equity", 0))
+    except (ValueError, TypeError) as err:
+        raise InvalidGameParamsError("hand_evaluation.ev and showdown_equity must be numbers.") from err
     coverage = data.get("range_coverage_percent", 0.0)
-    folds_weakest = data.get("opponent_model") == OpponentModel.RANGE.value
+    folds_weakest = params.opponent_model is OpponentModel.RANGE
 
     api_key = os.environ.get("OPENROUTER_API_KEY")
 
     if folds_weakest:
-        model_line = f"folds their weakest hands (calls only with the top {(1 - float(fold_equity)) * 100:.0f}%)"
+        model_line = f"folds their weakest hands (calls only with the top {(1 - fold_equity) * 100:.0f}%)"
     else:
         model_line = "folds at random, regardless of hand strength"
     prompt = (
@@ -323,7 +342,7 @@ def analyze_api() -> Any:
         f"Analyze this decision spot with precision and strategic depth in Vietnamese:\n\n"
         f"- Current Pot: {pot:,.0f} VND\n"
         f"- Bet / Raise Size: {bet_size:,.0f} VND\n"
-        f"- Opponent Fold Equity: {float(fold_equity) * 100:.1f}%\n"
+        f"- Opponent Fold Equity: {fold_equity * 100:.1f}%\n"
         f"- Opponent Model: {model_line}\n"
         f"- Total Range Coverage (Hands with EV > 0): {coverage}%\n"
     )
@@ -331,8 +350,8 @@ def analyze_api() -> Any:
     if hand_eval:
         prompt += (
             f"- Hero's Hand: {hand_eval.get('hand')} ({hand_eval.get('score_name')})\n"
-            f"- Showdown Equity: {float(hand_eval.get('showdown_equity', 0)) * 100:.1f}%\n"
-            f"- Calculated EV: {float(hand_eval.get('ev', 0)):+,.0f} VND\n"
+            f"- Showdown Equity: {hand_equity * 100:.1f}%\n"
+            f"- Calculated EV: {hand_ev:+,.0f} VND\n"
             f"- Solver Decision: {hand_eval.get('decision')}\n"
         )
     else:
@@ -349,7 +368,7 @@ def analyze_api() -> Any:
         # Fallback commentary when no OpenRouter API key is configured
         fallback_advice = (
             f"**[Phân Tích Chiến Thuật Hệ Thống (Offline Solver)]**\n\n"
-            f"1. **Quyết định Toán học:** Với Pot = {pot:,.0f}, Cược = {bet_size:,.0f}, và Fold Equity = {float(fold_equity)*100:.1f}%, "
+            f"1. **Quyết định Toán học:** Với Pot = {pot:,.0f}, Cược = {bet_size:,.0f}, và Fold Equity = {fold_equity*100:.1f}%, "
             f"ngưỡng hòa vốn cược hù (bluff) là {(bet_size / (pot + bet_size))*100:.1f}%. "
             f"Khoảng bài có lãi (EV > 0) chiếm **{coverage}%** toàn bộ thế bài có thể có. "
             + ("Giả định đối thủ bỏ những bài yếu nhất, nên khi bị theo, Hero đối đầu với nhóm bài mạnh hơn.\n\n" if folds_weakest
@@ -358,19 +377,18 @@ def analyze_api() -> Any:
         )
         if hand_eval:
             decision = hand_eval.get("decision", "EVALUATE")
-            ev = hand_eval.get("ev", 0)
             fallback_advice += (
                 f"Hero cầm **{hand_eval.get('hand')}** ({hand_eval.get('score_name')}) "
-                f"với xác suất thắng đối đầu {float(hand_eval.get('showdown_equity', 0))*100:.1f}%. "
-                f"Kỳ vọng thu nhập (EV) đạt **{ev:+,.0f} VND**. "
+                f"với xác suất thắng đối đầu {hand_equity*100:.1f}%. "
+                f"Kỳ vọng thu nhập (EV) đạt **{hand_ev:+,.0f} VND**. "
                 f"Khuyến nghị tối ưu: **{decision}**.\n\n"
                 f"3. **GTO Insight:** "
-                + ("Bài có EV dương rõ rệt nhờ cả showdown equity lẫn fold equity. Tố lớn để tối đa hóa lợi nhuận." if ev > 0
+                + ("Bài có EV dương rõ rệt nhờ cả showdown equity lẫn fold equity. Tố lớn để tối đa hóa lợi nhuận." if hand_ev > 0
                    else "EV âm. Showdown equity quá thấp và đối thủ ít bỏ bài. Không nên mạo hiểm, hãy Bỏ bài (Fold) hoặc Theo nhẹ nếu có thể.")
             )
         else:
             fallback_advice += (
-                f"Với tần suất đối thủ bỏ bài {float(fold_equity)*100:.1f}%, hãy ưu tiên nâng cược với các nhóm bài Sáp, Liêng, Đĩ "
+                f"Với tần suất đối thủ bỏ bài {fold_equity*100:.1f}%, hãy ưu tiên nâng cược với các nhóm bài Sáp, Liêng, Đĩ "
                 f"và các tổ hợp điểm cao (> 7 điểm). Cẩn trọng cược hù khi đối thủ có xu hướng theo cược dính."
             )
 

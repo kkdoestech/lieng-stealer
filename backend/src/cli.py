@@ -17,11 +17,18 @@ if sys.stdout and hasattr(sys.stdout, "reconfigure"):
     except Exception:
         pass
 
+from src.calling_range import CallingRangeModel, OpponentModel
 from src.db import WinRateDB
 from src.evaluator import Hand, HandCategory
 from src.ev import calculate_break_even_fold_equity, calculate_ev, evaluate_action
+from src.exceptions import LiengError
 from src.hands import to_canonical
 from src.range_finder import HandEVRecord, RangeFinder
+
+MODEL_DESCRIPTIONS = {
+    OpponentModel.RANDOM: "folds at random (random)",
+    OpponentModel.RANGE: "folds weakest hands first (range)",
+}
 
 try:
     from rich import box
@@ -46,6 +53,7 @@ def render_banner(
     bet_size: float,
     fold_equity: float,
     be_bluff_fe: float,
+    opponent_model: OpponentModel = OpponentModel.RANDOM,
 ) -> None:
     """Render the game state banner."""
     if HAS_RICH:
@@ -54,6 +62,7 @@ def render_banner(
             f"[bold cyan]Pot Size (Dead Money):[/] {format_currency(pot)}\n"
             f"[bold cyan]Bet / Raise Sizing:[/] {format_currency(bet_size)}\n"
             f"[bold cyan]Opponent Fold Equity:[/] {fold_equity * 100:.1f}%\n"
+            f"[bold cyan]Opponent Model:[/] {MODEL_DESCRIPTIONS[opponent_model]}\n"
             f"[bold yellow]Pure Bluff Break-Even Fold Equity:[/] {be_bluff_fe * 100:.1f}%\n"
             f"[bold cyan]Final Pot (if called):[/] {format_currency(pot + 2.0 * bet_size)}"
         )
@@ -65,6 +74,7 @@ def render_banner(
         print(f" Pot Size (Dead Money):       {format_currency(pot)}")
         print(f" Bet / Raise Sizing:          {format_currency(bet_size)}")
         print(f" Opponent Fold Equity:        {fold_equity * 100:.1f}%")
+        print(f" Opponent Model:              {MODEL_DESCRIPTIONS[opponent_model]}")
         print(f" Pure Bluff Break-Even FE:    {be_bluff_fe * 100:.1f}%")
         print(f" Final Pot (if called):       {format_currency(pot + 2.0 * bet_size)}")
         print("=" * 60)
@@ -110,11 +120,22 @@ def render_single_hand_decision(
     pot: float,
     bet_size: float,
     fold_equity: float,
+    calling_model: CallingRangeModel | None = None,
 ) -> None:
-    """Evaluate and render recommendation for a specific player hand."""
+    """Evaluate and render recommendation for a specific player hand.
+
+    With a calling_model, equity is measured against the opponent's calling range;
+    otherwise against a random hand.
+    """
     hand = Hand.from_str(hand_str)
     stats = db.get_by_cards(hand.cards)
-    ev_result = evaluate_action(pot, bet_size, fold_equity, stats.equity)
+    canonical_id = to_canonical(hand.cards).canonical_id
+    equity = calling_model.equity(canonical_id, fold_equity) if calling_model else stats.equity
+    ev_result = evaluate_action(pot, bet_size, fold_equity, equity)
+    # Under the range model EV is not monotonic in fold equity, so no single break-even exists
+    break_even_text = (
+        f"{ev_result.break_even_fold_equity * 100:.2f}%" if calling_model is None else "n/a (range model)"
+    )
 
     status_color = "green" if ev_result.is_profitable else "red"
     action_text = "RAISE / ALL-IN RECOMMENDED" if ev_result.is_profitable else "CHECK / FOLD RECOMMENDED"
@@ -123,20 +144,20 @@ def render_single_hand_decision(
         console = _console or Console(legacy_windows=False)
         content = (
             f"[bold]Hand Evaluated:[/] {hand} ([italic]{hand.score}[/])\n"
-            f"[bold]Canonical Class:[/] {to_canonical(hand.cards).canonical_id} ([cyan]{stats.category.display_name}[/])\n"
-            f"[bold]Showdown Equity:[/] {stats.equity * 100:.2f}%\n"
+            f"[bold]Canonical Class:[/] {canonical_id} ([cyan]{stats.category.display_name}[/])\n"
+            f"[bold]Showdown Equity:[/] {equity * 100:.2f}%\n"
             f"[bold]Expected Value (EV):[/] [{status_color}]{'+' if ev_result.ev > 0 else ''}{format_currency(ev_result.ev)}[/]\n"
-            f"[bold]Break-Even Fold Equity:[/] {ev_result.break_even_fold_equity * 100:.2f}%\n\n"
+            f"[bold]Break-Even Fold Equity:[/] {break_even_text}\n\n"
             f"[bold {status_color} reverse] >>> ACTION: {action_text} <<< [/]"
         )
         console.print(Panel(content, title="[bold magenta]HAND EVALUATION & ACTION[/]", border_style=status_color))
     else:
         print("\n================ HAND EVALUATION ================")
         print(f" Hand:               {hand} ({hand.score})")
-        print(f" Canonical Class:    {to_canonical(hand.cards).canonical_id} ({stats.category.display_name})")
-        print(f" Showdown Equity:    {stats.equity * 100:.2f}%")
+        print(f" Canonical Class:    {canonical_id} ({stats.category.display_name})")
+        print(f" Showdown Equity:    {equity * 100:.2f}%")
         print(f" Expected Value:     {format_currency(ev_result.ev)}")
-        print(f" Break-Even FE:      {ev_result.break_even_fold_equity * 100:.2f}%")
+        print(f" Break-Even FE:      {break_even_text}")
         print(f" >>> ACTION: {action_text} <<<")
         print("=================================================\n")
 
@@ -205,22 +226,25 @@ def run_solver(
     fold_equity: float,
     hand_str: str | None = None,
     db_path: str = "data/winrates.json",
+    opponent_model: OpponentModel = OpponentModel.RANDOM,
 ) -> None:
     """Execute the range solver pipeline and render visual reports."""
     db = WinRateDB(db_path)
-    finder = RangeFinder(db)
+    # Build the calling-range tables (~50 ms) only when the range model is requested
+    calling_model = CallingRangeModel() if opponent_model is OpponentModel.RANGE else None
+    finder = RangeFinder(db, calling_model)
 
     be_bluff = calculate_break_even_fold_equity(pot, bet_size, win_rate_when_called=0.0)
-    records = finder.solve_range(pot, bet_size, fold_equity)
+    records = finder.solve_range(pot, bet_size, fold_equity, opponent_model)
     profitable = [r for r in records if r.is_raise_profitable]
     coverage = finder.calculate_range_coverage(profitable)
 
-    render_banner(pot, bet_size, fold_equity, be_bluff)
+    render_banner(pot, bet_size, fold_equity, be_bluff, opponent_model)
     render_tactical_overview(records, coverage)
     render_categorized_heatmap(records)
 
     if hand_str:
-        render_single_hand_decision(hand_str, db, pot, bet_size, fold_equity)
+        render_single_hand_decision(hand_str, db, pot, bet_size, fold_equity, calling_model)
 
 
 def interactive_mode(db_path: str = "data/winrates.json") -> None:
@@ -236,9 +260,12 @@ def interactive_mode(db_path: str = "data/winrates.json") -> None:
         fe_str = input("Enter Opponent Fold Probability [0.0 - 1.0] (e.g. 0.35): ").strip()
         fold_equity = float(fe_str) if fe_str else 0.35
 
+        model_str = input("Opponent folds 'random' or 'range' (weakest hands first)? [random]: ").strip()
+        opponent_model = OpponentModel(model_str.lower()) if model_str else OpponentModel.RANDOM
+
         hand_str = input("Enter your hand (e.g. 'As Kh Qd' or press Enter to skip): ").strip()
-        run_solver(pot, bet, fold_equity, hand_str=hand_str or None, db_path=db_path)
-    except (ValueError, KeyboardInterrupt) as err:
+        run_solver(pot, bet, fold_equity, hand_str=hand_str or None, db_path=db_path, opponent_model=opponent_model)
+    except (ValueError, LiengError, KeyboardInterrupt) as err:
         print(f"\nExiting session: {err}")
 
 
@@ -267,6 +294,12 @@ def main(argv: Sequence[str] | None = None) -> None:
         default="data/winrates.json",
         help="Path to winrates database (default: data/winrates.json)",
     )
+    parser.add_argument(
+        "--opponent-model",
+        choices=[m.value for m in OpponentModel],
+        default=OpponentModel.RANDOM.value,
+        help="How the opponent folds: 'random' or 'range' (weakest hands first). Default: random",
+    )
 
     args = parser.parse_args(argv)
 
@@ -276,7 +309,19 @@ def main(argv: Sequence[str] | None = None) -> None:
         pot = args.pot if args.pot is not None else 100000.0
         bet = args.bet if args.bet is not None else 50000.0
         fold_equity = args.fold_equity if args.fold_equity is not None else 0.35
-        run_solver(pot=pot, bet_size=bet, fold_equity=fold_equity, hand_str=args.hand, db_path=args.db)
+        try:
+            run_solver(
+                pot=pot,
+                bet_size=bet,
+                fold_equity=fold_equity,
+                hand_str=args.hand,
+                db_path=args.db,
+                opponent_model=OpponentModel(args.opponent_model),
+            )
+        except (LiengError, ValueError) as err:
+            # Bad hand text or out-of-range numbers: a clear message and the usage-error exit code
+            print(f"Invalid input: {err}", file=sys.stderr)
+            sys.exit(2)
 
 
 if __name__ == "__main__":

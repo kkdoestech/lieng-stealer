@@ -92,17 +92,21 @@ alphabetically inside each group.
 | **Enum / IntEnum** | A class whose members are a fixed set of named constants, e.g. `Suit.SPADES`. `IntEnum` members also behave like integers. |
 | **`str` + `Enum`** | `class OpponentModel(str, Enum)`: enum members that are also strings, so `OpponentModel.RANGE == "range"` and they convert to JSON naturally. |
 | **Exception** | An error object that is "raised" and can be "caught" with `try/except`. |
+| **Exit code** | The number a program returns to the shell when it ends: 0 = success, anything else = failure (2 conventionally means "wrong usage"). Shown by `echo $?`. |
 | **Fixture (pytest)** | A function that prepares something (e.g. a loaded database) and passes it into tests. |
 | **Hash / hashable** | A hash is a number computed from an object so it can be found quickly in a `dict` or `set`. Hashable objects must not change. |
 | **Hash table** | The data structure behind Python's `dict`: finds a value by key in (on average) constant time, O(1). |
 | **Immutable** | Cannot be changed after creation (like a `tuple` or a frozen dataclass). |
 | **Module / package** | A module is one `.py` file. A package is a folder of modules with an `__init__.py`. |
+| **Mutation check** | Temporarily breaking the code you just fixed to confirm a test fails. If no test fails, the fix isn't protected. |
 | **O(1), O(n)** | "Big-O" notation. O(1) = takes the same time no matter how much data; O(n) = time grows with the amount of data. |
 | **Parameter object** | A small class that bundles values which always travel together, e.g. `GameParams(pot, bet_size, fold_equity, opponent_model)`. |
 | **Process / multiprocessing** | Running several copies of Python at once so you can use several CPU cores. |
 | **Pure function** | A function whose result depends only on its inputs and that changes nothing outside itself. |
 | **pytest** | The testing tool we use. It finds functions named `test_...` and runs them. |
+| **`capsys` / `monkeypatch` (pytest)** | Built-in fixtures: `capsys` captures printed output; `monkeypatch` temporarily replaces a function, attribute or environment variable for one test. |
 | **REPL** | "Read–Eval–Print Loop": the interactive `>>>` Python prompt. Start it with `python3`. |
+| **TDD (test-driven development)** | Write a failing test first, watch it fail, write the smallest code that passes, then clean up. |
 | **Virtual environment (venv)** | A private folder of installed packages for one project. |
 
 ## 6. Web terms
@@ -130,6 +134,7 @@ alphabetically inside each group.
 | **LLM** | Large Language Model (an AI that writes text). The project optionally asks one for commentary. |
 | **`localStorage`** | A small key/value store in the browser that survives page reloads; used to remember the chosen language. |
 | **npm** | Node's package manager (like `pip` for JavaScript). |
+| **`node --test`** | Node's built-in test runner (`npm test` in this project). Finds `*.test.js` files; tests use `node:test` and `node:assert`. |
 | **React** | A JavaScript library for building user interfaces from components. |
 | **REST** | A style of API design where URLs name resources and HTTP methods name actions. |
 | **State (React)** | Data a component remembers between renders. Changing it re-draws the UI. |

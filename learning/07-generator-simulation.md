@@ -422,8 +422,8 @@ def generate_winrates_database(
 ```python
 
 
-def main(args: Sequence[str] | None = None) -> None:
-    """CLI entry point for generator."""
+def build_parser() -> argparse.ArgumentParser:
+    """Build the generator's command-line parser (exact enumeration by default)."""
     parser = argparse.ArgumentParser(
         description="Liêng Stealer - Precompute Showdown Equities Database."
     )
@@ -431,12 +431,20 @@ def main(args: Sequence[str] | None = None) -> None:
         "--samples",
         type=int,
         default=10000,
-        help="Number of Monte Carlo samples per hand (default: 10000).",
+        help="Number of Monte Carlo samples per hand, with --monte-carlo (default: 10000).",
     )
     parser.add_argument(
         "--exact",
+        dest="exact",
         action="store_true",
-        help="Run exact combinatorial enumeration over all C(49, 3) = 18,424 hands.",
+        default=True,
+        help="Run exact combinatorial enumeration over all C(49, 3) = 18,424 hands (default).",
+    )
+    parser.add_argument(
+        "--monte-carlo",
+        dest="exact",
+        action="store_false",
+        help="Estimate equities from --samples random opponent hands instead of exact enumeration.",
     )
     parser.add_argument(
         "--output",
@@ -450,8 +458,12 @@ def main(args: Sequence[str] | None = None) -> None:
         default=os.cpu_count() or 1,
         help=f"Number of parallel worker processes (default: {os.cpu_count() or 1}).",
     )
+    return parser
 
-    parsed = parser.parse_args(args)
+
+def main(args: Sequence[str] | None = None) -> None:
+    """CLI entry point for generator."""
+    parsed = build_parser().parse_args(args)
     mode = "Exact Combinatorial Enumeration" if parsed.exact else f"Monte Carlo ({parsed.samples} samples)"
     print(f"Starting equity generation in {mode} across {parsed.workers} workers...")
 
@@ -466,15 +478,22 @@ def main(args: Sequence[str] | None = None) -> None:
 
 if __name__ == "__main__":
     main()
+
 ```
 
 **How it works**
 
-- **`argparse`** turns `--exact --workers 4` into an object: `parsed.exact == True`,
+- **`argparse`** turns `--monte-carlo --workers 4` into an object: `parsed.exact == False`,
   `parsed.workers == 4`. It also generates `--help` for free.
   - `type=int` converts the text `"4"` into the integer `4` (and prints an error for `"four"`).
-  - `action="store_true"` makes a **flag**: present → `True`, absent → `False`.
+  - `action="store_true"` / `"store_false"` make **flags**: present → `True` / `False`.
+  - **Two flags, one destination:** `--exact` and `--monte-carlo` both write to `parsed.exact`
+    (`dest="exact"`). `default=True` makes exact enumeration the **default**, so a plain
+    `python -m src.generator` produces the official data; `--monte-carlo` is the opt-in for experiments.
+    `--exact` still exists so older commands keep working.
   - `--output` becomes `parsed.output` (dashes would become underscores).
+- **`build_parser()` is separate from `main()`** so the command-line *rules* can be tested without
+  running a 30-second generation: `build_parser().parse_args([]).exact` must be `True` (Step 7.8).
 - `main(args=None)`: when `args` is `None`, argparse reads the real command line (`sys.argv`). Tests can
   pass a list instead, e.g. `main(["--samples", "100"])`.
 - **`if __name__ == "__main__":`**: when you run `python -m src.generator`, Python sets `__name__` to
@@ -490,16 +509,19 @@ python -m src.generator --help
 Expected output (the default worker count is your number of CPU cores):
 
 ```
-usage: generator.py [-h] [--samples SAMPLES] [--exact] [--output OUTPUT]
-                    [--workers WORKERS]
+usage: generator.py [-h] [--samples SAMPLES] [--exact] [--monte-carlo]
+                    [--output OUTPUT] [--workers WORKERS]
 
 Liêng Stealer - Precompute Showdown Equities Database.
 
 options:
   -h, --help         show this help message and exit
-  --samples SAMPLES  Number of Monte Carlo samples per hand (default: 10000).
+  --samples SAMPLES  Number of Monte Carlo samples per hand, with --monte-
+                     carlo (default: 10000).
   --exact            Run exact combinatorial enumeration over all C(49, 3) =
-                     18,424 hands.
+                     18,424 hands (default).
+  --monte-carlo      Estimate equities from --samples random opponent hands
+                     instead of exact enumeration.
   --output OUTPUT    Output filepath (default: data/winrates.json).
   --workers WORKERS  Number of parallel worker processes (default: 4).
 ```
@@ -511,7 +533,7 @@ options:
 First a **quick Monte Carlo trial** into a scratch file, to see it working:
 
 ```bash
-python -m src.generator --samples 2000 --output data/winrates_mc.json
+python -m src.generator --monte-carlo --samples 2000 --output data/winrates_mc.json
 ```
 
 Expected output (a few seconds; the worker count will match your machine):
@@ -521,10 +543,10 @@ Starting equity generation in Monte Carlo (2000 samples) across 4 workers...
 Successfully generated database for 455 canonical hands -> data/winrates_mc.json
 ```
 
-Now the **real, exact database**:
+Now the **real, exact database** (exact enumeration is the default, so no flag is needed):
 
 ```bash
-time python -m src.generator --exact
+time python -m src.generator
 ```
 
 Expected output (about 30 seconds on a 4-core laptop; more cores = faster):
@@ -571,10 +593,12 @@ Delete the Monte Carlo trial file. It must not be used by the app:
 rm data/winrates_mc.json
 ```
 
-> ⚠️ **Always generate the official file with `--exact`.** The default mode is Monte Carlo with 10,000
-> samples. That file would have slightly different numbers and `"samples": 10000`, and the tests in
-> chapters 7, 8 and 14 (which expect exact values like `0.9969` and `"samples": 18424`) would fail.
-> A safer design would make `--exact` the default, since it's both correct and fast enough here.
+> ✅ **How the code fixed this (before → after).** The first version defaulted to **Monte Carlo**:
+> running `python -m src.generator` without `--exact` silently produced a file with slightly different
+> numbers and `"samples": 10000`, and the tests in chapters 7, 8 and 14 (which expect exact values like
+> `0.9969` and `"samples": 18424`) failed. Now exact enumeration, which is both correct and fast enough
+> here, is the default, and Monte Carlo needs an explicit `--monte-carlo`. **Lesson:** the default should
+> be the safe, correct choice; make the risky option opt-in.
 
 > 🔬 **Reproducibility check.** Exact enumeration has no randomness, so your file should be
 > **byte-for-byte identical** to the original:
@@ -617,6 +641,7 @@ import pytest
 
 from src.evaluator import HandCategory
 from src.generator import (
+    build_parser,
     compute_hand_equity,
     generate_winrates_database,
 )
@@ -745,7 +770,31 @@ class TestGeneratorEngine:
 - `Path(__file__).resolve().parent.parent` = "the folder two levels above this test file" =
   `backend/`. It's a fallback so the test also works when pytest is started from another folder.
 - `assert condition, "message"`: the message is shown if the assertion fails.
-- This test checks the **file on disk**, so it only passes after Step 7.7 (with `--exact`).
+- This test checks the **file on disk**, so it only passes after Step 7.7 (exact enumeration).
+
+Finally, two small tests guard the command line's **default**, the setting that once let a Monte Carlo
+file slip into the project:
+
+📄 **File:** `backend/tests/test_generator.py` — *add to the end*
+
+```python
+
+
+class TestGeneratorCommandLine:
+    """The command line must produce the exact database by default (the tests above require it)."""
+
+    def test_defaults_to_exact_enumeration(self) -> None:
+        assert build_parser().parse_args([]).exact is True
+
+    def test_monte_carlo_is_opt_in(self) -> None:
+        args = build_parser().parse_args(["--monte-carlo", "--samples", "500"])
+        assert args.exact is False
+        assert args.samples == 500
+```
+
+They call `build_parser()` directly, so they finish in milliseconds instead of running the generator.
+Each test names a break: if someone flips the default back to Monte Carlo, the first one fails; if
+`--monte-carlo` stops working, the second one does.
 
 ---
 
@@ -758,8 +807,8 @@ python -m pytest -q
 Expected output (this takes a few seconds because of the exact enumerations):
 
 ```
-............................                                             [100%]
-28 passed in 3.50s
+..............................                                           [100%]
+30 passed in 1.30s
 ```
 
 Commit, including the data file (remember the `!backend/data/winrates.json` rule in `.gitignore`):
@@ -775,8 +824,8 @@ git add . && git commit -m "feat: equity generator and precomputed winrates.json
   with error ≈ `sqrt(p(1−p)/N)`.
 - **`ProcessPoolExecutor`** spreads the 455 hand types over all CPU cores; `executor.map` keeps the order.
 - The result is an ~83 KB JSON file that, in exact mode, is **byte-identical** on every machine.
-- Pitfalls: global `random.seed`; hard-coded `18424`; Monte Carlo is the default but tests require `--exact`;
-  and the big one: equity is measured against a **random** hand, not against the hands that would call
+- Exact enumeration is the command-line **default**; Monte Carlo is opt-in (`--monte-carlo`).
+- Pitfalls: global `random.seed`; hard-coded `18424`; and the big one: equity is measured against a **random** hand, not against the hands that would call
   (fixed by the calling-range model in chapter 9).
 
 **Next:** [08 — The database layer](08-database-layer.md)

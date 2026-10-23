@@ -174,7 +174,8 @@ Replace the generated file so your versions match the original project:
     "dev": "vite",
     "build": "vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --test"
   },
   "dependencies": {
     "react": "^19.2.8",
@@ -194,6 +195,9 @@ Replace the generated file so your versions match the original project:
 
 - `"type": "module"` → files use modern `import`/`export` syntax.
 - `"scripts"` are shortcuts: `npm run dev` runs `vite`, `npm run build` runs `vite build`, etc.
+  `npm test` runs `node --test`: Node's **built-in test runner** (no extra package needed), which finds
+  files named `*.test.js` and runs them. The frontend's tests are written in chapter 16; until then
+  `npm test` simply finds nothing to run.
 - `"dependencies"` are needed by the app in the browser (React itself). `"devDependencies"` are only
   needed while developing/building (Vite, the linter, type definitions).
 - `^19.2.8` means "19.2.8 or any newer 19.x". The exact versions installed get recorded in

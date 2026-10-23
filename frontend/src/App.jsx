@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import './App.css';
 import { STRINGS, LANGUAGES } from './i18n.js';
+import { formatMoney, formatZones } from './format.js';
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
 const LANG_STORAGE_KEY = "lieng-scope-lang";
@@ -8,16 +9,6 @@ const LANG_STORAGE_KEY = "lieng-scope-lang";
 // Backend category enum -> display label and i18n description key
 const CATEGORY_LABELS = { SAP: "SÁP", LIENG: "LIÊNG", DI: "ĐĨ", DIEM: "ĐIỂM" };
 const CATEGORY_DESC_KEYS = { SAP: "descSap", LIENG: "descLieng", DI: "descDi", DIEM: "descDiem" };
-
-function formatMoney(num) {
-  if (num === undefined || num === null) return "0";
-  return new Intl.NumberFormat("vi-VN").format(Math.round(num));
-}
-
-function formatZones(zones) {
-  const pct = (f) => `${Math.round(f * 100)}%`;
-  return zones.map(([start, end]) => (start === end ? pct(start) : `${pct(start)}–${pct(end)}`)).join(" · ");
-}
 
 function loadSavedLang() {
   try {
@@ -405,7 +396,7 @@ export default function App() {
               <div className="verdict-col-right">
                 <span className="verdict-label">{t.expectedValueTag}</span>
                 <div className="verdict-ev">
-                  {handEval.ev > 0 ? "+" : ""}{formatMoney(handEval.ev)} <span className="ev-currency">VND</span>
+                  {handEval.ev > 0 ? "+" : ""}{formatMoney(handEval.ev, t.locale)} <span className="ev-currency">VND</span>
                 </div>
                 <div className="verdict-breakeven">
                   {t.profitableWhen} <span className="mono-green">{formatZones(zones)}</span>
@@ -443,7 +434,7 @@ export default function App() {
             <div className="hud-card">
               <div className="hud-label">{t.expectedValue}</div>
               <div className={`hud-value ${handEval?.ev > 0 ? "green-metric" : "dim-metric"}`}>
-                {handEval ? `${handEval.ev > 0 ? "+" : ""}${formatMoney(handEval.ev)}` : "0"}
+                {handEval ? `${handEval.ev > 0 ? "+" : ""}${formatMoney(handEval.ev, t.locale)}` : "0"}
               </div>
               <div className="hud-subtext">{t.expectedValueSub}</div>
             </div>
@@ -541,7 +532,7 @@ export default function App() {
                         </td>
                         <td className="mono-num">{(item.equity * 100).toFixed(1)}%</td>
                         <td className={`mono-num bold-num ${item.ev > 0 ? "positive-ev" : "negative-ev"}`}>
-                          {item.ev > 0 ? "+" : ""}{formatMoney(item.ev)} VND
+                          {item.ev > 0 ? "+" : ""}{formatMoney(item.ev, t.locale)} VND
                         </td>
                         <td className="dim-cell">{item.multiplicity} {t.combosSuffix}</td>
                         <td>

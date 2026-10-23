@@ -2,7 +2,7 @@
 
 > **Goal:** finish the backend test suite with end-to-end "scenario" tests, learn the pytest features you
 > have been using, and measure the code against the speed and memory budgets in `AGENTS.md`.
-> **You will build:** `backend/tests/test_dynamic_scenarios.py` (5 tests).
+> **You will build:** `backend/tests/test_dynamic_scenarios.py` (6 tests).
 > **Time:** ~1 hour.
 > **Prerequisites:** [13](13-flask-api.md).
 
@@ -17,7 +17,7 @@ the whole stack (HTTP request → API → engine → JSON) and check that the *a
 ```
               ▲ fewer, slower, broader
               │      test_dynamic_scenarios.py   "a monster hand must say RAISE"   (whole stack)
-              │      test_api.py                 HTTP contract of each endpoint, both opponent models
+              │      test_api.py, test_cli.py    contract of each endpoint / command, both opponent models
               │      test_range_finder.py, test_calling_range.py, test_db.py, test_generator.py
               │      test_ev.py, test_hands.py, test_evaluator.py   (one function at a time)
               ▼ many, fast, narrow
@@ -61,12 +61,13 @@ python -m pytest --durations=5            # list the 5 slowest tests
 """Comprehensive Dynamic Scenario Verification Suite for Liêng Stealer.
 
 Verifies that the engine and API are completely dynamic and mathematically
-rigorous across 5 diverse game scenarios:
+rigorous across 6 diverse game scenarios:
 1. Monster Hand Value Raise (Liêng Q-K-A)
 2. Junk Hand against Calling Station (Forced Fold with 0 points)
 3. Mathematical Pure Bluff (0 points flips to Raise under high fold equity)
 4. Range Coverage Sensitivity Sweep across fold equities
 5. API Schema, Endpoint Variations & Dynamic Response Verification
+6. Same Medium Hand under Both Opponent Models (random raises, calling range folds)
 """
 
 import sys
@@ -371,7 +372,56 @@ depend on the inputs, i.e. nothing is accidentally cached or hard-coded.
 
 ---
 
-## Step 14.6 — Run the whole suite and read the report
+## Step 14.6 — Scenario 6: one hand, both opponent models
+
+📄 **File:** `backend/tests/test_dynamic_scenarios.py` — *add to the end*
+
+```python
+
+
+def test_scenario_6_same_hand_both_models(client):
+    """Scenario 6: Same Medium Hand under Both Opponent Models.
+    Pot=100k, Bet=100k, FoldEquity=0.35, Hand='Ks Qh 3d' (3 points)
+    """
+    base = {"pot": 100000.0, "bet_size": 100000.0, "fold_equity": 0.35, "hand": "Ks Qh 3d"}
+    vs_random = client.post("/api/solve", json={**base, "opponent_model": "random"}).get_json()["hand_evaluation"]
+    vs_range = client.post("/api/solve", json={**base, "opponent_model": "range"}).get_json()["hand_evaluation"]
+
+    # Invariants:
+    # 1. Against a random caller, 36% equity makes the pot-sized bet profitable
+    assert vs_random["decision"] == "RAISE"
+    assert vs_random["showdown_equity"] == 0.36
+    # 2. An opponent who folds their weakest 35% calls only with hands that beat 3 points
+    assert vs_range["decision"] == "CHECK/FOLD"
+    assert vs_range["showdown_equity"] < 0.02
+    # 3. Both answers describe the same hand; only the opponent model differs
+    assert vs_random["canonical_id"] == vs_range["canonical_id"] == "K-Q-3"
+
+    print("\n[Scenario 6: Same Hand, Both Opponent Models]")
+    print(f"  Hand: {vs_random['hand']} ({vs_random['canonical_id']})")
+    print(f"  Random caller:  equity {vs_random['showdown_equity'] * 100:.2f}%, EV {vs_random['ev']:+,.0f} VND -> {vs_random['decision']}")
+    print(f"  Calling range:  equity {vs_range['showdown_equity'] * 100:.2f}%, EV {vs_range['ev']:+,.0f} VND -> {vs_range['decision']}")
+    print("  Decision flips with the opponent model -> PASS")
+```
+
+**In plain words:** "the same medium hand, `K-Q-3` with a pot-sized bet, must be a **raise** against an
+opponent who folds at random (36% equity) and a **fold** against one who folds their weakest 35% (about
+1% equity)." It's the project's second core lesson, next to scenarios 2 and 3: the answer depends on the
+**model of the opponent**, not just on the cards and the numbers.
+
+- `{**base, "opponent_model": "random"}` builds each request from a shared base (dict unpacking).
+- Invariant 3 makes sure the two answers describe the **same** hand, so the only difference really is
+  the model.
+
+> 💡 **How do you know a test can fail?** This scenario passes the first time you run it, because the
+> behaviour already exists (chapters 9–13). A test that has never failed might test nothing. Try a quick
+> **mutation**: temporarily change `_parse_game_params` in `app.py` to always use
+> `OpponentModel.RANDOM`, run `python -m pytest tests/test_dynamic_scenarios.py -k scenario_6`, and watch
+> it fail; then undo the change. Now you know the test protects that behaviour.
+
+---
+
+## Step 14.7 — Run the whole suite and read the report
 
 ```bash
 python -m pytest -q
@@ -380,19 +430,14 @@ python -m pytest -q
 Expected output:
 
 ```
-........................................................................ [ 94%]
-....                                                                     [100%]
-76 passed in 1.60s
+........................................................................ [ 77%]
+.....................                                                    [100%]
+93 passed in 2.20s
 ```
 
-**76 tests**: 18 evaluator + 5 hands + 5 generator + 6 db + 9 calling range + 13 ev + 4 range finder +
-11 API + 5 scenarios. (The project's README still shows a "58 Tests Passing" badge from before the
-calling-range model was added: another doc that drifted.)
-
-> 💡 The five scenario tests all use the **default random model** (they don't send
-> `opponent_model`), so their numbers are the same as before the range model existed. The range model's
-> end-to-end behaviour is covered by the newer tests in `test_api.py` (chapter 13). A sixth scenario,
-> "the same medium hand under both models", would be a natural addition here.
+**93 tests**: 18 evaluator + 5 hands + 7 generator + 6 db + 9 calling range + 13 ev + 6 range finder +
+6 CLI + 17 API + 6 scenarios. (Parametrized tests count once per input.) The project's README badge says
+the same; it was corrected along with the code fixes in this guide.
 
 Now with the scenario report and the slowest tests:
 
@@ -418,7 +463,13 @@ python -m pytest tests/test_dynamic_scenarios.py -s -q
   f = 0.30 (Average Player): 96.42% coverage
   f = 0.40 (Folding Player): 100.00% coverage
 ...
-5 passed in 0.22s
+[Scenario 6: Same Hand, Both Opponent Models]
+  Hand: Ks Qh 3d (K-Q-3)
+  Random caller:  equity 36.00%, EV +40,200 VND -> RAISE
+  Calling range:  equity 1.08%, EV -27,894 VND -> CHECK/FOLD
+  Decision flips with the opponent model -> PASS
+.
+6 passed in 0.25s
 ```
 
 ```bash
@@ -430,7 +481,7 @@ milliseconds.
 
 ---
 
-## Step 14.7 — Measure the performance budgets
+## Step 14.8 — Measure the performance budgets
 
 `AGENTS.md` §6 lists five budgets. Let's measure each one. No new project files: run these in the
 terminal from `backend/`.
@@ -540,7 +591,7 @@ real    0m0.120s
 
 ## ✅ Checkpoint
 
-- [ ] `python -m pytest -q` → **76 passed**.
+- [ ] `python -m pytest -q` → **93 passed**.
 - [ ] You can explain the difference between a unit test and a scenario test.
 - [ ] You measured at least three of the five budgets yourself.
 
@@ -557,7 +608,7 @@ git add . && git commit -m "test: dynamic scenario suite"
 - Fixtures can test the same logic through HTTP (`client`) or directly (`solver`).
 - Measure performance with `timeit`, memory with `tracemalloc`, and whole commands with `time`.
 - The calling-range model costs ~50 ms and ~1.1 MB once, then ~1.5 ms per range solve.
-- Pitfall: two budgets are missed (evaluation, CLI) and only two are guarded by tests; the scenario
-  suite only exercises the random model.
+- Scenario 6 runs one hand under both opponent models; a quick **mutation** shows the test can fail.
+- Pitfall: two budgets are missed (evaluation, CLI) and only two are guarded by tests.
 
 **Next:** [15 — Frontend foundations](15-frontend-foundations.md)

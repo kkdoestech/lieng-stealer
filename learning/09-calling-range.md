@@ -708,7 +708,7 @@ The last test guards the `AGENTS.md` budget for a full range solve (25 ms). A ty
 python -m pytest tests/test_calling_range.py -v
 ```
 
-Expected: **9 passed**. Then the whole suite so far (evaluator 18 + hands 5 + generator 5 + db 6 +
+Expected: **9 passed**. Then the whole suite so far (evaluator 18 + hands 5 + generator 7 + db 6 +
 calling range 9):
 
 ```bash
@@ -716,8 +716,8 @@ python -m pytest -q
 ```
 
 ```
-...........................................                              [100%]
-43 passed in 2.10s
+.............................................                            [100%]
+45 passed in 2.10s
 ```
 
 Commit:

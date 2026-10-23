@@ -3,7 +3,7 @@
 > **Goal:** put the engine behind a web API, so a web page (or any program) can send a game situation as
 > JSON and get the decision back as JSON, with either opponent model.
 > **You will build:** `backend/app.py` (6 endpoints + shared helpers) and `backend/tests/test_api.py`
-> (11 tests).
+> (17 tests).
 > **Time:** ~3 hours.
 > **Prerequisites:** [12](12-cli.md). Flask is already installed (chapter 2).
 
@@ -305,7 +305,7 @@ Flask answers `400 {"error": "..."}` by itself.
 
 ---
 
-## Step 13.5 — `_equity_function` and `_evaluate_hand`: one hand, either model
+## Step 13.5 — `_equity_function`, `_evaluate_hand`, `_break_even_fields`: one hand, either model
 
 📄 **File:** `backend/app.py` — *add to the end*
 
@@ -323,17 +323,30 @@ def _evaluate_hand(
     canonical_id: str,
     random_equity: float,
     params: GameParams,
-) -> tuple[EVResult, list[tuple[float, float]], float]:
-    """Return the EV result, profitable fold-frequency zones, and break-even fold equity."""
+) -> tuple[EVResult, list[tuple[float, float]]]:
+    """Return the EV result and the profitable fold-frequency zones."""
     equity_at = _equity_function(canonical_id, random_equity, params.opponent_model)
     ev_res = evaluate_action(params.pot, params.bet_size, params.fold_equity, equity_at(params.fold_equity))
     zones = profitable_fold_zones(params.pot, params.bet_size, equity_at)
-    if params.opponent_model is OpponentModel.RANGE:
-        # EV is not monotonic in fold equity here; report where raising stays +EV for good
-        break_even = zones[-1][0] if zones else 1.0
-    else:
-        break_even = ev_res.break_even_fold_equity
-    return ev_res, zones, break_even
+    return ev_res, zones
+
+
+def _break_even_fields(
+    ev_res: EVResult,
+    zones: list[tuple[float, float]],
+    model: OpponentModel,
+) -> dict[str, float | None]:
+    """Describe when raising pays off, with one unambiguous meaning per field.
+
+    break_even_fold_equity: exact fold frequency where EV = 0 (random model only; under
+        RANGE, EV is not monotonic in fold equity, so no single break-even point exists).
+    profitable_from_fold_equity: first 1%-grid fold frequency from which raising stays +EV.
+        The last zone always ends at 1.0, because EV there equals the pot.
+    """
+    return {
+        "break_even_fold_equity": ev_res.break_even_fold_equity if model is OpponentModel.RANDOM else None,
+        "profitable_from_fold_equity": zones[-1][0],
+    }
 ```
 
 **How it works**
@@ -345,18 +358,27 @@ def _evaluate_hand(
   1. at the current fold frequency, `equity_at(params.fold_equity)` → `evaluate_action` (chapter 10) →
      EV and decision;
   2. on the whole 0–100% grid → `profitable_fold_zones` → the zones for the UI's profit map.
-- **Break-even depends on the model:**
-  - random model: the exact closed-form value from `calculate_break_even_fold_equity`;
-  - range model: EV isn't monotonic, so there is no single break-even. The code reports where raising
-    becomes profitable **for good**: the start of the **last** zone (`zones[-1][0]`), or 1.0 if raising
-    is never profitable.
-- It returns a **tuple of three** values; callers unpack them (`ev_res, zones, break_even = ...`).
+- It returns a **tuple of two** values; callers unpack them (`ev_res, zones = ...`).
+- **`_break_even_fields`** answers "from which fold frequency does raising pay?" with **two fields, one
+  meaning each**:
+  - `break_even_fold_equity`: the exact closed-form value from `calculate_break_even_fold_equity`
+    (chapter 10), valid for the **random** model, where equity doesn't change with `f`. Under the **range**
+    model EV isn't monotonic, so there is no single break-even point, and the field is `None` (JSON `null`)
+    instead of a misleading number;
+  - `profitable_from_fold_equity`: the start of the **last** profitable zone (`zones[-1][0]`), i.e. the
+    first 1%-grid fold frequency from which raising stays +EV all the way to 100%. It exists for **both**
+    models.
+- **Why `zones[-1]` is always safe:** at `f = 1.0` the opponent always folds, so EV = the pot > 0. The
+  scan therefore always ends inside a profitable zone, and the list is never empty. The docstring says
+  so, so nobody "fixes" it with an unnecessary `if`.
+- The return type `dict[str, float | None]` documents that a value may be `None`.
 
-> ⚠️ **Pitfall: one field, two meanings.** `break_even_fold_equity` in the responses means "the exact
-> fold frequency where EV = 0" under the random model, but "the grid point from which raising stays +EV"
-> under the range model (e.g. 0.51 for `K-Q-3`, although it is *also* profitable from 0 to 8%). A client
-> that doesn't check `opponent_model` can misread it. Clearer API design: a separate field name for each
-> meaning, or only the zones.
+> ✅ **How the code fixed this (before → after).** The first version had **one** field,
+> `break_even_fold_equity`, with **two** meanings: the exact EV = 0 point under the random model, but
+> "the grid point from which raising stays +EV" under the range model (e.g. 0.51 for `K-Q-3`, although
+> it is *also* profitable from 0 to 8%). A client that didn't check `opponent_model` would misread it.
+> Now each meaning has its own name, and the inapplicable one is explicitly `null`. **Lesson:** a field
+> name is a promise; never let one name mean two things.
 
 ---
 
@@ -497,7 +519,7 @@ def solve_api() -> Any:
         except LiengError as err:
             return jsonify({"error": f"Invalid hand: {err}"}), 400
 
-        ev_res, zones, break_even = _evaluate_hand(canonical.canonical_id, stats.equity, params)
+        ev_res, zones = _evaluate_hand(canonical.canonical_id, stats.equity, params)
         hand_eval_result = {
             "hand": str(player_hand),
             "score_name": str(player_hand.score),
@@ -507,7 +529,7 @@ def solve_api() -> Any:
             "showdown_equity": ev_res.win_rate_when_called,
             "equity_vs_random": stats.equity,
             "ev": ev_res.ev,
-            "break_even_fold_equity": break_even,
+            **_break_even_fields(ev_res, zones, params.opponent_model),
             "profitable_fold_zones": [[start, end] for start, end in zones],
             "is_profitable": ev_res.is_profitable,
             "decision": "RAISE" if ev_res.is_profitable else "CHECK/FOLD",
@@ -530,6 +552,9 @@ def solve_api() -> Any:
   `"Liêng Q-K-A"`). New fields compared with a random-only API:
   - `showdown_equity`: the equity **actually used** (depends on the model);
   - `equity_vs_random`: the random-hand equity, always included for comparison;
+  - `break_even_fold_equity` and `profitable_from_fold_equity` from Step 13.5. `**_break_even_fields(…)`
+    **unpacks** the returned dict into this one (like `{**a, "x": 1}`), so both endpoints share the same
+    two fields without copy-paste;
   - `profitable_fold_zones`: the zones as a list of `[start, end]` pairs (JSON has no tuples).
 
 ---
@@ -608,7 +633,7 @@ The response is long. The `hand_evaluation` part should be (Flask sorts keys alp
 
 ```json
 {
-  "break_even_fold_equity": 0.51,
+  "break_even_fold_equity": null,
   "canonical_id": "K-Q-3",
   "category": "DIEM",
   "category_name": "Điểm",
@@ -618,6 +643,7 @@ The response is long. The `hand_evaluation` part should be (Flask sorts keys alp
   "hand": "Ks Qh 3d",
   "is_profitable": false,
   "profitable_fold_zones": [[0.0, 0.08], [0.51, 1.0]],
+  "profitable_from_fold_equity": 0.51,
   "score_name": "3 điểm",
   "showdown_equity": 0.0108
 }
@@ -636,7 +662,10 @@ Compare with chapter 9's worked example (0.0108) and chapter 10's zones. In `sum
 ```
 
 Repeat the request **without** `"opponent_model"` (so the random model): the decision flips to `RAISE`,
-`showdown_equity` equals `equity_vs_random` (0.36), and the zones become `[[0.0, 1.0]]`.
+`showdown_equity` equals `equity_vs_random` (0.36), and the zones become `[[0.0, 1.0]]`. For a case
+where both break-even fields have a value, try `2s 3h 5d` with `"bet_size": 50000, "fold_equity": 0.05`
+(random model): `"break_even_fold_equity": 0.3312` (exact) and `"profitable_from_fold_equity": 0.34`
+(the first grid point above it).
 
 Now try bad input:
 
@@ -683,7 +712,7 @@ def evaluate_api() -> Any:
     except LiengError as err:
         return jsonify({"error": f"Invalid hand: {err}"}), 400
 
-    ev_res, _, break_even = _evaluate_hand(canonical.canonical_id, stats.equity, params)
+    ev_res, zones = _evaluate_hand(canonical.canonical_id, stats.equity, params)
     return jsonify({
         "hand": str(player_hand),
         "canonical_id": canonical.canonical_id,
@@ -695,7 +724,7 @@ def evaluate_api() -> Any:
         "showdown_equity": ev_res.win_rate_when_called,
         "equity_vs_random": stats.equity,
         "ev": ev_res.ev,
-        "break_even_fold_equity": break_even,
+        **_break_even_fields(ev_res, zones, params.opponent_model),
         "recommended_action": "RAISE" if ev_res.is_profitable else "CHECK/FOLD",
         "is_profitable": ev_res.is_profitable,
     }), 200
@@ -704,8 +733,8 @@ def evaluate_api() -> Any:
 **How it works**
 
 - Here `hand` is **required**: a missing hand is a 400, not "skip it".
-- The same helpers as `/api/solve`. `ev_res, _, break_even = …` unpacks the tuple; `_` is the
-  conventional name for a value we don't need (the zones aren't part of this response).
+- The same helpers as `/api/solve`, including both break-even fields via `**_break_even_fields(…)`. The
+  zones are used to compute `profitable_from_fold_equity`, but not sent in this lighter response.
 
 > ⚠️ **Still inconsistent: response field names.** Validation is shared now, but the responses still
 > name things differently: `/api/solve` says `"bet_size"` and `"decision"`; `/api/evaluate` says `"bet"`
@@ -781,19 +810,25 @@ a rule-based text itself, so the feature always works.
 def analyze_api() -> Any:
     """Query OpenRouter LLM for strategic game-theoretic commentary."""
     data = request.get_json(silent=True) or {}
+    params = _parse_game_params(data)
+    pot, bet_size, fold_equity = params.pot, params.bet_size, params.fold_equity
 
-    pot = data.get("pot", 100000.0)
-    bet_size = data.get("bet_size", 50000.0)
-    fold_equity = data.get("fold_equity", 0.35)
     hand = data.get("hand", "None")
     hand_eval = data.get("hand_evaluation") or {}
+    if not isinstance(hand_eval, dict):
+        raise InvalidGameParamsError("hand_evaluation must be a JSON object.")
+    try:
+        hand_ev = float(hand_eval.get("ev", 0))
+        hand_equity = float(hand_eval.get("showdown_equity", 0))
+    except (ValueError, TypeError) as err:
+        raise InvalidGameParamsError("hand_evaluation.ev and showdown_equity must be numbers.") from err
     coverage = data.get("range_coverage_percent", 0.0)
-    folds_weakest = data.get("opponent_model") == OpponentModel.RANGE.value
+    folds_weakest = params.opponent_model is OpponentModel.RANGE
 
     api_key = os.environ.get("OPENROUTER_API_KEY")
 
     if folds_weakest:
-        model_line = f"folds their weakest hands (calls only with the top {(1 - float(fold_equity)) * 100:.0f}%)"
+        model_line = f"folds their weakest hands (calls only with the top {(1 - fold_equity) * 100:.0f}%)"
     else:
         model_line = "folds at random, regardless of hand strength"
     prompt = (
@@ -801,7 +836,7 @@ def analyze_api() -> Any:
         f"Analyze this decision spot with precision and strategic depth in Vietnamese:\n\n"
         f"- Current Pot: {pot:,.0f} VND\n"
         f"- Bet / Raise Size: {bet_size:,.0f} VND\n"
-        f"- Opponent Fold Equity: {float(fold_equity) * 100:.1f}%\n"
+        f"- Opponent Fold Equity: {fold_equity * 100:.1f}%\n"
         f"- Opponent Model: {model_line}\n"
         f"- Total Range Coverage (Hands with EV > 0): {coverage}%\n"
     )
@@ -809,8 +844,8 @@ def analyze_api() -> Any:
     if hand_eval:
         prompt += (
             f"- Hero's Hand: {hand_eval.get('hand')} ({hand_eval.get('score_name')})\n"
-            f"- Showdown Equity: {float(hand_eval.get('showdown_equity', 0)) * 100:.1f}%\n"
-            f"- Calculated EV: {float(hand_eval.get('ev', 0)):+,.0f} VND\n"
+            f"- Showdown Equity: {hand_equity * 100:.1f}%\n"
+            f"- Calculated EV: {hand_ev:+,.0f} VND\n"
             f"- Solver Decision: {hand_eval.get('decision')}\n"
         )
     else:
@@ -832,22 +867,30 @@ def analyze_api() -> Any:
   the facts (pot, EV, decision, and now **how the opponent folds**) and the desired output structure
   (three numbered sections). Putting the *computed* numbers in the prompt matters: LLMs are bad at
   arithmetic, so we do the maths and let the model only explain it.
-- `folds_weakest` is a boolean computed once and used twice (prompt and fallback).
+- **Validation first:** the same `_parse_game_params` as the other endpoints (Steps 13.3–13.4), plus
+  checks for the extra input this endpoint reads: `hand_evaluation` must be a JSON object, and its `ev`
+  and `showdown_equity` must convert to numbers. Both raise `InvalidGameParamsError`, which the error
+  handler turns into a 400. After that, the f-strings can format `pot`, `hand_ev` etc. safely.
+- `folds_weakest` is a boolean computed once and used twice (prompt and fallback). It now comes from the
+  validated `params.opponent_model`, so an unknown model is a 400 instead of silently meaning "random".
 
-> ⚠️ **Pitfall: this endpoint is still unvalidated.** The other endpoints use `_parse_game_params`;
-> this one reads raw values. Send `{"pot": "abc"}` and `f"{pot:,.0f}"` raises `ValueError` ("Unknown
-> format code 'f' for object of type 'str'"), and Flask answers **500 Internal Server Error**:
+> ✅ **How the code fixed this (before → after).** The first version of this endpoint read raw values:
+> `{"pot": "abc"}` reached `f"{pot:,.0f}"`, which raised `ValueError` ("Unknown format code 'f' for object
+> of type 'str'"), and Flask answered **500 Internal Server Error**. A malformed `hand_evaluation` crashed
+> the same way. Because the other endpoints already shared `_parse_game_params`, the fix was mostly one
+> line. Now:
 >
 > ```bash
-> curl -s -i -X POST http://127.0.0.1:5000/api/analyze -H "Content-Type: application/json" -d '{"pot":"abc"}' | head -1
+> curl -s -i -X POST http://127.0.0.1:5000/api/analyze -H "Content-Type: application/json" -d '{"pot":"abc"}' | sed -n '1p;$p'
 > ```
 >
 > ```
-> HTTP/1.1 500 INTERNAL SERVER ERROR
+> HTTP/1.1 400 BAD REQUEST
+> {"error":"Invalid numerical parameters for pot, bet_size, or fold_equity."}
 > ```
 >
-> The fix is now one line, because the helper exists: `params = _parse_game_params(data)` at the top, then
-> use `params.pot` etc. (the error handler turns bad input into a 400 automatically).
+> **Lesson:** a shared validation helper pays off twice: once when you write it, and again when the next
+> endpoint can adopt it in one line.
 
 ---
 
@@ -861,7 +904,7 @@ def analyze_api() -> Any:
         # Fallback commentary when no OpenRouter API key is configured
         fallback_advice = (
             f"**[Phân Tích Chiến Thuật Hệ Thống (Offline Solver)]**\n\n"
-            f"1. **Quyết định Toán học:** Với Pot = {pot:,.0f}, Cược = {bet_size:,.0f}, và Fold Equity = {float(fold_equity)*100:.1f}%, "
+            f"1. **Quyết định Toán học:** Với Pot = {pot:,.0f}, Cược = {bet_size:,.0f}, và Fold Equity = {fold_equity*100:.1f}%, "
             f"ngưỡng hòa vốn cược hù (bluff) là {(bet_size / (pot + bet_size))*100:.1f}%. "
             f"Khoảng bài có lãi (EV > 0) chiếm **{coverage}%** toàn bộ thế bài có thể có. "
             + ("Giả định đối thủ bỏ những bài yếu nhất, nên khi bị theo, Hero đối đầu với nhóm bài mạnh hơn.\n\n" if folds_weakest
@@ -870,19 +913,18 @@ def analyze_api() -> Any:
         )
         if hand_eval:
             decision = hand_eval.get("decision", "EVALUATE")
-            ev = hand_eval.get("ev", 0)
             fallback_advice += (
                 f"Hero cầm **{hand_eval.get('hand')}** ({hand_eval.get('score_name')}) "
-                f"với xác suất thắng đối đầu {float(hand_eval.get('showdown_equity', 0))*100:.1f}%. "
-                f"Kỳ vọng thu nhập (EV) đạt **{ev:+,.0f} VND**. "
+                f"với xác suất thắng đối đầu {hand_equity*100:.1f}%. "
+                f"Kỳ vọng thu nhập (EV) đạt **{hand_ev:+,.0f} VND**. "
                 f"Khuyến nghị tối ưu: **{decision}**.\n\n"
                 f"3. **GTO Insight:** "
-                + ("Bài có EV dương rõ rệt nhờ cả showdown equity lẫn fold equity. Tố lớn để tối đa hóa lợi nhuận." if ev > 0
+                + ("Bài có EV dương rõ rệt nhờ cả showdown equity lẫn fold equity. Tố lớn để tối đa hóa lợi nhuận." if hand_ev > 0
                    else "EV âm. Showdown equity quá thấp và đối thủ ít bỏ bài. Không nên mạo hiểm, hãy Bỏ bài (Fold) hoặc Theo nhẹ nếu có thể.")
             )
         else:
             fallback_advice += (
-                f"Với tần suất đối thủ bỏ bài {float(fold_equity)*100:.1f}%, hãy ưu tiên nâng cược với các nhóm bài Sáp, Liêng, Đĩ "
+                f"Với tần suất đối thủ bỏ bài {fold_equity*100:.1f}%, hãy ưu tiên nâng cược với các nhóm bài Sáp, Liêng, Đĩ "
                 f"và các tổ hợp điểm cao (> 7 điểm). Cẩn trọng cược hù khi đối thủ có xu hướng theo cược dính."
             )
 
@@ -900,6 +942,8 @@ def analyze_api() -> Any:
   (`"A" if folds_weakest else "B"`): it explains which opponent model the numbers assume ("the opponent
   folds their weakest hands, so when called, Hero faces a stronger group of hands" vs "the opponent folds
   at random").
+- The hand's EV and equity come from the validated `hand_ev` / `hand_equity` (Step 13.12), never from the
+  raw request.
 - `bet_size / (pot + bet_size)` is the pure-bluff break-even `B / (P + B)` from chapter 10, written out by
   hand. Calling `calculate_break_even_fold_equity(pot, bet_size, 0.0)` would avoid a second copy of the
   formula.
@@ -1102,7 +1146,9 @@ That's good testing: test **behaviour**, not implementation.
 ```python
 
 
-def test_analyze_endpoint(client):
+def test_analyze_endpoint(client, monkeypatch):
+    # Force the offline fallback: a test must never call the real OpenRouter API
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     payload = {
         "pot": 100000,
         "bet_size": 50000,
@@ -1124,16 +1170,12 @@ def test_analyze_endpoint(client):
     assert len(data["advice"]) > 0
 ```
 
-> ⚠️ **Pitfall: a test that may call the internet.** If `OPENROUTER_API_KEY` is set in your shell,
-> `test_analyze_endpoint` sends a **real** request to OpenRouter: slow, uses your quota, and fails
-> offline or when the free model is unavailable (502 ≠ 200). Tests should never depend on external
-> services. Fix it with pytest's `monkeypatch` fixture, which changes things only for one test:
->
-> ```python
-> def test_analyze_endpoint(client, monkeypatch):
->     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)   # force the offline fallback
->     ...
-> ```
+> ✅ **How the code fixed this (before → after).** The first version of `test_analyze_endpoint` had no
+> `monkeypatch`: with `OPENROUTER_API_KEY` set in your shell it sent a **real** request to OpenRouter,
+> which was slow, used your quota, and failed offline (502 ≠ 200). Now `monkeypatch.delenv(...)` removes
+> the variable **for this test only** (pytest restores it afterwards), forcing the offline fallback.
+> Check it: `OPENROUTER_API_KEY=dummy python -m pytest tests/test_api.py -q` still passes, without
+> network. **Lesson:** tests must never depend on external services.
 
 Now the tests for the opponent models. (The original file has three blank lines before this test; two
 are standard, the third is harmless.)
@@ -1165,12 +1207,14 @@ def test_solve_range_model_flips_medium_hand(client):
     assert hand_eval["showdown_equity"] < 0.02
     assert hand_eval["decision"] == "CHECK/FOLD"
     assert len(hand_eval["profitable_fold_zones"]) == 2
-    assert hand_eval["break_even_fold_equity"] == 0.51
+    # EV is not monotonic in fold equity here, so there is no single break-even point
+    assert hand_eval["break_even_fold_equity"] is None
+    assert hand_eval["profitable_from_fold_equity"] == 0.51
 ```
 
 **In plain words:** the **same request** about `K-Q-3`, once per model. With the default (random) model
-it's a raise everywhere; with the range model it's a fold at 35%, with two profit zones and the
-"stays-profitable-from" point at 0.51. The first test is a **backward-compatibility test**: it guarantees
+it's a raise everywhere; with the range model it's a fold at 35%, with two profit zones, **no** single
+break-even (`None`) and the "stays-profitable-from" point at 0.51. The first test is a **backward-compatibility test**: it guarantees
 that clients written before the range model existed still get the old behaviour.
 
 📄 **File:** `backend/tests/test_api.py` — *add to the end*
@@ -1213,6 +1257,56 @@ def test_evaluate_and_range_accept_opponent_model(client):
 - The last test checks a **relationship** instead of exact numbers: range-model coverage must be lower
   than random-model coverage (54.57% vs 84.65%).
 
+The last group of tests pins down the two fixes of this chapter: the **break-even fields** and the
+**validation of `/api/analyze`**.
+
+📄 **File:** `backend/tests/test_api.py` — *add to the end*
+
+```python
+
+
+def test_break_even_fields_random_model(client):
+    """Random model: the exact closed-form break-even, plus the 1%-grid point where raising stays +EV."""
+    payload = {"pot": 100000, "bet_size": 50000, "fold_equity": 0.05, "hand": "2s 3h 5d"}
+    hand_eval = client.post("/api/solve", json=payload).get_json()["hand_evaluation"]
+    # S = 0.0024 * 200k - 50k = -49,520  ->  f = 49,520 / 149,520 = 0.3312; first +EV grid point is 0.34
+    assert hand_eval["break_even_fold_equity"] == 0.3312
+    assert hand_eval["profitable_from_fold_equity"] == 0.34
+
+
+def test_evaluate_reports_both_break_even_fields(client):
+    payload = {"pot": 100000, "bet": 100000, "fold_equity": 0.35, "hand": "Ks Qh 3d", "opponent_model": "range"}
+    evaluated = client.post("/api/evaluate", json=payload).get_json()
+    assert evaluated["break_even_fold_equity"] is None
+    assert evaluated["profitable_from_fold_equity"] == 0.51
+
+
+def test_analyze_rejects_non_numeric_pot(client):
+    res = client.post("/api/analyze", json={"pot": "abc"})
+    assert res.status_code == 400
+    assert "pot" in res.get_json()["error"]
+
+
+def test_analyze_rejects_unknown_opponent_model(client):
+    res = client.post("/api/analyze", json={"pot": 100000, "bet_size": 50000, "opponent_model": "psychic"})
+    assert res.status_code == 400
+
+
+@pytest.mark.parametrize("hand_evaluation", [{"ev": "lots", "showdown_equity": 0.5}, ["not", "a", "dict"]])
+def test_analyze_rejects_malformed_hand_evaluation(client, hand_evaluation):
+    res = client.post("/api/analyze", json={"pot": 100000, "bet_size": 50000, "hand_evaluation": hand_evaluation})
+    assert res.status_code == 400
+    assert "hand_evaluation" in res.get_json()["error"]
+```
+
+**How it works**
+
+- `test_break_even_fields_random_model` derives both values **by hand** (the comment shows the
+  arithmetic from chapter 10), so it can't be fooled by a bug shared between the code and the test.
+- The three analyze tests each name a crash the first version had: a text pot, an unknown model, and a
+  malformed `hand_evaluation` (a text EV, or a list instead of an object, via `parametrize`). Each must be
+  a **400 with a message that names the bad field**, never a 500.
+
 ---
 
 ## ✅ Checkpoint
@@ -1223,11 +1317,12 @@ Stop the dev server if it's running (Ctrl-C), then:
 python -m pytest -q
 ```
 
-Expected output (60 engine tests + 11 API tests):
+Expected output (64 engine tests + 6 CLI tests + 17 API tests):
 
 ```
-.......................................................................  [100%]
-71 passed in 2.50s
+........................................................................ [ 82%]
+...............                                                          [100%]
+87 passed in 2.40s
 ```
 
 Then start the server with `python app.py` and check the evaluate endpoint with curl:
@@ -1238,12 +1333,13 @@ curl -s -X POST http://127.0.0.1:5000/api/evaluate -H "Content-Type: application
 ```
 
 ```json
-{"bet":100000.0,"break_even_fold_equity":0.51,"canonical_id":"K-Q-3","category":"DIEM","equity_vs_random":0.36,"ev":-27894.0,"fold_equity":0.35,"hand":"Ks Qh 3d","is_profitable":false,"opponent_model":"range","pot":100000.0,"recommended_action":"CHECK/FOLD","showdown_equity":0.0108}
+{"bet":100000.0,"break_even_fold_equity":null,"canonical_id":"K-Q-3","category":"DIEM","equity_vs_random":0.36,"ev":-27894.0,"fold_equity":0.35,"hand":"Ks Qh 3d","is_profitable":false,"opponent_model":"range","pot":100000.0,"profitable_from_fold_equity":0.51,"recommended_action":"CHECK/FOLD","showdown_equity":0.0108}
 ```
 
-> 💡 The project's `README.md` still documents parts of the API from the first version (e.g.
-> `"hand": "A♠ K♥ Q♦"` and a break-even of `0.3333333333333333`; the real values are `"As Kh Qd"` and
-> `0.3333`). Trust the running code and the tests.
+> 💡 The project's `README.md` documents every endpoint, both opponent models and both break-even
+> fields. It was corrected together with these fixes; earlier it still showed first-version examples such
+> as `"hand": "A♠ K♥ Q♦"`. When docs and code disagree, trust the running code and the tests, then fix
+> the docs.
 
 Commit:
 
@@ -1257,13 +1353,15 @@ git add . && git commit -m "feat: Flask REST API with opponent models and LLM co
   a status code.
 - **Validate once:** `_parse_game_params` builds a frozen `GameParams` or raises `InvalidGameParamsError`;
   one `@app.errorhandler` turns that into a 400 for every endpoint.
-- `_equity_function` returns a closure, so one `_evaluate_hand` serves both opponent models, producing EV,
-  profit zones and a model-dependent break-even.
+- `_equity_function` returns a closure, so one `_evaluate_hand` serves both opponent models, producing EV
+  and profit zones; `_break_even_fields` reports an exact break-even (random model only, else `null`) and
+  `profitable_from_fold_equity` (both models).
 - The backend computes `category_breakdown` from the data, so the frontend no longer guesses.
 - **CORS** lets the browser page on port 5173 read responses from port 5000. Secrets come from
   **environment variables**; external calls always have a **timeout**; offline fallbacks keep features working.
-- ✅ Fixed since the first version: duplicated validation, missing endpoints in `/`, guessed category numbers.
-- ⚠️ Still open: `/api/analyze` unvalidated (500), module-level globals, inconsistent response field
-  names, `break_even_fold_equity` meaning depends on the model, a test that can hit the internet.
+- ✅ Fixed since the first version: duplicated validation, missing endpoints in `/`, guessed category
+  numbers, `/api/analyze` crashing on bad input, one field with two meanings, a test that could hit the
+  internet.
+- ⚠️ Still open: module-level globals, inconsistent response field names, hard-coded LLM model name.
 
 **Next:** [14 — Testing and performance](14-testing-and-performance.md)

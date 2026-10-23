@@ -1,12 +1,13 @@
 """Comprehensive Dynamic Scenario Verification Suite for Liêng Stealer.
 
 Verifies that the engine and API are completely dynamic and mathematically
-rigorous across 5 diverse game scenarios:
+rigorous across 6 diverse game scenarios:
 1. Monster Hand Value Raise (Liêng Q-K-A)
 2. Junk Hand against Calling Station (Forced Fold with 0 points)
 3. Mathematical Pure Bluff (0 points flips to Raise under high fold equity)
 4. Range Coverage Sensitivity Sweep across fold equities
 5. API Schema, Endpoint Variations & Dynamic Response Verification
+6. Same Medium Hand under Both Opponent Models (random raises, calling range folds)
 """
 
 import sys
@@ -228,3 +229,27 @@ def test_scenario_5_api_schema_and_endpoints(client):
     print("  Dynamic EV scaling with Pot/Bet changes: OK")
     print("  GET / service metadata: OK -> PASS")
 
+
+def test_scenario_6_same_hand_both_models(client):
+    """Scenario 6: Same Medium Hand under Both Opponent Models.
+    Pot=100k, Bet=100k, FoldEquity=0.35, Hand='Ks Qh 3d' (3 points)
+    """
+    base = {"pot": 100000.0, "bet_size": 100000.0, "fold_equity": 0.35, "hand": "Ks Qh 3d"}
+    vs_random = client.post("/api/solve", json={**base, "opponent_model": "random"}).get_json()["hand_evaluation"]
+    vs_range = client.post("/api/solve", json={**base, "opponent_model": "range"}).get_json()["hand_evaluation"]
+
+    # Invariants:
+    # 1. Against a random caller, 36% equity makes the pot-sized bet profitable
+    assert vs_random["decision"] == "RAISE"
+    assert vs_random["showdown_equity"] == 0.36
+    # 2. An opponent who folds their weakest 35% calls only with hands that beat 3 points
+    assert vs_range["decision"] == "CHECK/FOLD"
+    assert vs_range["showdown_equity"] < 0.02
+    # 3. Both answers describe the same hand; only the opponent model differs
+    assert vs_random["canonical_id"] == vs_range["canonical_id"] == "K-Q-3"
+
+    print("\n[Scenario 6: Same Hand, Both Opponent Models]")
+    print(f"  Hand: {vs_random['hand']} ({vs_random['canonical_id']})")
+    print(f"  Random caller:  equity {vs_random['showdown_equity'] * 100:.2f}%, EV {vs_random['ev']:+,.0f} VND -> {vs_random['decision']}")
+    print(f"  Calling range:  equity {vs_range['showdown_equity'] * 100:.2f}%, EV {vs_range['ev']:+,.0f} VND -> {vs_range['decision']}")
+    print("  Decision flips with the opponent model -> PASS")

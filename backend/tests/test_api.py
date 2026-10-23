@@ -69,7 +69,9 @@ def test_solve_endpoint_invalid_inputs(client):
     assert res3.status_code == 400
 
 
-def test_analyze_endpoint(client):
+def test_analyze_endpoint(client, monkeypatch):
+    # Force the offline fallback: a test must never call the real OpenRouter API
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     payload = {
         "pot": 100000,
         "bet_size": 50000,
@@ -113,7 +115,9 @@ def test_solve_range_model_flips_medium_hand(client):
     assert hand_eval["showdown_equity"] < 0.02
     assert hand_eval["decision"] == "CHECK/FOLD"
     assert len(hand_eval["profitable_fold_zones"]) == 2
-    assert hand_eval["break_even_fold_equity"] == 0.51
+    # EV is not monotonic in fold equity here, so there is no single break-even point
+    assert hand_eval["break_even_fold_equity"] is None
+    assert hand_eval["profitable_from_fold_equity"] == 0.51
 
 
 def test_solve_invalid_opponent_model(client):
@@ -140,3 +144,37 @@ def test_evaluate_and_range_accept_opponent_model(client):
     random_range = client.post("/api/range", json={**payload, "opponent_model": "random"}).get_json()
     calling_range = client.post("/api/range", json=payload).get_json()
     assert calling_range["range_coverage_percent"] < random_range["range_coverage_percent"]
+
+
+def test_break_even_fields_random_model(client):
+    """Random model: the exact closed-form break-even, plus the 1%-grid point where raising stays +EV."""
+    payload = {"pot": 100000, "bet_size": 50000, "fold_equity": 0.05, "hand": "2s 3h 5d"}
+    hand_eval = client.post("/api/solve", json=payload).get_json()["hand_evaluation"]
+    # S = 0.0024 * 200k - 50k = -49,520  ->  f = 49,520 / 149,520 = 0.3312; first +EV grid point is 0.34
+    assert hand_eval["break_even_fold_equity"] == 0.3312
+    assert hand_eval["profitable_from_fold_equity"] == 0.34
+
+
+def test_evaluate_reports_both_break_even_fields(client):
+    payload = {"pot": 100000, "bet": 100000, "fold_equity": 0.35, "hand": "Ks Qh 3d", "opponent_model": "range"}
+    evaluated = client.post("/api/evaluate", json=payload).get_json()
+    assert evaluated["break_even_fold_equity"] is None
+    assert evaluated["profitable_from_fold_equity"] == 0.51
+
+
+def test_analyze_rejects_non_numeric_pot(client):
+    res = client.post("/api/analyze", json={"pot": "abc"})
+    assert res.status_code == 400
+    assert "pot" in res.get_json()["error"]
+
+
+def test_analyze_rejects_unknown_opponent_model(client):
+    res = client.post("/api/analyze", json={"pot": 100000, "bet_size": 50000, "opponent_model": "psychic"})
+    assert res.status_code == 400
+
+
+@pytest.mark.parametrize("hand_evaluation", [{"ev": "lots", "showdown_equity": 0.5}, ["not", "a", "dict"]])
+def test_analyze_rejects_malformed_hand_evaluation(client, hand_evaluation):
+    res = client.post("/api/analyze", json={"pot": 100000, "bet_size": 50000, "hand_evaluation": hand_evaluation})
+    assert res.status_code == 400
+    assert "hand_evaluation" in res.get_json()["error"]

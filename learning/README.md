@@ -115,6 +115,7 @@ lieng-stealer/
 │       ├── test_calling_range.py (ch 09)
 │       ├── test_ev.py            (ch 10)
 │       ├── test_range_finder.py  (ch 11)
+│       ├── test_cli.py           (ch 12)
 │       ├── test_api.py           (ch 13)
 │       └── test_dynamic_scenarios.py (ch 14)
 └── frontend/
@@ -123,11 +124,13 @@ lieng-stealer/
         ├── main.jsx              (ch 15)
         ├── index.css             (ch 16)
         ├── i18n.js               (ch 16)  English / Vietnamese UI texts
+        ├── format.js             (ch 16)  number / zone formatting
+        ├── i18n.test.js, format.test.js   (ch 16)  `npm test` (Node's built-in test runner)
         ├── App.css               (ch 16)
         └── App.jsx               (ch 16)
 ```
 
-At the end, `python -m pytest -q` in `backend/` reports **76 passed**.
+At the end, `python -m pytest -q` in `backend/` reports **93 passed**, and `npm test` in `frontend/` reports **6 passed**.
 
 ---
 
@@ -147,13 +150,13 @@ At the end, `python -m pytest -q` in `backend/` reports **76 passed**.
 | 09 | [The calling-range model](09-calling-range.md) | Calling ranges, card removal, prefix sums, binary search | 3 h |
 | 10 | [Expected Value](10-expected-value.md) | The EV formula, break-even fold equity, non-monotonic EV, profit zones | 2 h |
 | 11 | [The range finder](11-range-finder.md) | Scoring all 455 hands under both opponent models, sorting, coverage | 1 h |
-| 12 | [The command-line interface](12-cli.md) | argparse, `rich` tables, interactive input | 1 h |
+| 12 | [The command-line interface](12-cli.md) | argparse, `rich` tables, interactive input, exit codes, testing a CLI | 1.5 h |
 | 13 | [The Flask web API](13-flask-api.md) | HTTP, JSON, shared validation, error handlers, CORS, calling an LLM | 3 h |
 | 14 | [Testing and performance](14-testing-and-performance.md) | pytest fixtures, scenario tests, timing and memory | 1 h |
 | 15 | [Frontend foundations](15-frontend-foundations.md) | Node, Vite, React, JSX, state, effects, fetch | 2 h |
-| 16 | [Building the UI](16-building-the-ui.md) | The full dashboard, i18n, a small chart, CSS variables, grid, flexbox | 4 h |
+| 16 | [Building the UI](16-building-the-ui.md) | The full dashboard, i18n, a small chart, `node --test`, CSS variables, grid, flexbox | 4 h |
 | 17 | [Deployment](17-deployment.md) | gunicorn, Procfile, production builds, env variables | 45 min |
-| 18 | [Pitfalls and next steps](18-pitfalls-and-next-steps.md) | What's fixed, what's open, what's new + ideas to extend | 45 min |
+| 18 | [Pitfalls and next steps](18-pitfalls-and-next-steps.md) | What's been fixed (and how), what's still open, ideas to extend | 45 min |
 
 Total: roughly **30–35 hours** for a careful first read-through.
 

@@ -3,8 +3,8 @@
 > **Goal:** build the full dashboard: inputs on the left; verdict, metrics and tables on the right; an
 > English/Vietnamese language switch; an opponent-model toggle with a "profit map"; styled as a dark
 > "tactical radar terminal".
-> **You will build:** `frontend/src/index.css`, `frontend/src/i18n.js`, `frontend/src/App.jsx`,
-> `frontend/src/App.css`.
+> **You will build:** `frontend/src/index.css`, `frontend/src/i18n.js`, `frontend/src/format.js`,
+> `frontend/src/App.jsx`, `frontend/src/App.css`, and two test files (`i18n.test.js`, `format.test.js`).
 > **Time:** ~4 hours.
 > **Prerequisites:** [15](15-frontend-foundations.md). Flask running (`python app.py` in `backend/`).
 
@@ -35,7 +35,7 @@ The page layout:
 ┌──────────────────────────────────────────────────────────────────────────────────────┐
 │ LIÊNG SCOPE                                 ● LIVE SOLVER / 455 CLASSES   [EN|VI]   │  header
 ├──────────────────────────┬───────────────────────────────────────────────────────────┤
-│ // TELEMETRY CONTROLS    │ ACTION: RAISE / ALL-IN                     +131.876 VND   │  verdict
+│ // TELEMETRY CONTROLS    │ ACTION: RAISE / ALL-IN                     +131,876 VND   │  verdict
 │ CURRENT POT  [100000]    │ … • [Q-K-A] • …            RAISE +EV WHEN OPP. FOLDS: 0%–100%
 │  50k 100k 200k 500k      ├──────────────┬──────────────┬─────────────┬──────────────┤
 │ BET / RAISE  [50000]     │ RANGE COV.   │ SHOWDOWN EQ  │ EXP. VALUE  │ BLUFF THRESH │  HUD
@@ -52,7 +52,8 @@ The page layout:
 We build it in three parts:
 
 - **Part A:** `index.css`, global design tokens (colours, font, background grid).
-- **Part B:** `i18n.js` (all UI texts in two languages) and `App.jsx` (the logic and the markup).
+- **Part B:** `i18n.js` (all UI texts in two languages), `format.js` (number formatting), their tests,
+  and `App.jsx` (the logic and the markup).
 - **Part C:** `App.css`, the styles, section by section, watching the page change after each one.
 
 ---
@@ -492,19 +493,159 @@ export const LANGUAGES = Object.keys(STRINGS);
 - `export const LANGUAGES = Object.keys(STRINGS);` → `["en", "vi"]`. The list of languages is
   **derived** from the dictionary, so adding a third language is just adding a third block.
 
-> 💡 **Keeping two dictionaries in sync.** Nothing checks that `vi` has every key `en` has. A missing key
-> shows up as `undefined` on screen, or as a crash for function-valued keys (`t[key] is not a function`).
-> A tiny test would guard it:
-> `expect(Object.keys(STRINGS.vi).sort()).toEqual(Object.keys(STRINGS.en).sort())` (with a JS test
-> runner such as Vitest), or a TypeScript type for the dictionary.
+> 💡 **Keeping two dictionaries in sync.** A key missing from `vi` would show up as `undefined` on
+> screen, or as a crash for function-valued keys (`t[key] is not a function`). The next step adds a test
+> that makes this impossible to miss.
+
+## Step 16.4 — Testing the dictionaries
+
+Two dictionaries that must stay in sync are a classic source of bugs: add a text in English, forget the
+Vietnamese one, and the page shows `undefined` (or crashes) only in Vietnamese. A test can check the
+**shape** of every language against English. It uses Node's **built-in test runner** (`node:test`, run by
+`npm test`, see chapter 15), so no new package is needed.
+
+📄 **File:** `frontend/src/i18n.test.js` — *create this file*
+
+```js
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { LANGUAGES, STRINGS } from "./i18n.js";
+
+// key -> "string" | "function", so a missing key or a wrong kind of value shows up in the diff
+const shape = (dictionary) =>
+  Object.fromEntries(Object.entries(dictionary).map(([key, value]) => [key, typeof value]));
+
+test("every language defines exactly the English keys, with the same kinds of values", () => {
+  for (const lang of LANGUAGES) {
+    assert.deepEqual(shape(STRINGS[lang]), shape(STRINGS.en), `language "${lang}"`);
+  }
+});
+
+test("messages with a parameter include it in every language", () => {
+  for (const lang of LANGUAGES) {
+    for (const [key, value] of Object.entries(STRINGS[lang])) {
+      if (typeof value === "function" && value.length > 0) {
+        assert.ok(String(value("DETAIL-123")).includes("DETAIL-123"), `${lang}.${key}`);
+      }
+    }
+  }
+});
+```
+
+**How it works**
+
+- `test(name, fn)` registers a test; `assert` (strict mode) provides `equal`, `deepEqual`, `match`, `ok`…
+  If an assertion fails, the test fails with a readable diff.
+- `shape(dictionary)` turns `{ potLabel: "…", invalidInput: (d) => … }` into
+  `{ potLabel: "string", invalidInput: "function" }`. Comparing **shapes** with `deepEqual` catches a missing
+  key, an extra key, **and** a string where a function is expected, all in one assertion, and the diff
+  names the culprit.
+- The second test calls every function that takes a parameter (`value.length > 0` is the number of
+  declared parameters) with a marker text and checks the marker appears in the result. A translation that
+  forgets `${detail}` would silently drop the server's error message; this test notices.
+
+🧪 **Mini-check**
+
+```bash
+npm test
+```
+
+Expected (timings omitted):
+
+```
+# tests 2
+# pass 2
+# fail 0
+```
+
+Now prove the test can fail: delete the line `statusPartial: "MỘT PHẦN",` from the `vi` block, run
+`npm test` again (1 failing test, whose diff shows `statusPartial: 'string'`), then put the line back.
+
+> ✅ **How the code fixed this (before → after).** The first version of the dictionaries had no check at
+> all; the two blocks were kept in sync by hand. **Lesson:** when two pieces of data must match, let a
+> test compare them; humans are bad at noticing what's missing.
+
+## Step 16.5 — `format.js`: formatting numbers, with tests
+
+Two small helpers turn numbers into text: money (`131876` → `"131,876"`) and profit zones
+(`[[0, 0.08], [0.51, 1]]` → `"0%–8% · 51%–100%"`). They're **pure functions**, so they live in their own
+module where they can be tested without React. The tests come first:
+
+📄 **File:** `frontend/src/format.test.js` — *create this file*
+
+```js
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { formatMoney, formatZones } from "./format.js";
+
+test("formatMoney uses the requested locale's thousands separator", () => {
+  assert.equal(formatMoney(131876, "en-US"), "131,876");
+  assert.equal(formatMoney(131876, "vi-VN"), "131.876");
+});
+
+test("formatMoney rounds to whole VND and keeps the minus sign", () => {
+  assert.equal(formatMoney(-27894.4, "en-US"), "-27,894");
+});
+
+test("formatMoney shows 0 before any value has arrived", () => {
+  assert.equal(formatMoney(undefined, "en-US"), "0");
+  assert.equal(formatMoney(null, "vi-VN"), "0");
+});
+
+test("formatZones lists every profitable fold-frequency interval", () => {
+  assert.equal(formatZones([[0, 0.08], [0.51, 1]]), "0%–8% · 51%–100%");
+  assert.equal(formatZones([[1, 1]]), "100%");
+});
+```
+
+📄 **File:** `frontend/src/format.js` — *create this file*
+
+```js
+// Pure formatting helpers, kept outside React so they can be unit-tested with `node --test`.
+
+export function formatMoney(num, locale) {
+  if (num === undefined || num === null) return "0";
+  return new Intl.NumberFormat(locale).format(Math.round(num));
+}
+
+export function formatZones(zones) {
+  const pct = (f) => `${Math.round(f * 100)}%`;
+  return zones.map(([start, end]) => (start === end ? pct(start) : `${pct(start)}–${pct(end)}`)).join(" · ");
+}
+```
+
+**How it works**
+
+- `formatMoney(num, locale)` uses the browser's built-in **`Intl.NumberFormat`** for the **current
+  language**: `"en-US"` → `131,876` (comma), `"vi-VN"` → `131.876` (dot). It rounds to whole VND and shows
+  `"0"` before any value has arrived.
+- `formatZones` turns the API's `profitable_fold_zones` (chapter 13) into text. A zone with
+  `start === end` (a single grid point) prints once. `zones.map(...).join(" · ")` is the JS version of
+  `" · ".join(...)` in Python.
+- `export function …` makes both importable, from `App.jsx` (Step 16.6) and from the test file.
+
+> ✅ **How the code fixed this (before → after).** In the first version, `formatMoney` lived inside
+> `App.jsx` and **always** used `"vi-VN"`: in English mode the EV showed `+131.876`, which reads like a
+> hundred and thirty-one point eight, right next to a combo count of `22,100`. The fix was to pass the
+> locale in (`formatMoney(num, t.locale)`), and moving the helpers into their own module made the fix
+> **testable**: `format.test.js` failed first (the module didn't exist), then passed. **Lesson:** pull pure
+> logic out of components so you can test it.
+
+🧪 **Mini-check**
+
+```bash
+npm test
+```
+
+Expected: `# tests 6`, `# pass 6`, `# fail 0`.
 
 ---
 
 From here we write `App.jsx` in **slices**, from top to bottom. The file only becomes valid when all
 slices are in (a JSX tag opened in one slice may be closed several slices later), so **don't run the page
-until Step 16.20**. Each slice is explained as you add it.
+until Step 16.22**. Each slice is explained as you add it.
 
-## Step 16.4 — Imports, constants and helper functions
+## Step 16.6 — Imports, constants and helper functions
 
 📄 **File:** `frontend/src/App.jsx` — *create this file*
 
@@ -512,6 +653,7 @@ until Step 16.20**. Each slice is explained as you add it.
 import { useState, useEffect } from 'react';
 import './App.css';
 import { STRINGS, LANGUAGES } from './i18n.js';
+import { formatMoney, formatZones } from './format.js';
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
 const LANG_STORAGE_KEY = "lieng-scope-lang";
@@ -519,16 +661,6 @@ const LANG_STORAGE_KEY = "lieng-scope-lang";
 // Backend category enum -> display label and i18n description key
 const CATEGORY_LABELS = { SAP: "SÁP", LIENG: "LIÊNG", DI: "ĐĨ", DIEM: "ĐIỂM" };
 const CATEGORY_DESC_KEYS = { SAP: "descSap", LIENG: "descLieng", DI: "descDi", DIEM: "descDiem" };
-
-function formatMoney(num) {
-  if (num === undefined || num === null) return "0";
-  return new Intl.NumberFormat("vi-VN").format(Math.round(num));
-}
-
-function formatZones(zones) {
-  const pct = (f) => `${Math.round(f * 100)}%`;
-  return zones.map(([start, end]) => (start === end ? pct(start) : `${pct(start)}–${pct(end)}`)).join(" · ");
-}
 
 function loadSavedLang() {
   try {
@@ -545,21 +677,12 @@ function loadSavedLang() {
 - `import { STRINGS, LANGUAGES } from './i18n.js'` brings in the dictionary from Steps 16.2–16.3.
 - **Two lookup tables** translate the backend's ASCII category names (chapter 13) for display:
   `CATEGORY_LABELS.DI` → `"ĐĨ"`, and `CATEGORY_DESC_KEYS.DI` → `"descDi"`, a key into `STRINGS`.
-- `formatMoney` uses the browser's built-in **`Intl.NumberFormat`** with the Vietnamese locale (dots as
-  thousands separators): `131876` → `"131.876"`.
-- `formatZones` turns the API's `profitable_fold_zones` (chapter 13) into text:
-  `[[0, 0.08], [0.51, 1]]` → `"0%–8% · 51%–100%"`. A zone with `start === end` (a single grid point)
-  prints once. `zones.map(...).join(" · ")` is the JS version of `" · ".join(...)` in Python.
+- `import { formatMoney, formatZones } from './format.js'` brings in the tested helpers from Step 16.5.
 - `loadSavedLang` reads the saved language, **accepts it only if it's a known language** (never trust
   stored data either), and defaults to English. `catch { … }` without a variable (optional catch
   binding) is used because the error itself isn't needed.
 
-> ⚠️ **Pitfall: two number formats on one page.** `formatMoney` always uses `"vi-VN"` (dots), while
-> other numbers use `toLocaleString(t.locale)` (commas in English). In English mode the EV shows
-> `+131.876` but the combo count shows `22,100`. To an English reader, `131.876` looks like a hundred and
-> thirty-one point eight. The fix: pass the locale in, `formatMoney(num, t.locale)`.
-
-## Step 16.5 — The component, its state, and the language effect
+## Step 16.7 — The component, its state, and the language effect
 
 📄 **File:** `frontend/src/App.jsx` — *add to the end*
 
@@ -615,7 +738,7 @@ export default function App() {
 > reasonable, but remember it: the same hand without `opponent_model` gives the API's random-model answer,
 > which can differ from what the web page shows.
 
-## Step 16.6 — `handleSolve`, part 1: call `/api/solve`
+## Step 16.8 — `handleSolve`, part 1: call `/api/solve`
 
 📄 **File:** `frontend/src/App.jsx` — *add to the end*
 
@@ -665,7 +788,7 @@ export default function App() {
 - **Two kinds of failure are told apart:**
   - the server answered but said **no** (`!solveRes.ok`, e.g. 400 for `"Xx Kh Qd"`): show
     `invalidInput` with the server's own message, turn the loading flags off, and `return` early;
-  - the server **didn't answer at all**: `fetch` itself throws, handled in Step 16.7.
+  - the server **didn't answer at all**: `fetch` itself throws, handled in Step 16.9.
 - `solveRes.json().catch(() => ({}))`: if the error body isn't valid JSON, use an empty object instead of
   crashing. `({})` needs parentheses so JS reads it as an object, not an empty function body.
 
@@ -675,7 +798,7 @@ export default function App() {
 > "offline" is kept for real network failures. **Lesson:** an error message must describe the error that
 > actually happened.
 
-## Step 16.7 — `handleSolve`, part 2: call `/api/analyze`, handle network errors
+## Step 16.9 — `handleSolve`, part 2: call `/api/analyze`, handle network errors
 
 📄 **File:** `frontend/src/App.jsx` — *add to the end*
 
@@ -733,7 +856,7 @@ export default function App() {
 > (chapter 15) flagged it. Optional catch binding (`catch {`) states the intent: "any failure here means
 > offline".
 
-## Step 16.8 — Solve on page load, and derived values
+## Step 16.10 — Solve on page load, and derived values
 
 📄 **File:** `frontend/src/App.jsx` — *add to the end*
 
@@ -776,7 +899,7 @@ export default function App() {
 > counts from the data, and this code just displays them: **20 lines of guessing became 4 lines of
 > mapping**. **Lesson:** don't re-derive in the frontend what the backend can compute exactly.
 
-## Step 16.9 — Start rendering: container and header with the language toggle
+## Step 16.11 — Start rendering: container and header with the language toggle
 
 📄 **File:** `frontend/src/App.jsx` — *add to the end*
 
@@ -836,7 +959,7 @@ export default function App() {
 > 💡 "LIVE SOLVER / 455 CLASSES LOADED" is static text, shown even if the backend is down. The
 > `/health` endpoint (chapter 13) returns the real `classes_loaded`; using it would make the badge honest.
 
-## Step 16.10 — The control panel: pot
+## Step 16.12 — The control panel: pot
 
 📄 **File:** `frontend/src/App.jsx` — *add to the end*
 
@@ -888,7 +1011,7 @@ export default function App() {
   when it equals the current pot, which CSS highlights. `{v / 1000}k` displays `100k`.
 - `type="button"` stops the button from acting as a form "submit" button.
 
-## Step 16.11 — Bet sizing
+## Step 16.13 — Bet sizing
 
 📄 **File:** `frontend/src/App.jsx` — *add to the end*
 
@@ -936,7 +1059,7 @@ Same pattern, but the presets are **relative to the pot** (½×, 1×, 2×). Bet 
 are how poker players think, and chapter 10's table showed why: the break-even numbers depend only on the
 ratio `B / P`. (`0.5x Pot` etc. aren't translated: they're universal poker shorthand.)
 
-## Step 16.12 — The fold-frequency slider
+## Step 16.14 — The fold-frequency slider
 
 📄 **File:** `frontend/src/App.jsx` — *add to the end*
 
@@ -967,7 +1090,7 @@ ratio `B / P`. (`0.5x Pot` etc. aren't translated: they're universal poker short
 expects), and the badge shows it as a percentage. Input values are always strings, hence `parseFloat`.
 Note that this `form-group` div is **not closed yet**: the next slice adds two more controls inside it.
 
-## Step 16.13 — The opponent-model toggle and the profit map
+## Step 16.15 — The opponent-model toggle and the profit map
 
 📄 **File:** `frontend/src/App.jsx` — *add to the end*
 
@@ -1024,14 +1147,14 @@ Note that this `form-group` div is **not closed yet**: the next slice adds two m
   - a white **marker** at `left: foldEquity × 100%` shows where the current slider value falls.
 - So for `K-Q-3` with a pot-sized bet under the range model you see: green 0–8%, red 9–50%, green
   51–100%, and the marker at 35% in the red. **Chapter 10's non-monotonic EV, drawn as a picture.**
-- The final `</div>` closes the `form-group` opened in Step 16.12.
+- The final `</div>` closes the `form-group` opened in Step 16.14.
 
 > 💡 The green zones come from the last solve and **don't depend on the slider**: the API scans the whole
 > 0–100% grid (chapter 13). Only the white marker follows the slider live, because it reads the
 > `foldEquity` state, not the response. So you can drag the slider to see where your fold estimate falls
 > without re-solving; changing the pot, bet, hand or model needs a new solve.
 
-## Step 16.14 — The hand input and presets
+## Step 16.16 — The hand input and presets
 
 📄 **File:** `frontend/src/App.jsx` — *add to the end*
 
@@ -1096,7 +1219,7 @@ labels aren't translated: they're game terms.
 > array like `const HAND_PRESETS = [["As Kh Qd", "Liêng Q-K-A"], …]` plus one `.map` (as the pot chips
 > and the model chips do) would be shorter and harder to get wrong.
 
-## Step 16.15 — The solve button, error box and specs card
+## Step 16.17 — The solve button, error box and specs card
 
 📄 **File:** `frontend/src/App.jsx` — *add to the end*
 
@@ -1143,12 +1266,12 @@ labels aren't translated: they're game terms.
 - **Translating a stored error:** `t[solveError.key](solveError.detail)`. `t["invalidInput"]` is a
   function (Step 16.2); calling it with the detail produces the sentence in the **current** language.
   Switch the language while an error is shown and it re-translates instantly.
-- `</section>` closes the left column opened in Step 16.10.
+- `</section>` closes the left column opened in Step 16.12.
 
 (The specs card still says "MONTE CARLO"; the shipped data was actually computed by **exact
 enumeration**, chapter 7.)
 
-## Step 16.16 — Right column: the verdict banner
+## Step 16.18 — Right column: the verdict banner
 
 📄 **File:** `frontend/src/App.jsx` — *add to the end*
 
@@ -1176,7 +1299,7 @@ enumeration**, chapter 7.)
               <div className="verdict-col-right">
                 <span className="verdict-label">{t.expectedValueTag}</span>
                 <div className="verdict-ev">
-                  {handEval.ev > 0 ? "+" : ""}{formatMoney(handEval.ev)} <span className="ev-currency">VND</span>
+                  {handEval.ev > 0 ? "+" : ""}{formatMoney(handEval.ev, t.locale)} <span className="ev-currency">VND</span>
                 </div>
                 <div className="verdict-breakeven">
                   {t.profitableWhen} <span className="mono-green">{formatZones(zones)}</span>
@@ -1198,11 +1321,13 @@ enumeration**, chapter 7.)
   "RAISE +EV WHEN OPP. FOLDS: 0%–8% · 51%–100%", because under the range model a single number can't
   describe the answer (chapter 10).
 
-> ⚠️ **Pitfall: an empty answer.** If raising is never profitable, `zones` is `[]`, `formatZones` returns
-> `""`, and the banner reads "RAISE +EV WHEN OPP. FOLDS:" followed by nothing. A short "NEVER" text (a
-> new i18n key) would be clearer.
+> 💡 **Why there is always at least one zone.** At a 100% fold frequency the opponent always folds, so
+> EV is simply the pot, which is always positive. The scan therefore always ends inside a profitable
+> zone, and "RAISE +EV WHEN OPP. FOLDS:" is never followed by nothing. (An earlier version of this guide
+> listed an "empty zones" pitfall here; working out EV at `f = 1` shows it can't happen. Checking a
+> suspected bug against the maths before "fixing" it is a good habit.)
 
-## Step 16.17 — The four HUD metric cards
+## Step 16.19 — The four HUD metric cards
 
 📄 **File:** `frontend/src/App.jsx` — *add to the end*
 
@@ -1237,7 +1362,7 @@ enumeration**, chapter 7.)
             <div className="hud-card">
               <div className="hud-label">{t.expectedValue}</div>
               <div className={`hud-value ${handEval?.ev > 0 ? "green-metric" : "dim-metric"}`}>
-                {handEval ? `${handEval.ev > 0 ? "+" : ""}${formatMoney(handEval.ev)}` : "0"}
+                {handEval ? `${handEval.ev > 0 ? "+" : ""}${formatMoney(handEval.ev, t.locale)}` : "0"}
               </div>
               <div className="hud-subtext">{t.expectedValueSub}</div>
             </div>
@@ -1263,7 +1388,7 @@ enumeration**, chapter 7.)
   "VS TOP 65% CALLING RANGE · RANDOM 99.7%". `Math.round((1 - fold_equity) * 100)` turns a 35% fold
   frequency into "top 65%". Under the random model it shows the old generic text.
 
-## Step 16.18 — The category coverage matrix
+## Step 16.20 — The category coverage matrix
 
 📄 **File:** `frontend/src/App.jsx` — *add to the end*
 
@@ -1328,14 +1453,14 @@ enumeration**, chapter 7.)
 **How it works**
 
 - A standard HTML table: `<thead>` with column titles, `<tbody>` with one `<tr>` per row of
-  `categoryMatrix` (Step 16.8), i.e. per row of the backend's `category_breakdown`.
+  `categoryMatrix` (Step 16.10), i.e. per row of the backend's `category_breakdown`.
 - The backend's ASCII names (`SAP`, `DI`…) are the `key`s and the CSS class suffix (`cat-SAP`), while the
   visible label goes through `CATEGORY_LABELS` ("SÁP", "ĐĨ") and the description through the i18n key
   table: `t[CATEGORY_DESC_KEYS[cat.category]]`. That's two lookups: category → key → text.
 - The status chip uses a **chained ternary** (`a ? x : b ? y : z`): 100% → "100% PUSH", more than 0 →
   "PARTIAL", else "FOLD" (translated).
 
-## Step 16.19 — Top holdings table
+## Step 16.21 — Top holdings table
 
 📄 **File:** `frontend/src/App.jsx` — *add to the end*
 
@@ -1370,7 +1495,7 @@ enumeration**, chapter 7.)
                         </td>
                         <td className="mono-num">{(item.equity * 100).toFixed(1)}%</td>
                         <td className={`mono-num bold-num ${item.ev > 0 ? "positive-ev" : "negative-ev"}`}>
-                          {item.ev > 0 ? "+" : ""}{formatMoney(item.ev)} VND
+                          {item.ev > 0 ? "+" : ""}{formatMoney(item.ev, t.locale)} VND
                         </td>
                         <td className="dim-cell">{item.multiplicity} {t.combosSuffix}</td>
                         <td>
@@ -1395,7 +1520,7 @@ a good `key`. The equity shown is the one the selected model used (chapter 11).
 > weakest hands that are still profitable, where decisions are actually hard) would be more informative,
 > though under the range model that region contains many tied equity-0 hands (chapter 11's pitfall).
 
-## Step 16.20 — The notes drawer, and closing everything
+## Step 16.22 — The notes drawer, and closing everything
 
 📄 **File:** `frontend/src/App.jsx` — *add to the end*
 
@@ -1454,7 +1579,7 @@ a good `key`. The equity shown is the one the selected model used (chapter 11).
 
 🧪 **Mini-check.** With Flask running, start Vite (`npm run dev`) and open http://localhost:5173. The page
 should work **completely** (opponent model "WEAKEST HANDS" by default): the verdict "ACTION: RAISE /
-ALL-IN" with `+131.876 VND` and "RAISE +EV WHEN OPP. FOLDS: 0%–100%", the HUD (100.0% coverage, 99.5%
+ALL-IN" with `+131,876 VND` and "RAISE +EV WHEN OPP. FOLDS: 0%–100%", the HUD (100.0% coverage, 99.5%
 equity "VS TOP 65% CALLING RANGE · RANDOM 99.7%", 33.3% bluff threshold) and both tables. Click **VI**:
 every label switches to Vietnamese. It just looks plain, because `App.css` is still empty. Let's fix that.
 
@@ -1465,7 +1590,7 @@ every label switches to Vietnamese. It just looks plain, because `App.css` is st
 From here on, **every step leaves the page working**. Keep the browser open next to your editor: Vite
 reloads styles instantly when you save.
 
-## Step 16.21 — Container, header and branding
+## Step 16.23 — Container, header and branding
 
 📄 **File:** `frontend/src/App.css` — *create this file*
 
@@ -1542,7 +1667,7 @@ reloads styles instantly when you save.
 
 ---
 
-## Step 16.22 — The live-status tag and its pulsing beacon
+## Step 16.24 — The live-status tag and its pulsing beacon
 
 📄 **File:** `frontend/src/App.css` — *add to the end*
 
@@ -1608,7 +1733,7 @@ reloads styles instantly when you save.
 
 ---
 
-## Step 16.23 — The language toggle
+## Step 16.25 — The language toggle
 
 📄 **File:** `frontend/src/App.css` — *add to the end*
 
@@ -1672,7 +1797,7 @@ change language, and the choice survives a page reload (`localStorage`).
 
 ---
 
-## Step 16.24 — The two-column grid and panels
+## Step 16.26 — The two-column grid and panels
 
 📄 **File:** `frontend/src/App.css` — *add to the end*
 
@@ -1741,7 +1866,7 @@ change language, and the choice survives a page reload (`localStorage`).
 - **`.terminal-grid > * { min-width: 0; }`** fixes a classic grid surprise: by default a grid item is never
   narrower than its content's minimum width, so a wide table would push the whole column (and page)
   sideways. With `min-width: 0` the column keeps its size and the table scrolls inside its
-  `.table-wrapper` (Step 16.31). The comment in the CSS says exactly that: comment the *why*.
+  `.table-wrapper` (Step 16.33). The comment in the CSS says exactly that: comment the *why*.
 - **Responsive design:** on screens **1024px or narrower** (tablets, phones), the media query switches to
   a single column, so the results drop below the controls. Try it by narrowing your browser window.
 - `.terminal-card` is the reusable "dark panel" look, used by the control panel and both tables.
@@ -1750,7 +1875,7 @@ change language, and the choice survives a page reload (`localStorage`).
 
 ---
 
-## Step 16.25 — Form controls: labels, inputs and preset chips
+## Step 16.27 — Form controls: labels, inputs and preset chips
 
 📄 **File:** `frontend/src/App.css` — *add to the end*
 
@@ -1841,13 +1966,13 @@ change language, and the choice survives a page reload (`localStorage`).
   replaces it with a green border plus two shadows: a 1px "ring" and a soft glow (`DESIGN.md` §3).
   (When you remove the default focus outline, always provide a visible replacement, or keyboard users
   can't see where they are.)
-- **`.preset-chip.active`**: the class added in JSX (Step 16.10) when a chip matches the current value.
+- **`.preset-chip.active`**: the class added in JSX (Step 16.12) when a chip matches the current value.
 - `flex-wrap: wrap` lets chips flow onto a second line when there isn't room.
 - `transition: all 0.15s` animates colour changes on hover.
 
 ---
 
-## Step 16.26 — The slider
+## Step 16.28 — The slider
 
 📄 **File:** `frontend/src/App.css` — *add to the end*
 
@@ -1922,7 +2047,7 @@ change language, and the choice survives a page reload (`localStorage`).
 
 ---
 
-## Step 16.27 — The opponent-model row and the profit map
+## Step 16.29 — The opponent-model row and the profit map
 
 📄 **File:** `frontend/src/App.css` — *add to the end*
 
@@ -1996,7 +2121,7 @@ change language, and the choice survives a page reload (`localStorage`).
 - **The profit map** is the classic "absolute inside relative" layout:
   - `.profit-map-bar` is `position: relative`, 10px tall, with a dark-red background (= −EV);
   - each `.profit-zone` is `position: absolute` with `top: 0; bottom: 0` (full height). Its `left` and
-    `width` come from the **inline styles** set in JSX (Step 16.13), so the same CSS draws any zones;
+    `width` come from the **inline styles** set in JSX (Step 16.15), so the same CSS draws any zones;
   - `.profit-marker` is a 2px white line that sticks out 4px above and below the bar
     (`top: -4px; bottom: -4px`). `transform: translateX(-1px)` shifts it left by half its width, so it
     is **centred** on the exact fold percentage.
@@ -2009,7 +2134,7 @@ verdict says CHECK / FOLD. Click "AT RANDOM" and execute again: the whole bar tu
 
 ---
 
-## Step 16.28 — The action button, alert and specs card
+## Step 16.30 — The action button, alert and specs card
 
 📄 **File:** `frontend/src/App.css` — *add to the end*
 
@@ -2109,7 +2234,7 @@ verdict says CHECK / FOLD. Click "AT RANDOM" and execute again: the whole bar tu
 
 ---
 
-## Step 16.29 — Right column and the verdict banner
+## Step 16.31 — Right column and the verdict banner
 
 📄 **File:** `frontend/src/App.css` — *add to the end*
 
@@ -2176,7 +2301,7 @@ verdict says CHECK / FOLD. Click "AT RANDOM" and execute again: the whole bar tu
 
 - `.results-container` stacks the right-hand blocks vertically with equal gaps (flex column + `gap`).
 - **One switch, many effects:** `.verdict-raise .verdict-title` means "a title *inside* a raise banner".
-  Changing the single class on the banner (Step 16.16) recolours the border, glow and title together.
+  Changing the single class on the banner (Step 16.18) recolours the border, glow and title together.
 
 📄 **File:** `frontend/src/App.css` — *add to the end*
 
@@ -2242,13 +2367,13 @@ verdict says CHECK / FOLD. Click "AT RANDOM" and execute again: the whole bar tu
 ```
 
 **Save → look:** click the "0 Điểm (Bù)" preset, click **AT RANDOM**, set the slider to 5% and execute:
-the banner turns red ("ACTION: CHECK / FOLD", −42.044 VND). Move the slider to 50% and execute again:
-green, +25.240. That's chapter 14's scenarios 2 and 3, live. (With **WEAKEST HANDS** the numbers are
-−42.500 and +25.000: `2-3-5` can't beat any hand that calls, so its equity is exactly 0.)
+the banner turns red ("ACTION: CHECK / FOLD", −42,044 VND). Move the slider to 50% and execute again:
+green, +25,240. That's chapter 14's scenarios 2 and 3, live. (With **WEAKEST HANDS** the numbers are
+−42,500 and +25,000: `2-3-5` can't beat any hand that calls, so its equity is exactly 0.)
 
 ---
 
-## Step 16.30 — The HUD metric cards
+## Step 16.32 — The HUD metric cards
 
 📄 **File:** `frontend/src/App.css` — *add to the end*
 
@@ -2331,7 +2456,7 @@ while sharing the base `.hud-value` size.
 
 ---
 
-## Step 16.31 — Tables
+## Step 16.33 — Tables
 
 📄 **File:** `frontend/src/App.css` — *add to the end*
 
@@ -2433,7 +2558,7 @@ while sharing the base `.hud-value` size.
 
 ---
 
-## Step 16.32 — Category pills, status chips, action badges
+## Step 16.34 — Category pills, status chips, action badges
 
 📄 **File:** `frontend/src/App.css` — *add to the end*
 
@@ -2530,7 +2655,7 @@ background, a solid text colour and a 35%-opacity border.
 
 ---
 
-## Step 16.33 — The notes drawer
+## Step 16.35 — The notes drawer
 
 📄 **File:** `frontend/src/App.css` — *add to the end*
 
@@ -2656,17 +2781,18 @@ make the open drawer look attached to the button above it.
 
 1. Flask running (`python app.py`), Vite running (`npm run dev`), open http://localhost:5173.
 2. On load you should see, without clicking anything (model "WEAKEST HANDS", fold 35%):
-   - **ACTION: RAISE / ALL-IN**, `As Kh Qd • [Q-K-A] • LIÊNG Q-K-A`, **+131.876 VND**, and
+   - **ACTION: RAISE / ALL-IN**, `As Kh Qd • [Q-K-A] • LIÊNG Q-K-A`, **+131,876 VND**, and
      "RAISE +EV WHEN OPP. FOLDS: **0%–100%**";
    - a fully green profit map with the marker at 35%;
    - HUD: **100.0%** (22,100 / 22,100 combos), **99.5%** ("VS TOP 65% CALLING RANGE · RANDOM 99.7%"),
-     **+131.876**, **33.3%**;
+     **+131,876**, **33.3%**;
    - the category matrix with **52 / 768 / 144 / 21,136** combos (all "100% PUSH") and the top-10 table
      starting with `A-A-A`.
 3. **The two models, side by side.** Hand `Ks Qh 3d`, bet "1.0x Pot", fold 35%:
-   - WEAKEST HANDS → red **CHECK / FOLD**, **−27.894 VND**, zones "0%–8% · 51%–100%", equity 1.1%
+   - WEAKEST HANDS → red **CHECK / FOLD**, **−27,894 VND**, zones "0%–8% · 51%–100%", equity 1.1%
      ("RANDOM 36.0%"), coverage 54.6%;
    - AT RANDOM → green **RAISE**, zones "0%–100%", equity 36.0%, coverage 84.7%.
+   - Click **VI**: the same EV now reads **−27.894** (Vietnamese uses dots), English shows **−27,894**.
 4. Type an invalid hand (`Xx Kh Qd`) and execute → "INVALID INPUT: Invalid hand: Invalid rank 'X'…"
    (not "offline"). Stop Flask and execute → "LOCAL SOLVER DAEMON OFFLINE…". Start Flask again.
 5. Click **VI** → everything switches to Vietnamese (the error box too, if shown); reload the page → still
@@ -2677,17 +2803,18 @@ make the open drawer look attached to the button above it.
 8. `npm run lint`: **no errors, 2 warnings**:
 
    ```
-   src/App.jsx:127:5: warning react(set-state-in-effect): Calling setState synchronously within an effect can trigger cascading renders
-   src/App.jsx:127:5: warning react-hooks(exhaustive-deps): React Hook useEffect has a missing dependency: 'handleSolve'
+   src/App.jsx:118:5: warning react(set-state-in-effect): Calling setState synchronously within an effect can trigger cascading renders
+   src/App.jsx:118:5: warning react-hooks(exhaustive-deps): React Hook useEffect has a missing dependency: 'handleSolve'
    ```
 
    Both concern `useEffect(() => { handleSolve(); }, [])`: the effect calls a function that is
    re-created on every render and that sets state. It works here, but React's recommended pattern is to
    keep effects for syncing with external systems (like the language effect, which writes to
    `document` and `localStorage`). The first version had a third warning (an unused `err`), fixed in
-   Step 16.7. **Linters are cheap code reviewers: read their warnings.**
+   Step 16.9. **Linters are cheap code reviewers: read their warnings.**
+9. `npm test`: **6 passed** (2 dictionary tests, 4 formatting tests), with Node's built-in test runner.
 
-Compare your four files with the originals (`diff -B`; see chapter 5), then commit:
+Compare your files with the originals (`diff -B`; see chapter 5), then commit:
 
 ```bash
 git add frontend && git commit -m "feat: LIÊNG SCOPE dashboard with i18n and opponent models"
@@ -2706,10 +2833,13 @@ git add frontend && git commit -m "feat: LIÊNG SCOPE dashboard with i18n and op
   relatively-positioned bar.
 - The CSS is built from **design tokens**, **flexbox**, **grid** (with `min-width: 0` so tables scroll),
   **media queries**, **keyframes**, and `:focus-visible` for keyboard users.
+- Pure helpers (`format.js`) and data (`i18n.js`) are tested with `node --test` (`npm test`), no extra
+  packages.
 - ✅ Fixed since the first version: guessed (and wrong) category totals, every error shown as
-  "offline", an unused-variable lint warning.
-- ⚠️ Still open: two number formats in English mode, empty zones show blank text, static "LIVE" status,
-  Markdown shown as raw text, repeated preset buttons, "MONTE CARLO" spec label, UI default model ≠ API
-  default.
+  "offline", an unused-variable lint warning, Vietnamese number format in English mode, unchecked
+  dictionaries.
+- ⚠️ Still open: static "LIVE" status, Markdown shown as raw text, repeated preset buttons, "MONTE CARLO"
+  spec label. (UI default model `range` ≠ API default `random` is deliberate and documented in the
+  project README.)
 
 **Next:** [17 — Deployment](17-deployment.md)

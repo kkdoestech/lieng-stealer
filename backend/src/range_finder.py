@@ -13,6 +13,7 @@ from src.calling_range import CallingRangeModel, OpponentModel
 from src.db import HandStats, WinRateDB
 from src.evaluator import HandCategory
 from src.ev import calculate_ev, is_profitable
+from src.hands import generate_all_canonical_hands
 
 TOTAL_COMBINATIONS: Final[int] = 22100
 
@@ -42,6 +43,8 @@ class RangeFinder:
             db.load()
         self._db = db
         self._calling_model = calling_model
+        # Showdown strength of each class, used to order hands whose EV and equity tie
+        self._strength = {h.canonical_id: h.score.score_tuple for h in generate_all_canonical_hands()}
 
     def solve_range(
         self,
@@ -93,8 +96,8 @@ class RangeFinder:
                 )
             )
 
-        # Sort descending by EV (highest profit first); tie-break by equity
-        records.sort(key=lambda r: (r.ev, r.equity), reverse=True)
+        # Sort descending by EV (highest profit first); tie-break by equity, then hand strength
+        records.sort(key=lambda r: (r.ev, r.equity, self._strength[r.canonical_id]), reverse=True)
         return records
 
     def get_profitable_range(
@@ -102,9 +105,10 @@ class RangeFinder:
         pot: float,
         bet_size: float,
         fold_equity: float,
+        opponent_model: OpponentModel = OpponentModel.RANDOM,
     ) -> list[HandEVRecord]:
         """Return only hands where Raise / All-in has positive expected value (EV > 0)."""
-        all_records = self.solve_range(pot, bet_size, fold_equity)
+        all_records = self.solve_range(pot, bet_size, fold_equity, opponent_model)
         return [r for r in all_records if r.is_raise_profitable]
 
     def calculate_range_coverage(
