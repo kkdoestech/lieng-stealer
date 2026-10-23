@@ -47,4 +47,4 @@ def test_interactive_mode_asks_for_opponent_model(monkeypatch, capsys):
 def test_interactive_mode_reports_invalid_hand(monkeypatch, capsys):
     _answer_prompts(monkeypatch, ["100000", "100000", "0.35", "", "Xx Kh Qd"])
     main([])
-    assert "Exiting session: Invalid rank 'X'" in capsys.readouterr().out
+    assert "Exiting session: Invalid card 'Xx': Invalid rank 'X'" in capsys.readouterr().out

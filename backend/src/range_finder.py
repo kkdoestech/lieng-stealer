@@ -8,15 +8,14 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Final
 
 from src.calling_range import CallingRangeModel, OpponentModel
 from src.db import WinRateDB
 from src.ev import calculate_ev, is_profitable
 from src.evaluator import HandCategory
+from src.exceptions import DatabaseNotLoadedError
+from src.hands import TOTAL_COMBINATIONS as TOTAL_COMBINATIONS  # re-exported for callers and tests
 from src.hands import generate_all_canonical_hands
-
-TOTAL_COMBINATIONS: Final[int] = 22100
 
 
 @dataclass(frozen=True)
@@ -37,11 +36,15 @@ class RangeFinder:
         """Initialize RangeFinder with a populated WinRateDB instance.
 
         Args:
-            db: Win-rate database (equity against a random opponent hand).
+            db: A loaded win-rate database (equity against a random opponent hand). Loading is
+                the caller's job, so the constructor never touches the filesystem.
             calling_model: Calling-range model, required only for OpponentModel.RANGE.
+
+        Raises:
+            DatabaseNotLoadedError: If ``db`` has not been loaded.
         """
         if not db.is_loaded:
-            db.load()
+            raise DatabaseNotLoadedError("RangeFinder needs a loaded WinRateDB; call db.load() first.")
         self._db = db
         self._calling_model = calling_model
         # Showdown strength of each class, used to order hands whose EV and equity tie
@@ -134,3 +137,25 @@ class RangeFinder:
         coverage = (combos / TOTAL_COMBINATIONS) * 100.0
         return round(min(100.0, max(0.0, coverage)), 2)
 
+
+@dataclass(frozen=True)
+class CategorySummary:
+    """How many classes and combinations of one hand category exist, and how many are profitable."""
+    category: HandCategory
+    classes: int
+    combos: int
+    profitable_combos: int
+
+
+def category_breakdown(records: Sequence[HandEVRecord]) -> list[CategorySummary]:
+    """Summarize classes, combos, and profitable combos per hand category (strongest first)."""
+    breakdown = []
+    for category in sorted(HandCategory, reverse=True):
+        members = [r for r in records if r.category is category]
+        breakdown.append(CategorySummary(
+            category=category,
+            classes=len(members),
+            combos=sum(r.multiplicity for r in members),
+            profitable_combos=sum(r.multiplicity for r in members if r.is_raise_profitable),
+        ))
+    return breakdown

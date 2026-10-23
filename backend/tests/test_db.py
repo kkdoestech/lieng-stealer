@@ -7,13 +7,16 @@ Verifies:
 - Accurate mapping from concrete Card sequences via get_by_cards()
 """
 
+import json
 import time
+from pathlib import Path
 
 import pytest
 
 from src.db import HandStats, WinRateDB
 from src.evaluator import Card, HandCategory
-from src.exceptions import DatabaseError, DatabaseNotLoadedError
+from src.exceptions import DatabaseError, DatabaseNotLoadedError, UnknownHandError
+from src.paths import DEFAULT_DB_PATH
 from tests.perf import budget
 
 
@@ -88,3 +91,61 @@ class TestWinRateDB:
         with pytest.raises(KeyError):
             loaded_db.get("INVALID_KEY")
 
+
+def _write(tmp_path: Path, records: object) -> Path:
+    path = tmp_path / "winrates.json"
+    path.write_text(json.dumps(records), encoding="utf-8")
+    return path
+
+
+@pytest.fixture(scope="module")
+def real_records() -> dict:
+    return json.loads(DEFAULT_DB_PATH.read_text(encoding="utf-8"))
+
+
+class TestDatabaseValidation:
+    """The loader rejects files that parse but don't describe the 455 hands (weak spot M11)."""
+
+    def test_malformed_json(self, tmp_path: Path) -> None:
+        path = tmp_path / "winrates.json"
+        path.write_text("{not json", encoding="utf-8")
+        with pytest.raises(DatabaseError, match="Malformed JSON"):
+            WinRateDB(path)
+
+    def test_missing_class(self, tmp_path: Path, real_records: dict) -> None:
+        records = dict(real_records)
+        del records["Q-K-A"]
+        with pytest.raises(DatabaseError, match="1 missing"):
+            WinRateDB(_write(tmp_path, records))
+
+    def test_rate_above_one(self, tmp_path: Path, real_records: dict) -> None:
+        records = {cid: dict(stats) for cid, stats in real_records.items()}
+        records["A-A-A"]["equity"] = 1.5
+        with pytest.raises(DatabaseError, match="outside"):
+            WinRateDB(_write(tmp_path, records))
+
+    def test_wrong_multiplicity(self, tmp_path: Path, real_records: dict) -> None:
+        records = {cid: dict(stats) for cid, stats in real_records.items()}
+        records["A-A-A"]["multiplicity"] = 64
+        with pytest.raises(DatabaseError, match="expected SAP x4"):
+            WinRateDB(_write(tmp_path, records))
+
+    def test_failed_reload_keeps_previous_data(self, tmp_path: Path) -> None:
+        db = WinRateDB(DEFAULT_DB_PATH)
+        before = db.get("Q-K-A")
+        with pytest.raises(DatabaseError):
+            db.load(_write(tmp_path, {"A-A-A": {}}))
+        assert db.is_loaded and db.get("Q-K-A") == before
+
+    def test_default_path_works_from_any_directory(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.chdir(tmp_path)
+        db = WinRateDB()
+        db.load()
+        assert len(db) == 455
+
+    def test_unknown_id_is_a_project_error_and_a_key_error(self) -> None:
+        db = WinRateDB(DEFAULT_DB_PATH)
+        with pytest.raises(UnknownHandError):
+            db.get("J-Q-K")
+        with pytest.raises(KeyError):
+            db.get("J-Q-K")

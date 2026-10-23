@@ -78,3 +78,32 @@ class TestCallingRangeModel:
         model.equity_table(0.35)
         elapsed_ms = (time.perf_counter() - start) * 1000
         assert elapsed_ms < budget(25.0)
+
+
+class TestModelInvariants:
+    def test_rejects_a_subset_of_hands(self) -> None:
+        from src.exceptions import LiengError
+        from src.hands import generate_all_canonical_hands
+
+        with pytest.raises(LiengError, match="22100"):
+            CallingRangeModel(generate_all_canonical_hands()[:100])
+
+    def test_rejects_classes_with_equal_strength(self) -> None:
+        """Making two classes tie (e.g. all Đĩ equal) must fail loudly, not give wrong equities."""
+        import dataclasses
+
+        from src.exceptions import LiengError
+        from src.hands import generate_all_canonical_hands
+
+        hands = generate_all_canonical_hands()
+        hands[1] = dataclasses.replace(hands[1], score=hands[0].score)
+        with pytest.raises(LiengError, match="distinct strength"):
+            CallingRangeModel(hands)
+
+    def test_errors_are_project_errors(self, model: CallingRangeModel) -> None:
+        from src.exceptions import InvalidGameParamsError, UnknownHandError
+
+        with pytest.raises(UnknownHandError):
+            model.equity("J-Q-K", 0.35)
+        with pytest.raises(InvalidGameParamsError):
+            model.equity("K-Q-3", 1.5)

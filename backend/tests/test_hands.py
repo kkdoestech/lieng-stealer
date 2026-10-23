@@ -12,7 +12,10 @@ Verifies:
 - Representative cards validity: all 455 classes yield 3 distinct valid cards
 """
 
+import math
 from collections import Counter
+
+import pytest
 
 from src.evaluator import Card, HandCategory, Rank
 from src.hands import (
@@ -107,3 +110,22 @@ class TestCanonicalHandEngine:
             # Ensure mapped back to the same canonical_id
             assert get_canonical_id(cards) == ch.canonical_id
 
+
+class TestCanonicalHandSafety:
+    def test_duplicate_cards_are_rejected(self) -> None:
+        from src.exceptions import DuplicateCardError
+
+        with pytest.raises(DuplicateCardError):
+            get_canonical_id([Card.from_str("As"), Card.from_str("As"), Card.from_str("Kd")])
+
+    def test_canonical_hands_support_all_comparisons(self) -> None:
+        hands = generate_all_canonical_hands()
+        weakest, strongest = min(hands), max(hands)
+        assert weakest <= strongest and strongest >= weakest
+        assert (weakest.canonical_id, strongest.canonical_id) == ("4-3-3", "A-A-A")
+
+    def test_state_space_constants_are_computed(self) -> None:
+        from src.hands import OPPONENT_COMBINATIONS, TOTAL_COMBINATIONS
+
+        assert TOTAL_COMBINATIONS == math.comb(52, 3) == 22100
+        assert OPPONENT_COMBINATIONS == math.comb(49, 3) == 18424

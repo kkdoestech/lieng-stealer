@@ -113,3 +113,19 @@ class TestOpponentModels:
         records = finder_with_model.solve_range(100000.0, 50000.0, 0.35, OpponentModel.RANGE)
         # The three weakest canonical hands, weakest last (chapter 6: 4-3-3 is the weakest of all 455)
         assert [r.canonical_id for r in records[-3:]] == ["5-3-2", "4-4-2", "4-3-3"]
+
+
+class TestConstructionAndSummaries:
+    def test_requires_a_loaded_database(self) -> None:
+        from src.exceptions import DatabaseNotLoadedError
+
+        with pytest.raises(DatabaseNotLoadedError):
+            RangeFinder(WinRateDB())
+
+    def test_category_breakdown_totals(self, loaded_finder: RangeFinder) -> None:
+        from src.range_finder import category_breakdown
+
+        rows = category_breakdown(loaded_finder.solve_range(100000.0, 50000.0, 0.0))
+        assert [(r.category.name, r.classes, r.combos) for r in rows] == [
+            ("SAP", 13, 52), ("LIENG", 12, 768), ("DI", 6, 144), ("DIEM", 424, 21136),
+        ]
