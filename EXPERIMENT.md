@@ -2,6 +2,8 @@
 
 *\*P.S: Đây là educational project, không phải financial advice.\**
 
+> **Ghi chú cập nhật (24/10/2026):** Đây là bản đề xuất ban đầu. Mã nguồn hiện tại khác ở vài điểm: bảng xác suất được tính bằng **liệt kê đầy đủ** (18,424 tay bài đối thủ cho mỗi lớp, thay cho mô phỏng Monte Carlo); hệ thống chỉ mô hình hóa ván **hai người (heads-up)**; và `HandScore` so sánh bằng tuple 5 phần tử `(category, primary_rank, secondary_rank, score, tie_breaker)`. Xem `AGENTS.md` và `README.md`.
+
 *Tuyên bố từ chối trách nhiệm (Disclaimer): Dự án được thực hiện hoàn toàn cho mục đích nghiên cứu học thuật về Khoa học máy tính, Lý thuyết trò chơi và Cấu trúc dữ liệu & Giải thuật. Nhóm tác giả kiên quyết phản đối mọi hành vi cờ bạc và cá độ dưới mọi hình thức.\**
 
 # 

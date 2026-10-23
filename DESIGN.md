@@ -28,10 +28,14 @@ The web UI of **LIÊNG SCOPE** is a plain tool page: inputs on the left, results
 | `--text-strong` | `#E6E1CF` | Headings, values, input text. |
 | `--muted` | `#8A9199` | Secondary text (6:1 contrast on `--bg`). |
 | `--accent` | `#E6B450` | Focus ring, slider, "Run solver" button. Nothing else. |
+| `--accent-hover` | `#D9A63F` | Hover state of the "Run solver" button. |
 | `--good` | `#AAD94C` | Raise, +EV. |
 | `--bad` | `#F07178` | Fold, −EV, errors. |
+| `--zone-good` | `--good` at 45% (`color-mix`) | Profitable stretches of the profit map. |
+| `--zone-bad` | `--bad` at 20% (`color-mix`) | The rest of the profit map's track. |
 
 - Green and red appear only where they mean raise/fold or +/−EV.
+- `App.css` uses tokens only: no hex or `rgba()` literals outside `index.css`.
 - Selected presets use `--bg-active` with a `--muted` border, not the accent.
 - Don't use Ayu's darker UI greys (e.g. `#565B66`) for text: they fail contrast.
 
@@ -65,12 +69,13 @@ The web UI of **LIÊNG SCOPE** is a plain tool page: inputs on the left, results
   3. Coverage by category table.
   4. Most profitable hands table.
   5. Analysis notes, collapsed by default.
-- **Engine specs**: a small muted footnote under the "Run solver" button, not a box.
+- **Engine specs**: a small muted footnote under the "Run solver" button, not a box. It states what the data is (exact enumeration over 455 canonical classes); keep it true when the engine changes.
 - **Responsive**:
   - `≤1024px`: one column, the divider moves below the inputs.
   - `≤640px`: the verdict and summary stack.
   - `≤480px`: 16px side padding.
   - Tables scroll sideways; the page itself must not scroll sideways at 390px.
+- **Class names**: `terminal-*`, `tactical-*`, `hud-*` and `radar-slider` are leftovers from the earlier radar-terminal design and carry no meaning. Don't add new names in that vocabulary.
 
 ---
 
@@ -78,11 +83,13 @@ The web UI of **LIÊNG SCOPE** is a plain tool page: inputs on the left, results
 - Plain words that say what things do. Buttons start with a verb: "Run solver", "Show analysis notes".
 - No `//`, `[ ]`, `●` or `>` decorations.
 - Errors say what happened and what to do next.
-- All UI strings live in `frontend/src/i18n.js` (English and Vietnamese, same keys). Change the Vietnamese wording only when asked.
+- All UI strings live in `frontend/src/i18n.js` (English and Vietnamese, same keys), including preset labels and the currency. Change the Vietnamese wording only when asked.
+- Each API error `code` has its own message (`invalidHand`, `invalidParams`, `serverError`, `solverOffline`, `badResponse`, `aiRateLimited`); the server's text is only the detail.
+- Never claim what the code doesn't do: no "live" indicators, no "GTO" (the tool computes EV, not an equilibrium).
 
 ---
 
 ## 7. Checking a UI Change
-- Run `npm run build`, `npm run lint` and `npm test` in `frontend/`.
+- Run `npm run build`, `npm run lint` (any warning fails) and `npm test` in `frontend/`.
 - Screenshot at 1360px and 390px wide and check them against this file.
 - The numbers on screen (EV, equity, coverage, top hands) must not change from a styling change.

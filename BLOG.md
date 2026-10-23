@@ -2,6 +2,8 @@
 
 *Câu chuyện về một đêm mất ngủ, 22,100 thế bài Liêng, và hành trình đảo ngược một tool Texas Hold'em thành công cụ tính toán Expected Value thực thụ.*
 
+> **Ghi chú cập nhật (24/10/2026):** Bài viết kể lại quá trình làm dự án. Trong phiên bản hiện tại, bảng xác suất thắng được tính bằng **liệt kê đầy đủ** toàn bộ 18,424 tay bài đối thủ cho mỗi lớp bài, không còn dùng Monte Carlo. Thí nghiệm "10,000 ván đối đầu" ở Phần 3 không có mã nguồn trong repo.
+
 ## **Phần 1: Từ Texas Hold'em đến "Chiếu Bài" Liêng Dân Gian**
 
 Mọi chuyện bắt đầu khi tôi lướt qua repository ganjizero/stealer trên GitHub. Đó là một công cụ mã nguồn mở nhỏ gọn nhưng cực kỳ sắc bén dành cho dân chơi No-Limit Texas Hold'em. Bài toán nó giải quyết rất thực tế: *"Khi bạn ngồi ở Blind và đối thủ ở Button nâng cược để cướp pot (Steal), bạn nên 3-bet (tố ngược) với những bài xuất phát nào để có lời dài hạn?"*  
@@ -17,7 +19,7 @@ Tổng số tổ hợp 3 lá bài \= C(52, 3\) \= (52 × 51 × 50\) / (3 × 2 ×
 So với Texas Hold'em pre-flop chỉ có 1,326 tổ hợp 2 lá, Liêng có số lượng tổ hợp lớn hơn gấp gần 17 lần. Phân cấp sức mạnh bài trong Liêng được xếp theo thứ tự giảm dần:
 
 > * **Sáp:** 3 lá cùng số (ví dụ: 7-7-7, A-A-A). Tỷ lệ xuất hiện: 52 / 22,100 ≈ 0.24%.  
-> * **Liêng:** 3 lá bài liên tiếp (từ A-2-3 đến Q-K-A). Tỷ lệ xuất hiện: ≈ 3.26%.  
+> * **Liêng:** 3 lá bài liên tiếp (từ A-2-3 đến Q-K-A). Tỷ lệ xuất hiện: ≈ 3.48% (768 / 22,100 thế bài).  
 > * **Đĩ (Liên Đồng Hoa):** 3 lá đầu người (J, Q, K) bất kỳ không tạo thành Sáp hoặc Liêng.  
 > * **Tính Điểm:** Tổng giá trị các lá chia dư cho 10 (modulo 10), từ 0 điểm (bù) đến 9 điểm.
 

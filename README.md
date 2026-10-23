@@ -7,7 +7,7 @@ Given the pot, your bet, how often the opponent folds and your three cards, it t
 It ships as a Python engine with a command-line tool, a Flask JSON API, and a bilingual (English /
 Vietnamese) React web app called **LIÊNG SCOPE**.
 
-`Python 3.11+` · `Flask 3` · `React 19 + Vite 8` · `93 backend + 6 frontend tests` · `MIT license`
+`Python 3.11+` · `Flask 3` · `React 19 + Vite 8` · `159 backend + 18 frontend tests` · `MIT license`
 
 ---
 
@@ -47,7 +47,7 @@ Vietnamese) React web app called **LIÊNG SCOPE**.
 
 ## Quick start
 
-You need **Python 3.11+**, **Node.js 20.19+ or 22.12+** (required by Vite 8) and npm.
+You need **Python 3.11+**, **Node.js 22.22+** (required by Vite 8 and the Vitest/jsdom test stack) and npm.
 
 **1. Backend** (Flask API on port 5000):
 
@@ -56,12 +56,12 @@ git clone https://github.com/kkdoestech/lieng-stealer.git
 cd lieng-stealer/backend
 python -m venv .venv
 source .venv/bin/activate          # Windows PowerShell: .venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+pip install -r requirements-dev.txt   # the API, the CLI, tests and linters (requirements.txt = server only)
 python app.py
 ```
 
 Check it: `curl -s http://127.0.0.1:5000/health` →
-`{"classes_loaded":455,"database_loaded":true,"status":"healthy","version":"1.0.0"}`
+`{"classes_loaded":455,"database_loaded":true,"status":"healthy","version":"1.1.0"}`
 
 **2. Frontend** (in a second terminal):
 
@@ -72,7 +72,8 @@ npm run dev
 ```
 
 Open <http://localhost:5173>. The page solves the default spot on load: pot 100,000 VND, bet 50,000,
-the opponent folds 35%, hand `As Kh Qd`.
+the opponent folds 35%, hand `As Kh Qd`. In development the page calls `/api/...` on its own origin and
+Vite forwards those requests to the backend.
 
 **Or use the command line only** (no frontend needed):
 
@@ -156,7 +157,7 @@ EV = f × P  +  (1 − f) × (e × (P + 2B) − B)          raise if and only if
 
 Inputs on the left, results on the right.
 
-- **Inputs:** pot and bet (with −/+ steppers and presets such as *100k* or *0.5x Pot*), the opponent's fold
+- **Inputs:** pot and bet (with −/+ steppers and presets such as *100k* or *0.5x pot*), the opponent's fold
   frequency (slider), how the opponent folds (**Weakest hands** = `range`, the default; **At random** =
   `random`), and your hand (e.g. `As Kh Qd`, or one of the presets).
 - **Results:** the recommended action and EV; *where raising pays*, a bar showing the profitable fold
@@ -197,17 +198,19 @@ It prints the game state, a range summary, a per-category table and the decision
 | `--fold-equity` (alias `--p-fold`) | Opponent fold probability, 0–1 | 0.35 |
 | `--hand` | Your hand, e.g. `"As Kh Qd"` or `"As,Kh,Qd"` | none (range report only) |
 | `--opponent-model` | `random` or `range` | `random` |
-| `--db` | Path to the win-rate file | `data/winrates.json` |
+| `--db` | Path to the win-rate file | `backend/data/winrates.json`, wherever you run from |
 
-Run it with no options for an **interactive** session. Invalid input prints `Invalid input: …` and exits
-with status 2.
+Run it with no options (or only `--opponent-model`, which becomes the default answer) for an
+**interactive** session. Every input is checked before anything is printed. Exit codes: **0** success,
+**1** the win-rate file can't be loaded, **2** invalid input (`Invalid input: …` on stderr), **130** Ctrl-C.
 
 **Card notation** (CLI and API): rank `2`–`10` (or `T`), `J`, `Q`, `K`, `A`, followed by a suit `s` `c`
 `d` `h` (or `♠ ♣ ♦ ♥`); upper or lower case. Separate cards with spaces, commas or hyphens.
 
 ### HTTP API
 
-Base URL `http://127.0.0.1:5000`. Requests and responses are JSON; CORS is open to all origins.
+Base URL `http://127.0.0.1:5000`. Requests and responses are JSON. Browsers may call the API only from the
+origins in `CORS_ORIGINS` (by default the Vite dev server; see [Configuration](#configuration-and-deployment)).
 
 | Method | Path | Purpose |
 | :--- | :--- | :--- |
@@ -216,20 +219,36 @@ Base URL `http://127.0.0.1:5000`. Requests and responses are JSON; CORS is open 
 | `POST` | `/api/solve` | Full range scan plus an optional single-hand decision (used by the web app) |
 | `POST` | `/api/evaluate` | Single-hand decision (`hand` required) |
 | `POST` | `/api/range` | Range scan only |
-| `POST` | `/api/analyze` | Strategy notes in Vietnamese from an LLM, or a rule-based text when no API key is set |
+| `POST` | `/api/analyze` | Strategy notes in Vietnamese from an LLM, or a rule-based text when no API key is set. Rate-limited per client (default 10 per minute) |
 
 **Common request fields** for the `POST` endpoints:
 
 | Field | Type | Default | Rule |
 | :--- | :--- | :--- | :--- |
 | `pot` | number | 100000 | > 0 |
-| `bet_size` (or `bet`) | number | 50000 | > 0 |
+| `bet_size` (`bet` is still accepted) | number | 50000 | > 0 |
 | `fold_equity` | number | 0.35 | 0–1 |
 | `opponent_model` | `"random"` \| `"range"` | `"random"` | the web app sends `"range"` |
 | `hand` | string | — | optional for `/api/solve`, required for `/api/evaluate` |
 
-Invalid input returns **`400`** with a message, e.g.
-`{"error": "Invalid hand: A Liêng hand cannot have duplicate cards."}`.
+The body must be a JSON object, and numbers must be real, finite numbers (`"nan"`, `"inf"` and `true` are
+rejected). Missing fields take the defaults above.
+
+**Errors.** Every error, including unknown URLs, is JSON with a stable `code`:
+`{"error": "A Liêng hand cannot have duplicate cards.", "code": "invalid_hand"}`.
+
+| `code` | Status | When |
+| :--- | :--- | :--- |
+| `invalid_params` | 400 | A body that isn't an object, a bad number, an unknown `opponent_model`, a missing `hand` on `/api/evaluate` |
+| `invalid_hand` | 400 | The hand text isn't three valid, different cards |
+| `not_found` / `method_not_allowed` | 404 / 405 | Unknown URL / wrong HTTP method |
+| `rate_limited` | 429 | Too many `/api/analyze` calls |
+| `upstream_error` | 502 | The LLM service failed or sent something unexpected (details are logged, not returned) |
+| `internal_error` | 500 | A bug; the server logs the traceback |
+
+**One vocabulary.** The three solver endpoints use the same field names with the same meanings:
+`bet_size`, `showdown_equity` (equity when called, under the chosen model), `decision` (`"RAISE"` or
+`"CHECK/FOLD"`), `is_profitable`.
 
 **When does raising pay?** Single-hand results contain:
 
@@ -238,7 +257,7 @@ Invalid input returns **`400`** with a message, e.g.
 | `showdown_equity` | Equity used by the chosen model; `equity_vs_random` is always included for comparison |
 | `break_even_fold_equity` | Exact fold frequency where EV = 0 (`random` model). `null` under `range`, where no single break-even exists |
 | `profitable_from_fold_equity` | First fold frequency (1% grid) from which raising stays +EV up to 100% |
-| `profitable_fold_zones` | Every `[start, end]` interval where raising is +EV (`/api/solve` only) |
+| `profitable_fold_zones` | Every `[start, end]` interval where raising is +EV |
 
 #### Example: `POST /api/solve`
 
@@ -287,45 +306,48 @@ Response (shortened: `top_hands` has 30 entries and `category_breakdown` has 4):
     ]
   },
   "top_hands": [
-    {"canonical_id": "A-A-A", "category": "SAP", "equity": 1.0, "ev": 165000.0, "multiplicity": 4, "is_profitable": true}
+    {"canonical_id": "A-A-A", "category": "SAP", "showdown_equity": 1.0, "ev": 165000.0, "multiplicity": 4, "is_profitable": true, "decision": "RAISE"}
   ]
 }
 ```
 
-`threshold_hand` is the weakest hand type that is still profitable to raise.
+`threshold_hand` is the profitable hand type with the lowest EV (the last one before EV turns negative).
 
 #### Example: `POST /api/evaluate`
 
 ```bash
 curl -s -X POST http://127.0.0.1:5000/api/evaluate -H "Content-Type: application/json" \
-  -d '{"pot": 100000, "bet": 50000, "fold_equity": 0.35, "hand": "As Kh Qd"}'
+  -d '{"pot": 100000, "bet_size": 50000, "fold_equity": 0.35, "hand": "As Kh Qd"}'
 ```
+
+The game parameters plus exactly the `hand_evaluation` fields of `/api/solve`:
 
 ```json
 {
-  "hand": "As Kh Qd",
-  "canonical_id": "Q-K-A",
-  "category": "LIENG",
   "pot": 100000.0,
-  "bet": 50000.0,
+  "bet_size": 50000.0,
   "fold_equity": 0.35,
   "opponent_model": "random",
+  "hand": "As Kh Qd",
+  "score_name": "Liêng Q-K-A",
+  "canonical_id": "Q-K-A",
+  "category": "LIENG",
+  "category_name": "Liêng",
   "showdown_equity": 0.9969,
   "equity_vs_random": 0.9969,
   "ev": 132097.0,
   "break_even_fold_equity": 0.0,
   "profitable_from_fold_equity": 0.0,
-  "recommended_action": "RAISE",
-  "is_profitable": true
+  "profitable_fold_zones": [[0.0, 1.0]],
+  "is_profitable": true,
+  "decision": "RAISE"
 }
 ```
 
-`/api/range` returns a flat summary (`pot`, `bet`, `fold_equity`, `opponent_model`, `final_pot`,
-`pure_bluff_break_even_fold_equity`, `total_combinations`, `profitable_combinations`,
-`range_coverage_percent`, `total_canonical_classes`, `profitable_classes`) and the top 30 hands, each with
-`showdown_equity` and `recommended_action`. `/api/analyze` takes the common fields plus the
-`hand_evaluation` and `range_coverage_percent` from a `/api/solve` response, and returns
-`{"advice": "...", "model": "..."}`.
+`/api/range` returns the same fields as the `/api/solve` `summary` (including `category_breakdown`) plus
+`top_hands`, in the same shape as above. `/api/analyze` takes the same fields as `/api/solve` (with an
+optional `hand`), recomputes every number on the server, and returns `{"advice": "...", "model": "..."}`;
+anything else in the body, such as a client-side `hand_evaluation`, is ignored.
 
 ---
 
@@ -334,13 +356,15 @@ curl -s -X POST http://127.0.0.1:5000/api/evaluate -H "Content-Type: application
 `backend/data/winrates.json` is committed. To rebuild it (from `backend/`):
 
 ```bash
-python -m src.generator                 # exact enumeration (default): ≈ 30 s on 4 cores
+python -m src.generator                 # exact enumeration (default): ≈ 10 s on one core
 python -m src.generator --monte-carlo --samples 10000 --output data/winrates_mc.json
 ```
 
 Exact enumeration is deterministic: the regenerated file is byte-for-byte identical to the committed one.
-Monte Carlo is only for experiments; the tests expect the exact data. Other options: `--output`,
-`--workers` (default: number of CPU cores).
+Monte Carlo is only for experiments; the tests expect the exact data. Other options: `--output` (default
+`backend/data/winrates.json`, wherever you run from), `--workers` (default: number of CPU cores; use
+`--workers 1` on a busy machine). The file is written atomically, so an interrupted run never leaves a
+half-written database, and the loader rejects files that don't describe all 455 hand types.
 
 ---
 
@@ -351,10 +375,14 @@ lieng-stealer/
 ├── backend/
 │   ├── app.py                  Flask API (validation, opponent models, LLM notes)
 │   ├── Procfile                gunicorn start command for hosting platforms
-│   ├── requirements.txt        Flask, flask-cors, gunicorn, requests, rich, pytest
+│   ├── requirements.txt        runtime: Flask, flask-cors, Flask-Limiter, gunicorn, requests
+│   ├── requirements-dev.txt    + pytest, rich (CLI), ruff, mypy
+│   ├── pyproject.toml          ruff, mypy (strict) and pytest settings
+│   ├── .env.example            every environment variable the API reads
 │   ├── data/winrates.json      precomputed equity of all 455 hand types (exact)
 │   ├── src/
 │   │   ├── exceptions.py       LiengError hierarchy
+│   │   ├── paths.py            default data path (independent of the current directory)
 │   │   ├── evaluator.py        Card, Hand, HandScore, evaluate_hand (ranking rules)
 │   │   ├── hands.py            22,100 hands → 455 canonical types, multiplicities
 │   │   ├── generator.py        equity generator (exact or Monte Carlo, multi-process)
@@ -363,7 +391,7 @@ lieng-stealer/
 │   │   ├── ev.py               EV, break-even fold equity, profitable fold zones
 │   │   ├── range_finder.py     EV of all 455 types, sorting, coverage
 │   │   └── cli.py              command-line interface
-│   └── tests/                  pytest suite (93 tests)
+│   └── tests/                  pytest suite (159 tests)
 ├── frontend/
 │   ├── index.html, vite.config.js, package.json, .oxlintrc.json
 │   └── src/
@@ -371,7 +399,8 @@ lieng-stealer/
 │       ├── i18n.js             English and Vietnamese UI text
 │       ├── format.js           money and fold-zone formatting
 │       ├── index.css, App.css  colour tokens and layout
-│       └── *.test.js           Node test-runner tests (6 tests)
+│       └── *.test.js(x)        Vitest tests (18 tests)
+├── .github/workflows/ci.yml    CI: backend, frontend and course checks on every push
 ├── learning/                   guided tour of the codebase: 18 lessons, start at COURSE.md
 ├── AGENTS.md                   engineering spec: rules, data model, maths, performance budgets
 ├── DESIGN.md                   web UI spec
@@ -387,26 +416,33 @@ lieng-stealer/
 From the repository root:
 
 ```bash
-(cd backend && python -m pytest -q)                          # 93 passed
-(cd frontend && npm test)                                    # 6 passed (Node's built-in test runner)
-(cd frontend && npm run lint && npm run build)               # 0 errors; production build in dist/
+(cd backend && python -m pytest -q)                          # 159 passed
+(cd backend && ruff check . && mypy)                         # lint + strict type check: 0 issues
+(cd frontend && npm test)                                    # 18 passed (Vitest)
+(cd frontend && npm run lint && npm run build)               # 0 warnings; production build in dist/
+python3 learning/verify_course.py                            # the course still matches the code
 ```
+
+GitHub Actions runs the same checks on every push (`.github/workflows/ci.yml`). Timing tests scale their
+budgets by `PERF_BUDGET_FACTOR` (CI sets 3, because shared runners are slower).
 
 | Test file | Tests | Covers |
 | :--- | ---: | :--- |
-| `test_evaluator.py` | 18 | Card parsing, category order, straight edge cases, Đĩ rules, points mod 10 |
-| `test_hands.py` | 5 | 455 types, multiplicities summing to 22,100, suit invariance |
-| `test_generator.py` | 7 | Exact equities, rate invariants, Monte Carlo convergence, data-file schema, exact-by-default CLI |
-| `test_db.py` | 6 | Loading, lookup latency, error handling |
-| `test_calling_range.py` | 9 | Card removal, exact match with `winrates.json` at 0% folds, monotonicity, latency |
-| `test_ev.py` | 13 | EV boundaries, bluffing, break-even, profitable fold zones |
-| `test_range_finder.py` | 6 | Range scan, coverage, opponent models, tie ordering |
-| `test_cli.py` | 6 | Decisions per model, interactive mode, exit code 2 on bad input |
-| `test_api.py` | 17 | Every endpoint, both models, break-even fields, category breakdown, 400 responses |
+| `test_evaluator.py` | 27 | Card parsing, category order, straight edge cases, Đĩ rules, points mod 10, tie-break house rules, hashing, the 1 µs budget |
+| `test_hands.py` | 8 | 455 types, multiplicities summing to 22,100, suit invariance, duplicate cards, ordering |
+| `test_exceptions.py` | 8 | The exception hierarchy callers rely on |
+| `test_generator.py` | 12 | Exact equities, rate invariants, Monte Carlo convergence, data-file schema, CLI flags, atomic write, private RNG |
+| `test_db.py` | 13 | Loading, lookup latency, error handling, validation of malformed or incomplete files |
+| `test_calling_range.py` | 12 | Card removal, exact match with `winrates.json` at 0% folds, monotonicity, latency, model invariants |
+| `test_ev.py` | 15 | EV boundaries, bluffing, break-even, profitable fold zones, strong hands |
+| `test_range_finder.py` | 8 | Range scan, coverage, opponent models, tie ordering, category breakdown |
+| `test_cli.py` | 10 | Decisions per model, interactive mode, exit codes, validation before output |
+| `test_api.py` | 40 | Every endpoint, both models, one shared vocabulary, JSON errors, validation, `/api/analyze` (OpenRouter mocked), rate limit, CORS |
 | `test_dynamic_scenarios.py` | 6 | End-to-end player stories (value raise, junk fold, pure bluff, coverage sweep, both models) |
-| frontend `*.test.js` | 6 | Locale-aware money formatting, zone formatting, EN/VI dictionary parity |
+| frontend `App.test.jsx` | 12 | Rendering, error messages, stale results cleared, language toggle, steppers, request cancelling |
+| frontend `format.test.js`, `i18n.test.js` | 6 | Locale-aware money formatting, zone formatting, EN/VI dictionary parity |
 
-The API tests never call the internet: the LLM test forces the offline fallback.
+The tests never call the internet: the LLM calls are mocked or use the offline fallback.
 
 ---
 
@@ -414,21 +450,30 @@ The API tests never call the internet: the LLM test forces the offline fallback.
 
 | Variable | Used by | Purpose |
 | :--- | :--- | :--- |
-| `OPENROUTER_API_KEY` | backend | Enables LLM notes in `/api/analyze` (model `meta-llama/llama-3.1-8b-instruct:free`). Without it, a rule-based text is returned. |
-| `PORT` | backend | Port for `python app.py` and the `Procfile` (default 5000) |
-| `VITE_API_URL` | frontend, **at build time** | Backend URL (default `http://127.0.0.1:5000`). It ends up in the public JavaScript bundle, so never put secrets in it. |
+All backend variables are listed in [`backend/.env.example`](backend/.env.example); every one is optional.
+
+| Variable | Used by | Purpose |
+| :--- | :--- | :--- |
+| `OPENROUTER_API_KEY` | backend | Enables LLM notes in `/api/analyze`. Without it, a rule-based text is returned. |
+| `OPENROUTER_MODEL`, `OPENROUTER_TIMEOUT` | backend | LLM model (default `meta-llama/llama-3.1-8b-instruct:free`) and timeout in seconds (default 15) |
+| `CORS_ORIGINS` | backend | Comma-separated browser origins allowed to call the API (default `http://localhost:5173,http://127.0.0.1:5173`). Set it to your frontend's URL in production. |
+| `ANALYZE_RATE_LIMIT`, `RATELIMIT_STORAGE_URI` | backend | Per-client limit for `/api/analyze` (default `10 per minute`) and where counts live (default `memory://`, which counts per worker; use e.g. `redis://…` for one shared limit) |
+| `HOST`, `PORT` | backend | Address for `python app.py` (default `127.0.0.1:5000`; `HOST=0.0.0.0` shares it on your network). The `Procfile` uses `$PORT`. |
+| `VITE_API_URL` | frontend, **at build time** | Backend URL. Without it the page calls `/api` on its own origin. It ends up in the public JavaScript bundle, so never put secrets in it. |
+
+`.env` files are git-ignored, so real keys stay out of the repository.
 
 | Part | Example platform | Build | Run |
 | :--- | :--- | :--- | :--- |
-| Backend | Render, Railway | `pip install -r requirements.txt` | `gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120` (from `backend/Procfile`) |
+| Backend | Render, Railway | `pip install -r requirements.txt` | `gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --worker-class gthread --threads 4 --timeout 60 --preload` (from `backend/Procfile`) |
 | Frontend | Vercel, Netlify | `npm run build` with `VITE_API_URL` set | serve `frontend/dist/` as static files |
 
 ---
 
 ## Limitations
 
-- **EV, not an equilibrium.** Despite "GTO" in the UI subtitle, the tool computes the expected value of one
-  raise under the assumptions you give it. It does not solve for a game-theory-optimal strategy.
+- **EV, not an equilibrium.** The tool computes the expected value of one raise under the assumptions you
+  give it. It does not solve for a game-theory-optimal strategy.
 - **One betting round, two players:** the opponent can only fold or call; no re-raises, no multi-way pots.
 - **The fold frequency is your estimate.** The `range` model also assumes the opponent folds strictly from
   the weakest hand up; real players sit somewhere between `range` and `random`.
