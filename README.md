@@ -48,10 +48,10 @@ LIÊNG SCOPE is an offline-computed, $O(1)$ real-time Game Theory Optimal (GTO) 
 |               - Endpoints: /health, /api/evaluate, /api/range, /api/solve, /api/analyze           |
 |                            |                                                                      |
 |                            v                                                                      |
-|            [ Reactive Tactical HUD Terminal ]                                                     |
+|            [ React Web UI ]                                                                       |
 |            - React 19 + Vite SPA, English / Vietnamese UI                                         |
-|            - EPL SCOPE Dark Radar Theme (JetBrains Mono)                                          |
-|            - Decision Banner, Profit Map, 4-Card HUD, Range Matrix & Top Holdings                 |
+|            - Plain dark UI (Ayu Dark colors, system font)                                         |
+|            - Verdict, Profit Map, Summary, Category Matrix & Top Hands                            |
 +---------------------------------------------------------------------------------------------------+
 ```
 
@@ -124,7 +124,7 @@ $$\binom{13 + 3 - 1}{3} = \binom{15}{3} = 455 \text{ canonical hand types}$$
 
 ```
 lieng-stealer/
-├── DESIGN.md                  # Persistent tactical UI/UX specification (EPL SCOPE)
+├── DESIGN.md                  # Web UI rules: colors, type, controls, layout, copy
 ├── AGENTS.md                  # Architectural guardrails, latency budgets & constraints
 ├── README.md                  # Project documentation & mathematical specification
 ├── LICENSE                    # MIT License
@@ -159,18 +159,18 @@ lieng-stealer/
 │       ├── test_dynamic_scenarios.py # Dynamic stack & pot edge-case solver scenarios
 │       └── test_api.py        # REST API endpoint integration tests
 │
-└── frontend/                  # React 19 + Vite Tactical Radar Dashboard
-    ├── index.html             # HTML shell with JetBrains Mono typography
+└── frontend/                  # React 19 + Vite web UI
+    ├── index.html             # HTML shell
     ├── package.json           # Frontend dependencies and scripts (dev, build, lint, test)
     ├── vite.config.js         # Vite bundler configuration
     ├── src/
     │   ├── main.jsx           # Application entrypoint
-    │   ├── App.jsx            # Tactical radar terminal layout & telemetry controls
+    │   ├── App.jsx            # Page layout: inputs, verdict, tables, notes
     │   ├── i18n.js            # English / Vietnamese UI texts
     │   ├── format.js          # Pure number / zone formatting helpers
     │   ├── *.test.js          # Node built-in test runner tests (npm test)
-    │   ├── App.css            # EPL SCOPE dark terminal styling & responsive HUD grid
-    │   └── index.css          # Design tokens, CSS variables, and 24px canvas grid
+    │   ├── App.css            # Layout and component styles
+    │   └── index.css          # Color tokens and base styles
     └── public/                # Static assets & SVG indicators
 ```
 
@@ -219,7 +219,7 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173) to access the **LIÊNG SCOPE** tactical terminal.
+Open [http://localhost:5173](http://localhost:5173) to use the **LIÊNG SCOPE** web UI.
 
 ---
 

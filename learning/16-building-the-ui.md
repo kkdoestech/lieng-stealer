@@ -8,6 +8,14 @@
 > **Time:** ~4 hours.
 > **Prerequisites:** [15](15-frontend-foundations.md). Flask running (`python app.py` in `backend/`).
 
+> **Note (2026-10-23): the styling in this chapter is out of date.** The UI was later restyled to a
+> plain dark look: Ayu Dark colors, the system font, sentence-case text, `−`/`+` steppers on the pot
+> and bet fields, labels linked to their inputs, and no "LIVE" status pill. Steps 16.4–16.10 (tests,
+> `format.js`, state and `handleSolve`) still match the project. Step 16.1 (`index.css`), Steps
+> 16.2–16.3 (the texts), parts of Steps 16.11–16.22 (markup) and all of Part C (`App.css`) don't.
+> For the current versions, read `DESIGN.md` and `frontend/src/` (`index.css`, `App.css`, `i18n.js`,
+> `App.jsx`).
+
 ---
 
 ## The big picture

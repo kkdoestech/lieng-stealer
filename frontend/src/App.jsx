@@ -142,13 +142,6 @@ export default function App() {
         </div>
 
         <div className="header-actions">
-          <div className="telemetry-status-tag">
-            <span className="radar-beacon"></span>
-            <span className="telemetry-status-text">{t.liveSolver}</span>
-            <span className="telemetry-separator">/</span>
-            <span className="telemetry-classes">{t.classesLoaded}</span>
-          </div>
-
           <button
             type="button"
             className="lang-toggle"
@@ -170,14 +163,22 @@ export default function App() {
         {/* Left Column: Control Telemetry */}
         <section className="terminal-card control-panel">
           <div className="panel-header">
-            <span className="panel-tag">{t.controlsTag}</span>
-            <span className="panel-id">SEC-01</span>
+            <h2 className="panel-tag">{t.controlsTag}</h2>
           </div>
 
           <div className="form-group">
-            <label className="form-label">{t.potLabel}</label>
-            <div className="input-wrapper">
+            <label className="form-label" htmlFor="pot-input">{t.potLabel}</label>
+            <div className="input-wrapper stepper">
+              <button
+                type="button"
+                className="stepper-btn"
+                aria-label={`${t.potLabel} −10k`}
+                onClick={() => setPot((v) => Math.max(1000, v - 10000))}
+              >
+                −
+              </button>
               <input
+                id="pot-input"
                 type="number"
                 className="input-field"
                 value={pot}
@@ -185,6 +186,14 @@ export default function App() {
                 step="10000"
                 min="1000"
               />
+              <button
+                type="button"
+                className="stepper-btn"
+                aria-label={`${t.potLabel} +10k`}
+                onClick={() => setPot((v) => v + 10000)}
+              >
+                +
+              </button>
             </div>
             <div className="preset-chips">
               {[50000, 100000, 200000, 500000].map((v) => (
@@ -201,9 +210,18 @@ export default function App() {
           </div>
 
           <div className="form-group">
-            <label className="form-label">{t.betLabel}</label>
-            <div className="input-wrapper">
+            <label className="form-label" htmlFor="bet-input">{t.betLabel}</label>
+            <div className="input-wrapper stepper">
+              <button
+                type="button"
+                className="stepper-btn"
+                aria-label={`${t.betLabel} −10k`}
+                onClick={() => setBetSize((v) => Math.max(1000, v - 10000))}
+              >
+                −
+              </button>
               <input
+                id="bet-input"
                 type="number"
                 className="input-field"
                 value={betSize}
@@ -211,6 +229,14 @@ export default function App() {
                 step="10000"
                 min="1000"
               />
+              <button
+                type="button"
+                className="stepper-btn"
+                aria-label={`${t.betLabel} +10k`}
+                onClick={() => setBetSize((v) => v + 10000)}
+              >
+                +
+              </button>
             </div>
             <div className="preset-chips">
               <button
@@ -239,10 +265,11 @@ export default function App() {
 
           <div className="form-group">
             <div className="slider-label-row">
-              <label className="form-label">{t.foldLabel}</label>
+              <label className="form-label" htmlFor="fold-input">{t.foldLabel}</label>
               <span className="slider-value-badge">{Math.round(foldEquity * 100)}%</span>
             </div>
             <input
+              id="fold-input"
               type="range"
               min="0"
               max="1"
@@ -292,11 +319,12 @@ export default function App() {
           </div>
 
           <div className="form-group">
-            <label className="form-label">{t.handLabel}</label>
+            <label className="form-label" htmlFor="hand-input">{t.handLabel}</label>
             <div className="input-wrapper">
               <input
+                id="hand-input"
                 type="text"
-                className="input-field mono-bold"
+                className="input-field"
                 value={hand}
                 onChange={(e) => setHand(e.target.value)}
                 placeholder={t.handPlaceholder}
@@ -351,13 +379,12 @@ export default function App() {
           </button>
 
           {solveError && (
-            <div className="terminal-alert">
-              <span className="alert-marker">!</span>
-              <span>{t[solveError.key](solveError.detail)}</span>
+            <div className="terminal-alert" role="alert">
+              {t[solveError.key](solveError.detail)}
             </div>
           )}
 
-          {/* Engine Specs Sub-Card */}
+          {/* Engine specs footnote */}
           <div className="specs-subcard">
             <div className="spec-row">
               <span className="spec-label">{t.specArchitecture}</span>
@@ -386,10 +413,10 @@ export default function App() {
                 </h2>
                 <div className="verdict-meta">
                   <span className="holding-tag">{handEval.hand}</span>
-                  <span className="holding-sep">•</span>
-                  <span className="holding-class">[{handEval.canonical_id}]</span>
-                  <span className="holding-sep">•</span>
-                  <span className="holding-score">{handEval.score_name.toUpperCase()}</span>
+                  <span className="holding-sep">·</span>
+                  <span className="holding-class">{handEval.canonical_id}</span>
+                  <span className="holding-sep">·</span>
+                  <span className="holding-score">{handEval.score_name}</span>
                 </div>
               </div>
 
@@ -451,8 +478,7 @@ export default function App() {
           {/* Range Breakdown Matrix Table */}
           <div className="terminal-card table-panel">
             <div className="panel-header">
-              <span className="panel-tag">{t.matrixTag}</span>
-              <span className="panel-id">{t.matrixId}</span>
+              <h2 className="panel-tag">{t.matrixTag}</h2>
             </div>
 
             <div className="table-wrapper">
@@ -507,8 +533,7 @@ export default function App() {
           {solveData?.top_hands && (
             <div className="terminal-card table-panel">
               <div className="panel-header">
-                <span className="panel-tag">{t.topHandsTag}</span>
-                <span className="panel-id">{t.topHandsId}</span>
+                <h2 className="panel-tag">{t.topHandsTag}</h2>
               </div>
 
               <div className="table-wrapper">
@@ -563,14 +588,11 @@ export default function App() {
               <div className="drawer-content">
                 <div className="drawer-header">
                   <span className="drawer-title">{t.notesTitle}</span>
-                  <span className="drawer-sub">OPENROUTER / LLAMA 3.1 8B INSTRUCT</span>
+                  <span className="drawer-sub">OpenRouter · Llama 3.1 8B Instruct</span>
                 </div>
 
                 {isAiLoading ? (
-                  <div className="telemetry-loading">
-                    <span className="radar-spinner"></span>
-                    <span>{t.notesLoading}</span>
-                  </div>
+                  <div className="telemetry-loading">{t.notesLoading}</div>
                 ) : (
                   <div className="telemetry-body">
                     {!aiAdvice ? t.notesEmpty : aiAdvice.text ?? t[aiAdvice.key](aiAdvice.detail)}

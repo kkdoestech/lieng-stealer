@@ -287,10 +287,7 @@ Run it any time with `npm run lint`.
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>LIÊNG SCOPE // Tactical GTO Solver</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <title>Liêng Scope – GTO solver</title>
   </head>
   <body>
     <div id="root"></div>
@@ -304,8 +301,8 @@ Run it any time with `npm run lint`.
 - This is the only real HTML file. The page is **empty** except for `<div id="root"></div>`. React
   fills that div with everything you see.
 - `<meta name="viewport" …>` makes the page scale properly on phones.
-- The Google Fonts links load **JetBrains Mono** (the monospace "terminal" font from `DESIGN.md`) and
-  **Inter**. `preconnect` starts the network connection early to speed up loading.
+- There are no font links: the app uses the system font stack set in `index.css` (see `DESIGN.md`), so
+  nothing has to download before text appears.
 - `<script type="module" src="/src/main.jsx">`: Vite intercepts this and serves the compiled JSX.
 
 📄 **File:** `frontend/src/main.jsx` — *create this file*
