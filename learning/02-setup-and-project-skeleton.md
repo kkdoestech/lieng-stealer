@@ -33,7 +33,7 @@ lieng-stealer/              ← the project root (a git repository)
         └── __init__.py
 ```
 
-> Later, in chapter 14, a second folder `frontend/` will hold the web page. Keeping the Python
+> Later, in chapter 15, a second folder `frontend/` will hold the web page. Keeping the Python
 > **backend** and the JavaScript **frontend** in separate folders is a common way to organise a
 > "full-stack" project.
 
@@ -152,11 +152,11 @@ What each library is for (you'll meet each one later):
 
 | Library | Used in | Purpose |
 |---------|---------|---------|
-| `flask` | ch 12 | the web API |
-| `flask-cors` | ch 12 | lets the browser page call the API |
-| `gunicorn` | ch 16 | production web server |
-| `requests` | ch 12 | calling another web service (the LLM) |
-| `rich` | ch 11 | pretty tables in the terminal |
+| `flask` | ch 13 | the web API |
+| `flask-cors` | ch 13 | lets the browser page call the API |
+| `gunicorn` | ch 17 | production web server |
+| `requests` | ch 13 | calling another web service (the LLM) |
+| `rich` | ch 12 | pretty tables in the terminal |
 | `pytest` | every chapter | running tests |
 
 `==3.0.3` **pins** an exact version. Pinning means everyone who installs the project gets the same

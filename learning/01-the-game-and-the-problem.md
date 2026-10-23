@@ -210,7 +210,7 @@ EV = 0.35 × 100,000  +  0.65 × (0.9969 × 200,000 − 50,000)
 ```
 
 (Why `0.9969 × 200,000 − 50,000`? If the opponent calls, the final pot is 100k + 50k + 50k = 200k. You
-win it 99.69% of the time, and you had to pay 50k to get there. Chapter 9 derives this carefully.)
+win it 99.69% of the time, and you had to pay 50k to get there. Chapter 10 derives this carefully.)
 
 Now the same situation with the worst kind of hand, `2♠ 3♥ 5♦` (0 points, wins only 0.24% of
 showdowns):
@@ -228,6 +228,23 @@ folded only 5% of the time, that same junk hand would lose about 42,000 per game
 
 This is the whole point of the project: **"strong hand → raise" is too simple.** The right decision
 depends on the pot, the bet size, the opponent's folding habits **and** the hand's equity together.
+
+### Which hands does the opponent call with?
+
+The examples above used the equity against a **random** hand. But think about how a real opponent folds:
+they give up their **worst** hands and call with their **best** ones. So when you get called, you usually
+face a hand stronger than random, and your real chance of winning is lower.
+
+The program therefore supports two **opponent models**, and you choose one:
+
+| Model | The opponent folds… | Your equity when called is measured against… |
+|---|---|---|
+| **random** | without looking at their cards | a random hand (simple, optimistic) |
+| **range** ("weakest hands") | their weakest hands first | only the hands strong enough to call (realistic) |
+
+For strong hands the two models barely differ. For medium hands the difference is huge: a 3-point hand
+like `K-Q-3` wins 36% against a random hand, but only about 1% against an opponent who folds their weakest
+35% and calls with the rest. Chapter 9 builds this "calling-range" model.
 
 ---
 

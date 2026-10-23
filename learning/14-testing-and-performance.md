@@ -1,10 +1,10 @@
-# 13 — Testing and Performance
+# 14 — Testing and Performance
 
 > **Goal:** finish the backend test suite with end-to-end "scenario" tests, learn the pytest features you
 > have been using, and measure the code against the speed and memory budgets in `AGENTS.md`.
 > **You will build:** `backend/tests/test_dynamic_scenarios.py` (5 tests).
 > **Time:** ~1 hour.
-> **Prerequisites:** [12](13-flask-api.md).
+> **Prerequisites:** [13](13-flask-api.md).
 
 ---
 
@@ -17,8 +17,8 @@ the whole stack (HTTP request → API → engine → JSON) and check that the *a
 ```
               ▲ fewer, slower, broader
               │      test_dynamic_scenarios.py   "a monster hand must say RAISE"   (whole stack)
-              │      test_api.py                 HTTP contract of each endpoint
-              │      test_range_finder.py, test_db.py, test_generator.py
+              │      test_api.py                 HTTP contract of each endpoint, both opponent models
+              │      test_range_finder.py, test_calling_range.py, test_db.py, test_generator.py
               │      test_ev.py, test_hands.py, test_evaluator.py   (one function at a time)
               ▼ many, fast, narrow
 ```
@@ -53,7 +53,7 @@ python -m pytest --durations=5            # list the 5 slowest tests
 
 ---
 
-## Step 13.1 — Scenario tests: set-up
+## Step 14.1 — Scenario tests: set-up
 
 📄 **File:** `backend/tests/test_dynamic_scenarios.py` — *create this file*
 
@@ -110,7 +110,7 @@ def solver():
 
 ---
 
-## Step 13.2 — Scenario 1: a monster hand must raise
+## Step 14.2 — Scenario 1: a monster hand must raise
 
 📄 **File:** `backend/tests/test_dynamic_scenarios.py` — *add to the end*
 
@@ -153,14 +153,14 @@ def test_scenario_1_monster_hand_value_raise(client):
 ```
 
 **In plain words:** "If I hold the best Liêng and the opponent rarely folds (20%), the tool must tell me
-to raise, and it must say I'd profit even if they never folded." Check the EV by hand with chapter 9:
+to raise, and it must say I'd profit even if they never folded." Check the EV by hand with chapter 10:
 `0.2 × 100,000 + 0.8 × (0.9969 × 200,000 − 50,000) = 20,000 + 119,504 = 139,504`. ✔
 
 The `print` lines are a **readable report** for humans, shown with `pytest -s`.
 
 ---
 
-## Step 13.3 — Scenarios 2 and 3: the same junk hand, two answers
+## Step 14.3 — Scenarios 2 and 3: the same junk hand, two answers
 
 📄 **File:** `backend/tests/test_dynamic_scenarios.py` — *add to the end*
 
@@ -244,11 +244,11 @@ def test_scenario_3_pure_bluff_flip(client):
 only on the opponent: fold against a calling station (5% folds, EV −42,044), raise against a player who
 folds half the time (EV +25,240). This pair of tests captures the whole lesson of the project: the right
 decision depends on the situation, not only on your cards. The numbers are the ones you computed in
-chapter 9's table.
+chapter 10's table.
 
 ---
 
-## Step 13.4 — Scenario 4: coverage grows with fold equity
+## Step 14.4 — Scenario 4: coverage grows with fold equity
 
 📄 **File:** `backend/tests/test_dynamic_scenarios.py` — *add to the end*
 
@@ -294,7 +294,7 @@ it isolates the logic from the web layer.
 
 ---
 
-## Step 13.5 — Scenario 5: the API contract
+## Step 14.5 — Scenario 5: the API contract
 
 📄 **File:** `backend/tests/test_dynamic_scenarios.py` — *add to the end*
 
@@ -360,7 +360,7 @@ def test_scenario_5_api_schema_and_endpoints(client):
     print("  GET / service metadata: OK -> PASS")
 ```
 
-**In plain words:** the frontend (chapter 15) relies on a certain JSON shape: `summary`, `top_hands`,
+**In plain words:** the frontend (chapter 16) relies on a certain JSON shape: `summary`, `top_hands`,
 and `hand_evaluation` (an object, or `null` when no hand is sent). This test pins down that **contract**,
 so a backend change that would break the web page fails here first. Part 3 makes sure results really
 depend on the inputs, i.e. nothing is accidentally cached or hard-coded.
@@ -371,7 +371,7 @@ depend on the inputs, i.e. nothing is accidentally cached or hard-coded.
 
 ---
 
-## Step 13.6 — Run the whole suite and read the report
+## Step 14.6 — Run the whole suite and read the report
 
 ```bash
 python -m pytest -q
@@ -380,12 +380,19 @@ python -m pytest -q
 Expected output:
 
 ```
-..........................................................               [100%]
-58 passed in 1.50s
+........................................................................ [ 94%]
+....                                                                     [100%]
+76 passed in 1.60s
 ```
 
-**58 tests**: 18 evaluator + 5 hands + 5 generator + 6 db + 9 ev + 4 range finder + 6 API + 5 scenarios.
-That matches the "58 Tests Passing" badge in the project's README.
+**76 tests**: 18 evaluator + 5 hands + 5 generator + 6 db + 9 calling range + 13 ev + 4 range finder +
+11 API + 5 scenarios. (The project's README still shows a "58 Tests Passing" badge from before the
+calling-range model was added: another doc that drifted.)
+
+> 💡 The five scenario tests all use the **default random model** (they don't send
+> `opponent_model`), so their numbers are the same as before the range model existed. The range model's
+> end-to-end behaviour is covered by the newer tests in `test_api.py` (chapter 13). A sixth scenario,
+> "the same medium hand under both models", would be a natural addition here.
 
 Now with the scenario report and the slowest tests:
 
@@ -423,7 +430,7 @@ milliseconds.
 
 ---
 
-## Step 13.7 — Measure the performance budgets
+## Step 14.7 — Measure the performance budgets
 
 `AGENTS.md` §6 lists five budgets. Let's measure each one. No new project files: run these in the
 terminal from `backend/`.
@@ -471,6 +478,36 @@ and expect variations of 2–3×. The memory figure should be about 150 KB every
 stop it before timing. `min(timeit.repeat(...))` takes the best of several runs, the most stable
 measure.)
 
+The **calling-range model** (chapter 9) adds its own costs: a one-time build, extra memory, and a
+slightly slower range solve:
+
+```bash
+python -c "
+import timeit, tracemalloc
+from src.calling_range import CallingRangeModel, OpponentModel
+tracemalloc.start()
+before = tracemalloc.get_traced_memory()[0]
+m = CallingRangeModel()
+after = tracemalloc.get_traced_memory()[0]
+tracemalloc.stop()
+print(f'model memory: {(after - before) / 1024:.0f} KB')
+print(f'model build: {min(timeit.repeat(CallingRangeModel, number=1, repeat=3)) * 1000:.0f} ms')
+from src.db import WinRateDB
+from src.range_finder import RangeFinder
+rf = RangeFinder(WinRateDB('data/winrates.json'), m)
+print(f'range-model solve: {min(timeit.repeat(lambda: rf.solve_range(100000, 50000, 0.35, OpponentModel.RANGE), number=100, repeat=5)) / 100 * 1000:.2f} ms')
+"
+```
+
+```
+model memory: 1124 KB
+model build: 51 ms
+range-model solve: 1.49 ms
+```
+
+About 1.1 MB for 455 prefix rows, ~50 ms once at start-up, and still far below the 25 ms budget per solve.
+`timeit.repeat(CallingRangeModel, …)` times the **constructor** itself: a class is a callable too.
+
 **4. CLI command (< 50 ms total):**
 
 ```bash
@@ -487,13 +524,14 @@ real    0m0.120s
 |---|---|---|---|
 | Single hand evaluation | < 1.0 µs | ~3–10 µs | ❌ |
 | Hash-table lookup | < 5.0 µs | ~0.15 µs | ✅ (30× margin) |
-| Full range EV (455 hands) | < 25 ms | ~1–2 ms | ✅ |
+| Full range EV (455 hands), random model | < 25 ms | ~1–2 ms | ✅ |
+| Full range EV (455 hands), range model | < 25 ms | ~1.5–3 ms | ✅ (equity table alone is tested: < 25 ms) |
 | CLI command | < 50 ms | ~120 ms | ❌ |
-| Database memory | < 10 MB | ~150 KB | ✅ |
+| Lookup-database memory | < 10 MB | ~150 KB `WinRateDB` + ~1.1 MB `CallingRangeModel` | ✅ |
 
-> ⚠️ **Pitfall: two budgets aren't met, and only one is tested.** Only the lookup budget has an
-> automated test (`test_db.py`). The evaluation budget is missed by ~4× (see chapter 5 for a lookup-table
-> fix), and the CLI budget by ~2.5×. Python itself starts in ~10 ms, but **importing `rich` and the
+> ⚠️ **Pitfall: two budgets aren't met, and only some are tested.** The lookup budget (`test_db.py`)
+> and the calling-range table budget (`test_calling_range.py`) have automated tests. The evaluation
+> budget is missed by ~4× (see chapter 5 for a lookup-table fix), and the CLI budget by ~2.5×. Python itself starts in ~10 ms, but **importing `rich` and the
 > modules takes ~100 ms** (measure with `python -X importtime -m src.cli --help 2> imports.txt`). A fix is
 > to import `rich` lazily, inside the render functions, or to skip it when output isn't a terminal.
 > **Lesson:** a performance number in a spec is just a wish until a test or a benchmark checks it.
@@ -502,7 +540,7 @@ real    0m0.120s
 
 ## ✅ Checkpoint
 
-- [ ] `python -m pytest -q` → **58 passed**.
+- [ ] `python -m pytest -q` → **76 passed**.
 - [ ] You can explain the difference between a unit test and a scenario test.
 - [ ] You measured at least three of the five budgets yourself.
 
@@ -518,6 +556,8 @@ git add . && git commit -m "test: dynamic scenario suite"
 - Scenarios 2 and 3 show the project's core lesson: the same junk hand is a fold or a raise depending on fold equity.
 - Fixtures can test the same logic through HTTP (`client`) or directly (`solver`).
 - Measure performance with `timeit`, memory with `tracemalloc`, and whole commands with `time`.
-- Pitfall: of five budgets, two are missed and only one is guarded by a test.
+- The calling-range model costs ~50 ms and ~1.1 MB once, then ~1.5 ms per range solve.
+- Pitfall: two budgets are missed (evaluation, CLI) and only two are guarded by tests; the scenario
+  suite only exercises the random model.
 
-**Next:** [14 — Frontend foundations](15-frontend-foundations.md)
+**Next:** [15 — Frontend foundations](15-frontend-foundations.md)

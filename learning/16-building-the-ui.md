@@ -1,61 +1,65 @@
-# 15 — Building the UI ("LIÊNG SCOPE")
+# 16 — Building the UI ("LIÊNG SCOPE")
 
-> **Goal:** build the full dashboard: inputs on the left; verdict, metrics and tables on the right;
-> styled as a dark "tactical radar terminal".
-> **You will build:** `frontend/src/index.css`, `frontend/src/App.jsx`, `frontend/src/App.css`.
-> **Time:** ~3 hours.
-> **Prerequisites:** [14](15-frontend-foundations.md). Flask running (`python app.py` in `backend/`).
+> **Goal:** build the full dashboard: inputs on the left; verdict, metrics and tables on the right; an
+> English/Vietnamese language switch; an opponent-model toggle with a "profit map"; styled as a dark
+> "tactical radar terminal".
+> **You will build:** `frontend/src/index.css`, `frontend/src/i18n.js`, `frontend/src/App.jsx`,
+> `frontend/src/App.css`.
+> **Time:** ~4 hours.
+> **Prerequisites:** [15](15-frontend-foundations.md). Flask running (`python app.py` in `backend/`).
 
 ---
 
 ## The big picture
 
-The whole UI is **one component**, `App`, plus two stylesheets. The data flow is a loop:
+The whole UI is **one component**, `App`, plus a dictionary of UI texts (`i18n.js`) and two stylesheets.
+The data flow is a loop:
 
 ```
-   ┌───────────── state (useState) ──────────────┐
-   │ pot, betSize, foldEquity, hand   ◄── inputs  │◄──── user types / clicks a preset
-   │ solveData, aiAdvice, isLoading, error, …     │
-   └──────────────┬───────────────────────────────┘
+   ┌──────────────────── state (useState) ─────────────────────┐
+   │ pot, betSize, foldEquity, hand, opponentModel  ◄── inputs  │◄──── user types / clicks a preset
+   │ lang ("en"/"vi")  ◄── language toggle (saved in localStorage)
+   │ solveData, aiAdvice, isLoading, solveError, …              │
+   └──────────────┬─────────────────────────────────────────────┘
                   │ "EXECUTE SOLVER" → handleSolve()
                   ▼
      POST /api/solve  ──►  setSolveData(json)  ──►  POST /api/analyze  ──►  setAiAdvice(text)
                   │
-                  ▼ every state change re-renders App
-     verdict banner · 4 HUD cards · category matrix · top-10 table · notes drawer
+                  ▼ every state change re-renders App, with every label looked up in STRINGS[lang]
+     verdict banner · profit map · 4 HUD cards · category matrix · top-10 table · notes drawer
 ```
 
 The page layout:
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│ LIÊNG SCOPE                                          ● LIVE SOLVER / 455 CLASSES│  header
-├──────────────────────────┬──────────────────────────────────────────────────────┤
-│ // TELEMETRY CONTROLS    │ ACTION: RAISE / ALL-IN                  +132,097 VND │  verdict
-│ CURRENT POT  [100000]    ├─────────────┬─────────────┬────────────┬─────────────┤
-│  50k 100k 200k 500k      │ RANGE COV.  │ SHOWDOWN EQ │ EXP. VALUE │ BLUFF THRESH│  HUD
-│ BET / RAISE  [50000]     ├─────────────┴─────────────┴────────────┴─────────────┤
-│  0.5x 1.0x 2.0x Pot      │ // CATEGORY COVERAGE MATRIX  (SÁP, LIÊNG, ĐĨ, ĐIỂM)  │  table
-│ FOLD FREQUENCY ──●── 35% ├──────────────────────────────────────────────────────┤
-│ HAND [As Kh Qd]          │ // TOP PROFITABLE HOLDINGS   (top 10 canonical hands)│  table
-│ [ EXECUTE SOLVER ]       ├──────────────────────────────────────────────────────┤
-│ specs                    │ [ + MATHEMATICAL TELEMETRY NOTES ]  ▼                │  drawer
-└──────────────────────────┴──────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────────────┐
+│ LIÊNG SCOPE                                 ● LIVE SOLVER / 455 CLASSES   [EN|VI]   │  header
+├──────────────────────────┬───────────────────────────────────────────────────────────┤
+│ // TELEMETRY CONTROLS    │ ACTION: RAISE / ALL-IN                     +131.876 VND   │  verdict
+│ CURRENT POT  [100000]    │ … • [Q-K-A] • …            RAISE +EV WHEN OPP. FOLDS: 0%–100%
+│  50k 100k 200k 500k      ├──────────────┬──────────────┬─────────────┬──────────────┤
+│ BET / RAISE  [50000]     │ RANGE COV.   │ SHOWDOWN EQ  │ EXP. VALUE  │ BLUFF THRESH │  HUD
+│  0.5x 1.0x 2.0x Pot      ├──────────────┴──────────────┴─────────────┴──────────────┤
+│ FOLD FREQUENCY ──●── 35% │ // CATEGORY COVERAGE MATRIX   (SÁP, LIÊNG, ĐĨ, ĐIỂM)      │  table
+│ OPPONENT FOLDS [WEAKEST HANDS][AT RANDOM]                                            │
+│ RAISE PROFIT MAP ▓▓▓░░░▓▓▓│ (green = +EV zones, white line = current fold %)        │
+│ HAND [As Kh Qd]          ├───────────────────────────────────────────────────────────┤
+│ [ EXECUTE SOLVER ]       │ // TOP PROFITABLE HOLDINGS    (top 10 canonical hands)    │  table
+│ specs                    │ [ + MATHEMATICAL TELEMETRY NOTES ]  ▼                     │  drawer
+└──────────────────────────┴───────────────────────────────────────────────────────────┘
 ```
 
 We build it in three parts:
 
 - **Part A:** `index.css`, global design tokens (colours, font, background grid).
-- **Part B:** `App.jsx`, the logic and the markup.
+- **Part B:** `i18n.js` (all UI texts in two languages) and `App.jsx` (the logic and the markup).
 - **Part C:** `App.css`, the styles, section by section, watching the page change after each one.
-
-> 📝 **Which version?** This chapter rebuilds the version **committed** in the repository. If your
-> copy of the original has newer, uncommitted changes (for example a language switcher with an
-> `i18n.js` file), they're not covered here.
 
 ---
 
-## Concepts you need: CSS in brief
+## Concepts you need
+
+### CSS in brief
 
 CSS is a list of **rules**: a **selector** (which elements) and **declarations** (what style):
 
@@ -71,12 +75,14 @@ CSS is a list of **rules**: a **selector** (which elements) and **declarations**
 | class selector | `.hud-card` | elements with `className="hud-card"` |
 | combined | `.verdict-raise .verdict-title` | a `.verdict-title` **inside** a `.verdict-raise` |
 | both classes | `.preset-chip.active` | an element that has **both** classes |
-| pseudo-class | `:hover`, `:focus`, `:disabled`, `:not(...)` | element **state** |
+| child selector | `.terminal-grid > *` | every **direct child** of `.terminal-grid` |
+| pseudo-class | `:hover`, `:focus`, `:focus-visible`, `:disabled`, `:not(...)` | element **state** |
 | pseudo-element | `::selection`, `::-webkit-slider-thumb` | a **part** of an element |
 | CSS variable | `--accent-green: #22C55E;` then `var(--accent-green)` | reusable named value |
 | `rem` | `1.5rem` | relative to the root font size (usually 16px), so it scales with user settings |
 | flexbox | `display: flex; justify-content: space-between;` | lay children out in a **row** (or column) |
 | grid | `display: grid; grid-template-columns: 380px 1fr;` | lay children out in a **2-D grid**; `1fr` = "the remaining space" |
+| positioning | `position: relative` on a parent, `position: absolute; left: 40%` on a child | place a child at exact coordinates inside its parent (used by the profit map) |
 | media query | `@media (max-width: 1024px) { … }` | rules that apply only on smaller screens (responsive design) |
 | transition | `transition: all 0.15s ease;` | animate changes smoothly (e.g. on hover) |
 | keyframes | `@keyframes pulse { 0% {…} 50% {…} }` | a named animation |
@@ -84,11 +90,51 @@ CSS is a list of **rules**: a **selector** (which elements) and **declarations**
 The **design spec** for this look is in [`DESIGN.md`](../DESIGN.md): near-black background, radar green
 `#22C55E`, monospace font everywhere, sharp 2px corners, no emoji, no purple gradients.
 
+### Internationalisation (i18n)
+
+**i18n** (an "i", 18 letters, an "n") means making an app work in several languages. The simplest
+correct approach, used here:
+
+1. Put **every** UI text in a dictionary per language, with the **same keys**:
+
+   ```js
+   const STRINGS = {
+     en: { solveIdle: "[ EXECUTE SOLVER ]", invalidInput: (detail) => `INVALID INPUT: ${detail}` },
+     vi: { solveIdle: "[ CHẠY BỘ GIẢI ]",   invalidInput: (detail) => `DỮ LIỆU KHÔNG HỢP LỆ: ${detail}` },
+   };
+   const t = STRINGS[lang];          // pick the current language's dictionary
+   <button>{t.solveIdle}</button>     // components only ever use keys
+   ```
+
+2. Texts with a **variable part** are **functions** (`invalidInput(detail)`), because word order differs
+   between languages; you can't just glue strings together.
+3. Store **keys**, not finished sentences, in state. If an error is stored as
+   `{ key: "invalidInput", detail: "…" }`, switching the language re-translates it on the next render.
+   A stored English sentence would stay English.
+
+### `localStorage` and lazy initial state
+
+`localStorage` is a small key/value store in the browser that **survives page reloads**:
+`localStorage.setItem("lieng-scope-lang", "vi")` / `localStorage.getItem("lieng-scope-lang")`. It can
+throw (e.g. in some private-browsing modes), so the code wraps it in `try/catch`.
+
+`useState(loadSavedLang)` (a function, **without** calling it) is a **lazy initial state**: React calls
+the function only on the first render to compute the starting value, instead of on every render.
+
+### Accessibility attributes
+
+Screen readers (software that reads the page aloud for blind users) need extra hints for custom
+controls:
+
+- `aria-label="…"` names a button whose visible text isn't self-explanatory ("EN VI");
+- `aria-pressed={true/false}` tells that a toggle button is on or off;
+- `role="group"` + `aria-label` groups related buttons ("OPPONENT FOLDS: WEAKEST HANDS / AT RANDOM").
+
 ---
 
 # Part A — Global design tokens
 
-## Step 15.1 — `index.css`
+## Step 16.1 — `index.css`
 
 📄 **File:** `frontend/src/index.css` — *create this file*
 
@@ -213,55 +259,363 @@ Create an empty stylesheet now, so the `import './App.css'` in the next part doe
 
 ---
 
-# Part B — `App.jsx`
+# Part B — `i18n.js` and `App.jsx`
 
-We write `App.jsx` in **slices**, from top to bottom. The file only becomes valid when all slices are in
-(a JSX tag opened in one slice may be closed several slices later), so **don't run the page until
-Step 15.15**. Each slice is explained as you add it.
+## Step 16.2 — `i18n.js`, part 1: the English texts
 
-## Step 15.2 — Imports, helpers and state
+Every text the user sees (apart from game terms and the hand names the backend sends) lives in one
+file. We write the English dictionary first.
+
+📄 **File:** `frontend/src/i18n.js` — *create this file*
+
+```js
+// UI copy for each supported language. Game terms (Sáp, Liêng, Đĩ, Điểm) and
+// backend-provided hand names are Vietnamese in both languages.
+export const STRINGS = {
+  en: {
+    locale: "en-US",
+    langToggleLabel: "Switch language to Vietnamese",
+
+    subtitle: "GTO SOLVER & COMBINATORIAL ENGINE",
+    liveSolver: "LIVE SOLVER",
+    classesLoaded: "455 CLASSES LOADED",
+
+    controlsTag: "// TELEMETRY CONTROLS",
+    potLabel: "CURRENT POT (VND)",
+    betLabel: "BET / RAISE SIZING",
+    foldLabel: "OPPONENT FOLD FREQUENCY",
+    foldMin: "0% (CALLING STATION)",
+    foldMax: "100% (EXTREME FOLD)",
+    opponentFolds: "OPPONENT FOLDS",
+    modelRange: "WEAKEST HANDS",
+    modelRandom: "AT RANDOM",
+    profitMap: "RAISE PROFIT MAP (THIS HAND)",
+    handLabel: "PLAYER HAND (3 CARDS)",
+    handPlaceholder: "e.g. As Kh Qd",
+    solveBusy: "[ COMPUTING RANGE... ]",
+    solveIdle: "[ EXECUTE SOLVER ]",
+    solverOffline: () => "LOCAL SOLVER DAEMON OFFLINE. VERIFY BACKEND RUNNING ON PORT 5000.",
+    invalidInput: (detail) => `INVALID INPUT: ${detail}`,
+
+    specArchitecture: "SOLVER ARCHITECTURE",
+    specArchitectureVal: "MONTE CARLO / CANONICAL",
+    specSpace: "COMBINATORIAL SPACE",
+    specSpaceVal: "22,100 COMBOS (455 CLS)",
+    specQuery: "ONLINE QUERY COMPLEXITY",
+    specQueryVal: "O(1) CACHED LOOKUP",
+
+    recommendedAction: "// RECOMMENDED ACTION",
+    actionRaise: "ACTION: RAISE / ALL-IN",
+    actionFold: "ACTION: CHECK / FOLD",
+    expectedValueTag: "// EXPECTED VALUE",
+    profitableWhen: "RAISE +EV WHEN OPP. FOLDS:",
+```
+
+📄 **File:** `frontend/src/i18n.js` — *add to the end*
+
+```js
+
+    rangeCoverage: "RANGE COVERAGE",
+    combosOfTotal: "/ 22,100 COMBOS",
+    showdownEquity: "SHOWDOWN EQUITY",
+    showdownEquitySub: "VS UNKNOWN 49-CARD SPECTRUM",
+    vsCallingRange: (pct) => `VS TOP ${pct}% CALLING RANGE`,
+    vsRandomShort: (equity) => `RANDOM ${equity}`,
+    expectedValue: "EXPECTED VALUE",
+    expectedValueSub: "NET VND GAIN PER DECISION",
+    bluffThreshold: "PURE BLUFF THRESHOLD",
+    bluffThresholdSub: "MIN FOLD EQ FOR 0-PT AIR",
+    notAvailable: "N/A",
+
+    matrixTag: "// CATEGORY COVERAGE MATRIX",
+    matrixId: "4 CORE HIERARCHIES",
+    colCategory: "CATEGORY",
+    colDescription: "DESCRIPTION",
+    colClasses: "CLASSES",
+    colCombos: "COMBOS",
+    colProfitable: "PROFITABLE",
+    colCoverage: "COVERAGE",
+    colStatus: "RADAR STATUS",
+    descSap: "Three of a Kind",
+    descLieng: "Straight Sequence",
+    descDi: "Three Face Cards",
+    descDiem: "Points Modulo 10",
+    statusFull: "100% PUSH",
+    statusPartial: "PARTIAL",
+    statusZero: "FOLD",
+
+    topHandsTag: "// TOP PROFITABLE HOLDINGS",
+    topHandsId: "SAMPLE EQUIVALENCE CLASSES",
+    colCanonicalId: "CANONICAL ID",
+    colEquity: "SHOWDOWN EQUITY",
+    colEv: "EXPECTED VALUE (EV)",
+    colMultiplicity: "MULTIPLICITY",
+    colAction: "ACTION",
+    combosSuffix: "combos",
+    raise: "RAISE",
+    fold: "FOLD",
+
+    notesCollapse: "[ − COLLAPSE TELEMETRY NOTES ]",
+    notesExpand: "[ + MATHEMATICAL TELEMETRY NOTES ]",
+    notesTitle: "// GAME-THEORETIC TELEMETRY ADVISORY",
+    notesLoading: "> TRANSMITTING GAME-THEORETIC TELEMETRY QUERY...",
+    notesEmpty: "No active telemetry payload recorded for this game state.",
+    aiNoAdvice: () => "No telemetry analysis generated.",
+    aiUnreachable: () => "AI telemetry gateway unreachable.",
+    aiTransportFault: (detail) => `Telemetry transmission fault: ${detail}`,
+  },
+```
+
+**How it works**
+
+- `export const STRINGS = { en: { … }, vi: { … } }`: one object per language, **same keys** in both.
+  `export` makes it importable from `App.jsx`.
+- Plain texts are strings (`potLabel: "CURRENT POT (VND)"`). Texts with a **variable part** are arrow
+  functions: `vsCallingRange: (pct) => \`VS TOP ${pct}% CALLING RANGE\``. The component calls
+  `t.vsCallingRange(65)` → `"VS TOP 65% CALLING RANGE"`.
+- Messages that are stored in **state** (errors and AI notices) are *all* functions, even those without
+  a parameter (`solverOffline: () => "…"`). That way the component can always call
+  `t[key](detail)` without checking which kind it is. A uniform shape keeps the calling code simple.
+- `locale: "en-US"` is used for number formatting (`22,100` in English, `22.100` in Vietnamese).
+- The comment at the top states a design decision: **game terms** (Sáp, Liêng, Đĩ, Điểm) stay
+  Vietnamese in both languages, like "Texas Hold'em" stays English in every language.
+
+## Step 16.3 — `i18n.js`, part 2: the Vietnamese texts and the language list
+
+📄 **File:** `frontend/src/i18n.js` — *add to the end*
+
+```js
+
+  vi: {
+    locale: "vi-VN",
+    langToggleLabel: "Chuyển ngôn ngữ sang tiếng Anh",
+
+    subtitle: "BỘ GIẢI GTO & ĐỘNG CƠ TỔ HỢP",
+    liveSolver: "ĐANG CHẠY",
+    classesLoaded: "ĐÃ NẠP 455 LỚP BÀI",
+
+    controlsTag: "// BẢNG ĐIỀU KHIỂN",
+    potLabel: "POT HIỆN TẠI (VND)",
+    betLabel: "MỨC CƯỢC / TỐ",
+    foldLabel: "TẦN SUẤT ĐỐI THỦ BỎ BÀI",
+    foldMin: "0% (LUÔN THEO)",
+    foldMax: "100% (LUÔN BỎ)",
+    opponentFolds: "ĐỐI THỦ BỎ",
+    modelRange: "BÀI YẾU NHẤT",
+    modelRandom: "NGẪU NHIÊN",
+    profitMap: "BẢN ĐỒ LÃI KHI TỐ (BÀI NÀY)",
+    handLabel: "BÀI CỦA BẠN (3 LÁ)",
+    handPlaceholder: "VD: As Kh Qd",
+    solveBusy: "[ ĐANG TÍNH TOÁN... ]",
+    solveIdle: "[ CHẠY BỘ GIẢI ]",
+    solverOffline: () => "BỘ GIẢI CỤC BỘ KHÔNG PHẢN HỒI. KIỂM TRA BACKEND ĐANG CHẠY Ở CỔNG 5000.",
+    invalidInput: (detail) => `DỮ LIỆU KHÔNG HỢP LỆ: ${detail}`,
+
+    specArchitecture: "KIẾN TRÚC BỘ GIẢI",
+    specArchitectureVal: "MONTE CARLO / CHUẨN HÓA",
+    specSpace: "KHÔNG GIAN TỔ HỢP",
+    specSpaceVal: "22.100 TỔ HỢP (455 LỚP)",
+    specQuery: "ĐỘ PHỨC TẠP TRUY VẤN",
+    specQueryVal: "O(1) TRA CỨU BỘ ĐỆM",
+
+    recommendedAction: "// HÀNH ĐỘNG KHUYẾN NGHỊ",
+    actionRaise: "HÀNH ĐỘNG: TỐ / TẤT TAY",
+    actionFold: "HÀNH ĐỘNG: KHÔNG TỐ / BỎ BÀI",
+    expectedValueTag: "// GIÁ TRỊ KỲ VỌNG",
+    profitableWhen: "TỐ CÓ LÃI KHI ĐỐI THỦ BỎ:",
+```
+
+📄 **File:** `frontend/src/i18n.js` — *add to the end*
+
+```js
+
+    rangeCoverage: "ĐỘ PHỦ DẢI BÀI",
+    combosOfTotal: "/ 22.100 TỔ HỢP",
+    showdownEquity: "TỶ LỆ THẮNG KHI LẬT BÀI",
+    showdownEquitySub: "TRƯỚC 49 LÁ CHƯA BIẾT",
+    vsCallingRange: (pct) => `TRƯỚC TOP ${pct}% BÀI THEO`,
+    vsRandomShort: (equity) => `NGẪU NHIÊN ${equity}`,
+    expectedValue: "GIÁ TRỊ KỲ VỌNG",
+    expectedValueSub: "LÃI RÒNG (VND) MỖI QUYẾT ĐỊNH",
+    bluffThreshold: "NGƯỠNG TỐ HÙ (BLUFF)",
+    bluffThresholdSub: "TỶ LỆ BỎ BÀI TỐI THIỂU CHO BÀI 0 ĐIỂM",
+    notAvailable: "N/A",
+
+    matrixTag: "// MA TRẬN ĐỘ PHỦ THEO NHÓM BÀI",
+    matrixId: "4 CẤP BẬC CHÍNH",
+    colCategory: "NHÓM BÀI",
+    colDescription: "MÔ TẢ",
+    colClasses: "LỚP",
+    colCombos: "TỔ HỢP",
+    colProfitable: "CÓ LÃI",
+    colCoverage: "ĐỘ PHỦ",
+    colStatus: "TRẠNG THÁI",
+    descSap: "Ba lá cùng hạng",
+    descLieng: "Ba lá liên tiếp",
+    descDi: "Ba lá hình (J, Q, K)",
+    descDiem: "Tính điểm (mod 10)",
+    statusFull: "100% TỐ",
+    statusPartial: "MỘT PHẦN",
+    statusZero: "BỎ BÀI",
+
+    topHandsTag: "// CÁC THẾ BÀI CÓ LÃI NHẤT",
+    topHandsId: "MẪU LỚP TƯƠNG ĐƯƠNG",
+    colCanonicalId: "MÃ CHUẨN",
+    colEquity: "TỶ LỆ THẮNG",
+    colEv: "GIÁ TRỊ KỲ VỌNG (EV)",
+    colMultiplicity: "SỐ TỔ HỢP",
+    colAction: "HÀNH ĐỘNG",
+    combosSuffix: "tổ hợp",
+    raise: "TỐ",
+    fold: "BỎ",
+
+    notesCollapse: "[ − THU GỌN GHI CHÚ PHÂN TÍCH ]",
+    notesExpand: "[ + GHI CHÚ PHÂN TÍCH TOÁN HỌC ]",
+    notesTitle: "// TƯ VẤN LÝ THUYẾT TRÒ CHƠI",
+    notesLoading: "> ĐANG GỬI TRUY VẤN PHÂN TÍCH...",
+    notesEmpty: "Chưa có dữ liệu phân tích cho tình huống này.",
+    aiNoAdvice: () => "Không có phân tích nào được tạo.",
+    aiUnreachable: () => "Không kết nối được cổng phân tích AI.",
+    aiTransportFault: (detail) => `Lỗi truyền dữ liệu phân tích: ${detail}`,
+  },
+};
+
+export const LANGUAGES = Object.keys(STRINGS);
+```
+
+**How it works**
+
+- The `vi` block mirrors `en` key by key. Note the Vietnamese poker vocabulary from chapter 1: *TỐ*
+  (raise), *TẤT TAY* (all-in), *BỎ BÀI* (fold).
+- `locale: "vi-VN"` and `specSpaceVal: "22.100 TỔ HỢP"`: Vietnamese uses a **dot** as the thousands
+  separator.
+- `export const LANGUAGES = Object.keys(STRINGS);` → `["en", "vi"]`. The list of languages is
+  **derived** from the dictionary, so adding a third language is just adding a third block.
+
+> 💡 **Keeping two dictionaries in sync.** Nothing checks that `vi` has every key `en` has. A missing key
+> shows up as `undefined` on screen, or as a crash for function-valued keys (`t[key] is not a function`).
+> A tiny test would guard it:
+> `expect(Object.keys(STRINGS.vi).sort()).toEqual(Object.keys(STRINGS.en).sort())` (with a JS test
+> runner such as Vitest), or a TypeScript type for the dictionary.
+
+---
+
+From here we write `App.jsx` in **slices**, from top to bottom. The file only becomes valid when all
+slices are in (a JSX tag opened in one slice may be closed several slices later), so **don't run the page
+until Step 16.20**. Each slice is explained as you add it.
+
+## Step 16.4 — Imports, constants and helper functions
 
 📄 **File:** `frontend/src/App.jsx` — *create this file*
 
 ```jsx
 import { useState, useEffect } from 'react';
 import './App.css';
+import { STRINGS, LANGUAGES } from './i18n.js';
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
+const LANG_STORAGE_KEY = "lieng-scope-lang";
+
+// Backend category enum -> display label and i18n description key
+const CATEGORY_LABELS = { SAP: "SÁP", LIENG: "LIÊNG", DI: "ĐĨ", DIEM: "ĐIỂM" };
+const CATEGORY_DESC_KEYS = { SAP: "descSap", LIENG: "descLieng", DI: "descDi", DIEM: "descDiem" };
 
 function formatMoney(num) {
   if (num === undefined || num === null) return "0";
   return new Intl.NumberFormat("vi-VN").format(Math.round(num));
 }
 
-export default function App() {
-  const [pot, setPot] = useState(100000);
-  const [betSize, setBetSize] = useState(50000);
-  const [hand, setHand] = useState("As Kh Qd");
-  const [foldEquity, setFoldEquity] = useState(0.35);
+function formatZones(zones) {
+  const pct = (f) => `${Math.round(f * 100)}%`;
+  return zones.map(([start, end]) => (start === end ? pct(start) : `${pct(start)}–${pct(end)}`)).join(" · ");
+}
 
-  const [isLoading, setIsLoading] = useState(false);
-  const [isAiLoading, setIsAiLoading] = useState(false);
-  const [solveData, setSolveData] = useState(null);
-  const [aiAdvice, setAiAdvice] = useState("");
-  const [isNotesOpen, setIsNotesOpen] = useState(false);
-  const [error, setError] = useState("");
+function loadSavedLang() {
+  try {
+    const saved = localStorage.getItem(LANG_STORAGE_KEY);
+    return LANGUAGES.includes(saved) ? saved : "en";
+  } catch {
+    return "en";
+  }
+}
 ```
 
 **How it works**
 
-- `formatMoney` uses the browser's built-in **`Intl.NumberFormat`** with the Vietnamese locale, which
-  uses **dots** as thousands separators: `132097` → `"132.097"`.
-- **Ten pieces of state**, in two groups:
-  - **inputs** the user controls: `pot`, `betSize`, `hand`, `foldEquity` (defaults: the chapter 1
-    example);
-  - **UI/results state**: two loading flags, the API results, whether the notes drawer is open, and an
-    error message.
-- `export default function App()` makes `App` the module's main export (what `main.jsx` imports).
+- `import { STRINGS, LANGUAGES } from './i18n.js'` brings in the dictionary from Steps 16.2–16.3.
+- **Two lookup tables** translate the backend's ASCII category names (chapter 13) for display:
+  `CATEGORY_LABELS.DI` → `"ĐĨ"`, and `CATEGORY_DESC_KEYS.DI` → `"descDi"`, a key into `STRINGS`.
+- `formatMoney` uses the browser's built-in **`Intl.NumberFormat`** with the Vietnamese locale (dots as
+  thousands separators): `131876` → `"131.876"`.
+- `formatZones` turns the API's `profitable_fold_zones` (chapter 13) into text:
+  `[[0, 0.08], [0.51, 1]]` → `"0%–8% · 51%–100%"`. A zone with `start === end` (a single grid point)
+  prints once. `zones.map(...).join(" · ")` is the JS version of `" · ".join(...)` in Python.
+- `loadSavedLang` reads the saved language, **accepts it only if it's a known language** (never trust
+  stored data either), and defaults to English. `catch { … }` without a variable (optional catch
+  binding) is used because the error itself isn't needed.
 
----
+> ⚠️ **Pitfall: two number formats on one page.** `formatMoney` always uses `"vi-VN"` (dots), while
+> other numbers use `toLocaleString(t.locale)` (commas in English). In English mode the EV shows
+> `+131.876` but the combo count shows `22,100`. To an English reader, `131.876` looks like a hundred and
+> thirty-one point eight. The fix: pass the locale in, `formatMoney(num, t.locale)`.
 
-## Step 15.3 — `handleSolve`, part 1: call `/api/solve`
+## Step 16.5 — The component, its state, and the language effect
+
+📄 **File:** `frontend/src/App.jsx` — *add to the end*
+
+```jsx
+
+export default function App() {
+  const [lang, setLang] = useState(loadSavedLang);
+  const t = STRINGS[lang];
+
+  const [pot, setPot] = useState(100000);
+  const [betSize, setBetSize] = useState(50000);
+  const [hand, setHand] = useState("As Kh Qd");
+  const [foldEquity, setFoldEquity] = useState(0.35);
+  const [opponentModel, setOpponentModel] = useState("range");
+
+  const [isLoading, setIsLoading] = useState(false);
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [solveData, setSolveData] = useState(null);
+  // { text } from the server, or { key, detail } for a client-side notice translated at render
+  const [aiAdvice, setAiAdvice] = useState(null);
+  const [isNotesOpen, setIsNotesOpen] = useState(false);
+  // { key, detail } translated at render, or null
+  const [solveError, setSolveError] = useState(null);
+
+  useEffect(() => {
+    document.documentElement.lang = lang;
+    try {
+      localStorage.setItem(LANG_STORAGE_KEY, lang);
+    } catch {
+      // Storage unavailable (e.g. private mode): the choice just won't persist.
+    }
+  }, [lang]);
+```
+
+**How it works**
+
+- `useState(loadSavedLang)`: **lazy initial state** (see Concepts). `t = STRINGS[lang]` is recomputed on
+  every render: when `lang` changes, every `t.something` in the JSX switches language.
+- **Inputs:** `pot`, `betSize`, `hand`, `foldEquity` (defaults: the chapter 1 example) and
+  `opponentModel`, which defaults to **`"range"`**, the more realistic model (chapter 9).
+- **UI/result state:** two loading flags, the solve results, the AI advice, the drawer toggle, and
+  `solveError`. The comments describe their **shape**: `aiAdvice` is `{ text }` (from the server) or
+  `{ key, detail }` (a client-side notice), and `solveError` is `{ key, detail }`. Keys, not sentences, so
+  they re-translate when the language changes (Concepts, i18n rule 3).
+- **The language effect:** `useEffect(…, [lang])` runs after every render in which `lang` changed:
+  - `document.documentElement.lang = lang` sets `<html lang="vi">`, so screen readers pronounce the text
+    correctly and browsers offer the right translation/spell-check;
+  - it saves the choice in `localStorage` inside `try/catch`, with a comment explaining why ignoring
+    the error is safe. That's the right way to "swallow" an exception: deliberately, narrowly, documented.
+
+> 💡 **Different defaults by design.** The API's default is `"random"` (backward compatibility for old
+> clients, chapter 13), but the UI's default is `"range"` (better advice for humans). Both choices are
+> reasonable, but remember it: the same hand without `opponent_model` gives the API's random-model answer,
+> which can differ from what the web page shows.
+
+## Step 16.6 — `handleSolve`, part 1: call `/api/solve`
 
 📄 **File:** `frontend/src/App.jsx` — *add to the end*
 
@@ -270,7 +624,7 @@ export default function App() {
   const handleSolve = async () => {
     setIsLoading(true);
     setIsAiLoading(true);
-    setError("");
+    setSolveError(null);
 
     try {
       // 1. Call solve endpoint
@@ -282,12 +636,17 @@ export default function App() {
           bet_size: Number(betSize),
           fold_equity: Number(foldEquity),
           hand: hand.trim(),
+          opponent_model: opponentModel,
         }),
       });
 
       if (!solveRes.ok) {
-        const errJson = await solveRes.json();
-        throw new Error(errJson.error || `Server responded with ${solveRes.status}`);
+        // The solver is up but rejected the input (e.g. duplicate cards)
+        const errJson = await solveRes.json().catch(() => ({}));
+        setSolveError({ key: "invalidInput", detail: errJson.error || `HTTP ${solveRes.status}` });
+        setIsLoading(false);
+        setIsAiLoading(false);
+        return;
       }
 
       const solveJson = await solveRes.json();
@@ -301,15 +660,22 @@ export default function App() {
   clicked.
 - Turn on both loading flags and clear any old error **before** the request, so the button immediately
   shows "COMPUTING…".
-- The JSON body uses the API's field names (`bet_size`, `fold_equity`: snake_case, Python style) while
-  the JS variables are camelCase. `Number(...)` makes sure we send numbers, not strings.
-- If the server answers with an error status (e.g. 400 for a bad hand), we read its `{"error": ...}`
-  message and `throw`, jumping to the `catch` at the end (Step 15.4).
-- On success, store the whole JSON in `solveData` → React re-renders with the results.
+- The JSON body uses the API's field names (`bet_size`, `fold_equity`, `opponent_model`: snake_case,
+  Python style), while the JS variables are camelCase. `Number(...)` makes sure we send numbers.
+- **Two kinds of failure are told apart:**
+  - the server answered but said **no** (`!solveRes.ok`, e.g. 400 for `"Xx Kh Qd"`): show
+    `invalidInput` with the server's own message, turn the loading flags off, and `return` early;
+  - the server **didn't answer at all**: `fetch` itself throws, handled in Step 16.7.
+- `solveRes.json().catch(() => ({}))`: if the error body isn't valid JSON, use an empty object instead of
+  crashing. `({})` needs parentheses so JS reads it as an object, not an empty function body.
 
----
+> ✅ **How the code fixed this (before → after).** The first version *threw* on a 400 and let the outer
+> `catch` show "LOCAL SOLVER DAEMON OFFLINE" for **every** error, so a typo in the hand claimed the
+> server was down. Now a rejected input shows `INVALID INPUT: Invalid hand: Invalid rank 'X'…`, and
+> "offline" is kept for real network failures. **Lesson:** an error message must describe the error that
+> actually happened.
 
-## Step 15.4 — `handleSolve`, part 2: call `/api/analyze`, handle errors
+## Step 16.7 — `handleSolve`, part 2: call `/api/analyze`, handle network errors
 
 📄 **File:** `frontend/src/App.jsx` — *add to the end*
 
@@ -325,6 +691,7 @@ export default function App() {
             bet_size: Number(betSize),
             fold_equity: Number(foldEquity),
             hand: hand.trim(),
+            opponent_model: opponentModel,
             hand_evaluation: solveJson.hand_evaluation,
             range_coverage_percent: solveJson.summary?.range_coverage_percent,
           }),
@@ -332,17 +699,17 @@ export default function App() {
 
         if (analyzeRes.ok) {
           const analyzeJson = await analyzeRes.json();
-          setAiAdvice(analyzeJson.advice || "No telemetry analysis generated.");
+          setAiAdvice(analyzeJson.advice ? { text: analyzeJson.advice } : { key: "aiNoAdvice" });
         } else {
-          setAiAdvice("AI telemetry gateway unreachable.");
+          setAiAdvice({ key: "aiUnreachable" });
         }
       } catch (aiErr) {
-        setAiAdvice(`Telemetry transmission fault: ${aiErr.message}`);
+        setAiAdvice({ key: "aiTransportFault", detail: aiErr.message });
       } finally {
         setIsAiLoading(false);
       }
-    } catch (err) {
-      setError("LOCAL SOLVER DAEMON OFFLINE. VERIFY BACKEND RUNNING ON PORT 5000.");
+    } catch {
+      setSolveError({ key: "solverOffline" });
       setIsLoading(false);
       setIsAiLoading(false);
     }
@@ -351,23 +718,22 @@ export default function App() {
 
 **How it works**
 
-- **Two requests in sequence:** the analysis needs the solve results (`hand_evaluation`, coverage), so it
-  runs only after `/api/solve` succeeded. The main results are already on screen while the (possibly
-  slow, up to 20 s) LLM call runs. That's good UX.
-- The analyze call has its **own** `try/catch/finally`: if the AI fails, the solver results stay visible
-  and only the notes drawer shows an error. `finally` runs whether it succeeded or failed, so the
-  spinner always stops.
-- The outer `catch (err)` handles any failure of the solve call.
+- **Two requests in sequence:** the analysis needs the solve results (`hand_evaluation`, coverage) and
+  the `opponent_model` (so the AI text explains which model the numbers assume, chapter 13). It runs only
+  after `/api/solve` succeeded: the main results are already on screen while the (possibly slow, up to
+  20 s) LLM call runs. That's good UX.
+- The analyze call has its **own** `try/catch/finally`, so if the AI fails the solver results stay
+  visible. `finally` runs whether it succeeded or failed, so the spinner always stops.
+- Advice is stored as `{ text }` (server text, shown as-is) or `{ key, detail }` (our own notice, translated
+  at render time).
+- The outer `catch { … }` has no variable: it doesn't need the error object, because it always means
+  "couldn't reach the solver".
 
-> ⚠️ **Pitfall: every error looks like "server offline".** The outer `catch` ignores `err` and always
-> shows "LOCAL SOLVER DAEMON OFFLINE…". But Step 15.3 *throws* for a **400 Bad Request** too. Type
-> `Xx Kh Qd` as the hand: the backend answers "Invalid hand: Invalid rank 'X'…", yet the page claims
-> the server is offline. A useful fix: `setError(err.message)` (the server's own message), keeping the
-> "offline" text only for network failures (when `fetch` itself throws a `TypeError`).
+> ✅ **Fixed: a linter warning.** The first version wrote `catch (err)` and never used `err`; the linter
+> (chapter 15) flagged it. Optional catch binding (`catch {`) states the intent: "any failure here means
+> offline".
 
----
-
-## Step 15.5 — Solve on page load, and derived values
+## Step 16.8 — Solve on page load, and derived values
 
 📄 **File:** `frontend/src/App.jsx` — *add to the end*
 
@@ -382,114 +748,35 @@ export default function App() {
   const summary = solveData?.summary;
   const isRaise = handEval?.decision === "RAISE";
 
-  // Category Matrix Statistics
-  const totalProfitableCombos = summary?.profitable_combinations || 0;
-  const sapProfitable = Math.min(52, Math.max(0, totalProfitableCombos));
-  const liengProfitable = Math.min(768, Math.max(0, totalProfitableCombos - 52));
-  const diProfitable = Math.min(288, Math.max(0, totalProfitableCombos - 820));
-  const diemProfitable = Math.min(20992, Math.max(0, totalProfitableCombos - 1108));
+  const zones = handEval?.profitable_fold_zones;
+
+  // Category Matrix Statistics (computed by the solver per category)
+  const categoryMatrix = (summary?.category_breakdown || []).map((row) => ({
+    ...row,
+    pct: ((row.profitable_combos / row.combos) * 100).toFixed(1),
+  }));
 ```
 
 **How it works**
 
 - `useEffect(() => { handleSolve(); }, [])` runs the solver once when the page opens, so the dashboard is
-  never empty. (Under `StrictMode` in development it runs twice, see chapter 14.)
-- **Derived values** are computed from state on every render, not stored in state. `handEval`,
-  `summary` and `isRaise` are always consistent with `solveData`. The `?.` operator returns `undefined`
-  instead of crashing while `solveData` is still `null`.
-- **The category maths:** the API only returns the *total* number of profitable combos. The code then
-  **guesses** the per-category numbers by "filling" the categories in strength order (Sáp first, then
-  Liêng, …), each capped by `Math.min(categoryTotal, …)`. Chapter 10 showed why filling in order is
-  roughly right: the profitable range is always "the strongest hands". But…
+  never empty. (Under `StrictMode` in development it runs twice, see chapter 15.)
+- **Derived values** are computed from state on every render, not stored in state: `handEval`,
+  `summary`, `isRaise`, `zones`. The `?.` operator returns `undefined` instead of crashing while
+  `solveData` is still `null`.
+- **The category matrix comes straight from the backend** (`summary.category_breakdown`, chapter 13).
+  Each row is copied with the **spread** syntax (`{ ...row, pct: … }` = all of `row`'s fields plus a new
+  `pct` field), adding the coverage percentage as a string with one decimal (`.toFixed(1)`).
+  `|| []` gives an empty table before the first response.
 
-> ⚠️ **Pitfall: wrong totals.** The caps and offsets use **288** combos for Đĩ and **20,992** for Điểm.
-> Chapter 6 proved the real numbers are **144** and **21,136** (6 types × 24, and 22,100 − 52 − 768 −
-> 144). The offset `1108` should be `964` (= 52 + 768 + 144). Because 52 + 768 + 288 + 20,992 also adds
-> up to 22,100, the total looks right and the mistake hides. The same wrong numbers are in `DESIGN.md`.
-> Effect at fold equity 0 (pot 100k, bet 50k):
->
-> | Category | UI shows | True |
-> |---|---|---|
-> | Đĩ | 288 / 288 | 144 / 144 |
-> | Điểm | 15,504 / 20,992 (73.9%) | 15,648 / 21,136 (74.0%) |
->
-> **The real fix** is not to correct the constants but to stop guessing: have `/api/solve` return the
-> per-category counts (computed like the CLI's table in chapter 11), e.g.
->
-> ```python
-> # backend/app.py, inside solve_api, before the return
-> categories = {
->     cat.name: {
->         "profitable": sum(r.multiplicity for r in profitable_records if r.category == cat),
->         "total": sum(r.multiplicity for r in records if r.category == cat),
->     }
->     for cat in HandCategory
-> }
-> # ...and add  "categories": categories  to the JSON response
-> ```
->
-> and read `summary.categories.DI.profitable` etc. in the UI. **Lesson:** don't re-derive in the
-> frontend what the backend can compute exactly; duplicated "facts" drift.
+> ✅ **How the code fixed this (before → after).** The first version received only the *total* of
+> profitable combos and **guessed** the split with hard-coded caps: `Math.min(288, …)` for Đĩ and
+> `Math.min(20992, …)` for Điểm. Those numbers were wrong: chapter 6 proves 144 and 21,136, and the old
+> table showed "288 / 288" Đĩ combos when only 144 exist. Now the backend computes exact per-category
+> counts from the data, and this code just displays them: **20 lines of guessing became 4 lines of
+> mapping**. **Lesson:** don't re-derive in the frontend what the backend can compute exactly.
 
----
-
-## Step 15.6 — The category table's data
-
-📄 **File:** `frontend/src/App.jsx` — *add to the end*
-
-```jsx
-
-  const categoryMatrix = [
-    {
-      name: "SÁP",
-      desc: "Three of a Kind",
-      classes: 13,
-      combos: 52,
-      profitable: sapProfitable,
-      pct: ((sapProfitable / 52) * 100).toFixed(1),
-      tier: "TIER 1 (NUTS)",
-    },
-    {
-      name: "LIÊNG",
-      desc: "Straight Sequence",
-      classes: 12,
-      combos: 768,
-      profitable: liengProfitable,
-      pct: ((liengProfitable / 768) * 100).toFixed(1),
-      tier: "TIER 2 (STRONG)",
-    },
-    {
-      name: "ĐĨ",
-      desc: "Three Face Cards",
-      classes: 6,
-      combos: 288,
-      profitable: diProfitable,
-      pct: ((diProfitable / 288) * 100).toFixed(1),
-      tier: "TIER 3 (MEDIUM)",
-    },
-    {
-      name: "ĐIỂM",
-      desc: "Points Modulo 10",
-      classes: 424,
-      combos: 20992,
-      profitable: diemProfitable,
-      pct: ((diemProfitable / 20992) * 100).toFixed(1),
-      tier: "TIER 4 (MARGINAL)",
-    },
-  ];
-```
-
-**How it works**
-
-- An **array of plain objects**, one per table row. Later the JSX does `categoryMatrix.map(cat => <tr>…)`.
-  Separating *data* from *markup* keeps the JSX short.
-- `.toFixed(1)` formats a number with 1 decimal and returns a **string** (`"73.9"`). That's why the JSX
-  later converts it back with `Number(cat.pct)` to compare.
-- `tier` is defined but never displayed (dead data).
-
----
-
-## Step 15.7 — Start rendering: container and header
+## Step 16.9 — Start rendering: container and header with the language toggle
 
 📄 **File:** `frontend/src/App.jsx` — *add to the end*
 
@@ -503,14 +790,30 @@ export default function App() {
           <h1 className="terminal-title">
             <span className="brand-white">LIÊNG</span> <span className="brand-green">SCOPE</span>
           </h1>
-          <p className="terminal-subtitle">GTO SOLVER & COMBINATORIAL ENGINE</p>
+          <p className="terminal-subtitle">{t.subtitle}</p>
         </div>
 
-        <div className="telemetry-status-tag">
-          <span className="radar-beacon"></span>
-          <span className="telemetry-status-text">LIVE SOLVER</span>
-          <span className="telemetry-separator">/</span>
-          <span className="telemetry-classes">455 CLASSES LOADED</span>
+        <div className="header-actions">
+          <div className="telemetry-status-tag">
+            <span className="radar-beacon"></span>
+            <span className="telemetry-status-text">{t.liveSolver}</span>
+            <span className="telemetry-separator">/</span>
+            <span className="telemetry-classes">{t.classesLoaded}</span>
+          </div>
+
+          <button
+            type="button"
+            className="lang-toggle"
+            onClick={() => setLang((cur) => (cur === "en" ? "vi" : "en"))}
+            aria-label={t.langToggleLabel}
+            title={t.langToggleLabel}
+          >
+            {LANGUAGES.map((code) => (
+              <span key={code} className={`lang-option ${lang === code ? "active" : ""}`}>
+                {code.toUpperCase()}
+              </span>
+            ))}
+          </button>
         </div>
       </header>
 ```
@@ -518,17 +821,22 @@ export default function App() {
 **How it works**
 
 - `return ( … )`: everything returned is JSX. A component must return **one** root element (here the
-  `terminal-container` div).
-- `{/* … */}` is how you write a comment inside JSX.
-- The title is two `<span>`s with different classes, white "LIÊNG" and green "SCOPE", exactly as
-  `DESIGN.md` §4.1 asks. The empty `radar-beacon` span becomes the pulsing green dot (via CSS).
+  `terminal-container` div). `{/* … */}` is how you write a comment inside JSX.
+- The title is two `<span>`s, white "LIÊNG" and green "SCOPE" (`DESIGN.md` §4.1); the subtitle comes from
+  the dictionary (`{t.subtitle}`).
+- `header-actions` groups the status tag and the new **language toggle** on the right.
+- **The toggle** is one button showing both codes (`EN` `VI`), the active one highlighted via the
+  `active` class. Clicking flips the language:
+  `setLang((cur) => (cur === "en" ? "vi" : "en"))`. Passing a **function** to a state setter
+  ("given the current value, compute the next one") is the safe way to update state based on its
+  previous value.
+- `aria-label` and `title` describe what the button does (in the *current* language): "Switch language
+  to Vietnamese". `title` also shows as a tooltip on hover.
 
 > 💡 "LIVE SOLVER / 455 CLASSES LOADED" is static text, shown even if the backend is down. The
-> `/health` endpoint (chapter 12) returns the real `classes_loaded`; using it would make the badge honest.
+> `/health` endpoint (chapter 13) returns the real `classes_loaded`; using it would make the badge honest.
 
----
-
-## Step 15.8 — The control panel: pot
+## Step 16.10 — The control panel: pot
 
 📄 **File:** `frontend/src/App.jsx` — *add to the end*
 
@@ -539,12 +847,12 @@ export default function App() {
         {/* Left Column: Control Telemetry */}
         <section className="terminal-card control-panel">
           <div className="panel-header">
-            <span className="panel-tag">// TELEMETRY CONTROLS</span>
+            <span className="panel-tag">{t.controlsTag}</span>
             <span className="panel-id">SEC-01</span>
           </div>
 
           <div className="form-group">
-            <label className="form-label">CURRENT POT (VND)</label>
+            <label className="form-label">{t.potLabel}</label>
             <div className="input-wrapper">
               <input
                 type="number"
@@ -580,16 +888,14 @@ export default function App() {
   when it equals the current pot, which CSS highlights. `{v / 1000}k` displays `100k`.
 - `type="button"` stops the button from acting as a form "submit" button.
 
----
-
-## Step 15.9 — Bet sizing
+## Step 16.11 — Bet sizing
 
 📄 **File:** `frontend/src/App.jsx` — *add to the end*
 
 ```jsx
 
           <div className="form-group">
-            <label className="form-label">BET / RAISE SIZING</label>
+            <label className="form-label">{t.betLabel}</label>
             <div className="input-wrapper">
               <input
                 type="number"
@@ -627,12 +933,10 @@ export default function App() {
 ```
 
 Same pattern, but the presets are **relative to the pot** (½×, 1×, 2×). Bet sizes relative to the pot
-are how poker players think, and chapter 9's table showed why: the break-even numbers depend only on the
-ratio `B / P`.
+are how poker players think, and chapter 10's table showed why: the break-even numbers depend only on the
+ratio `B / P`. (`0.5x Pot` etc. aren't translated: they're universal poker shorthand.)
 
----
-
-## Step 15.10 — The fold-frequency slider
+## Step 16.12 — The fold-frequency slider
 
 📄 **File:** `frontend/src/App.jsx` — *add to the end*
 
@@ -640,7 +944,7 @@ ratio `B / P`.
 
           <div className="form-group">
             <div className="slider-label-row">
-              <label className="form-label">OPPONENT FOLD FREQUENCY</label>
+              <label className="form-label">{t.foldLabel}</label>
               <span className="slider-value-badge">{Math.round(foldEquity * 100)}%</span>
             </div>
             <input
@@ -653,33 +957,95 @@ ratio `B / P`.
               className="radar-slider"
             />
             <div className="slider-calibrations">
-              <span>0% (CALLING STATION)</span>
+              <span>{t.foldMin}</span>
               <span>50%</span>
-              <span>100% (EXTREME FOLD)</span>
+              <span>{t.foldMax}</span>
             </div>
-          </div>
 ```
 
 `<input type="range">` is a slider. It works in the 0–1 range with 0.01 steps (the probability the API
 expects), and the badge shows it as a percentage. Input values are always strings, hence `parseFloat`.
+Note that this `form-group` div is **not closed yet**: the next slice adds two more controls inside it.
 
----
+## Step 16.13 — The opponent-model toggle and the profit map
 
-## Step 15.11 — The hand input and presets
+📄 **File:** `frontend/src/App.jsx` — *add to the end*
+
+```jsx
+
+            <div className="model-row">
+              <span className="form-label model-label">{t.opponentFolds}</span>
+              <div className="preset-chips model-chips" role="group" aria-label={t.opponentFolds}>
+                {["range", "random"].map((model) => (
+                  <button
+                    key={model}
+                    type="button"
+                    className={`preset-chip ${opponentModel === model ? "active" : ""}`}
+                    aria-pressed={opponentModel === model}
+                    onClick={() => setOpponentModel(model)}
+                  >
+                    {model === "range" ? t.modelRange : t.modelRandom}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {zones && (
+              <div className="profit-map">
+                <span className="profit-map-label">{t.profitMap}</span>
+                <div className="profit-map-bar">
+                  {zones.map(([start, end]) => (
+                    <span
+                      key={start}
+                      className="profit-zone"
+                      style={{ left: `${Math.min(start, 0.99) * 100}%`, width: `${Math.max(end - start, 0.01) * 100}%` }}
+                    />
+                  ))}
+                  <span className="profit-marker" style={{ left: `${foldEquity * 100}%` }} />
+                </div>
+              </div>
+            )}
+          </div>
+```
+
+**How it works**
+
+- **The opponent-model toggle**: two chips generated from `["range", "random"]`, labelled
+  "WEAKEST HANDS" / "AT RANDOM" (chapters 1 and 9). `aria-pressed` tells screen readers which one is on;
+  `role="group"` + `aria-label` names the pair.
+- **The profit map** is a small chart built from plain `<span>`s, shown once a hand was evaluated
+  (`zones && …`):
+  - the bar itself is red (= raising loses money);
+  - each profitable zone `[start, end]` is a green `<span>` placed with **inline styles**:
+    `left: 51%` and `width: 49%` for the zone `[0.51, 1.0]`. `style={{ … }}` is an object of CSS properties
+    (camelCase names; the outer braces are JSX, the inner braces the object);
+  - `Math.min(start, 0.99)` and `Math.max(end - start, 0.01)` keep even a single-point zone (e.g.
+    `[1.0, 1.0]`) visible as a 1%-wide sliver inside the bar;
+  - a white **marker** at `left: foldEquity × 100%` shows where the current slider value falls.
+- So for `K-Q-3` with a pot-sized bet under the range model you see: green 0–8%, red 9–50%, green
+  51–100%, and the marker at 35% in the red. **Chapter 10's non-monotonic EV, drawn as a picture.**
+- The final `</div>` closes the `form-group` opened in Step 16.12.
+
+> 💡 The green zones come from the last solve and **don't depend on the slider**: the API scans the whole
+> 0–100% grid (chapter 13). Only the white marker follows the slider live, because it reads the
+> `foldEquity` state, not the response. So you can drag the slider to see where your fold estimate falls
+> without re-solving; changing the pot, bet, hand or model needs a new solve.
+
+## Step 16.14 — The hand input and presets
 
 📄 **File:** `frontend/src/App.jsx` — *add to the end*
 
 ```jsx
 
           <div className="form-group">
-            <label className="form-label">PLAYER HAND (3 CARDS)</label>
+            <label className="form-label">{t.handLabel}</label>
             <div className="input-wrapper">
               <input
                 type="text"
                 className="input-field mono-bold"
                 value={hand}
                 onChange={(e) => setHand(e.target.value)}
-                placeholder="e.g. As Kh Qd"
+                placeholder={t.handPlaceholder}
               />
             </div>
             <div className="preset-chips">
@@ -723,15 +1089,14 @@ expects), and the badge shows it as a percentage. Input values are always string
 ```
 
 Five example hands, one per interesting case from chapter 1. Click "Liêng J-Q-K" later and look at the
-verdict: the canonical class shows `[K-Q-J]`, the naming inconsistency from chapter 6.
+verdict: the canonical class shows `[K-Q-J]`, the naming inconsistency from chapter 6. The preset
+labels aren't translated: they're game terms.
 
 > 💡 **Repetition.** Five nearly identical `<button>` blocks differ only in the hand and the label. An
 > array like `const HAND_PRESETS = [["As Kh Qd", "Liêng Q-K-A"], …]` plus one `.map` (as the pot chips
-> do) would be shorter and harder to get wrong.
+> and the model chips do) would be shorter and harder to get wrong.
 
----
-
-## Step 15.12 — The solve button, error box and specs card
+## Step 16.15 — The solve button, error box and specs card
 
 📄 **File:** `frontend/src/App.jsx` — *add to the end*
 
@@ -743,29 +1108,29 @@ verdict: the canonical class shows `[K-Q-J]`, the naming inconsistency from chap
             onClick={handleSolve}
             disabled={isLoading}
           >
-            {isLoading ? "[ COMPUTING RANGE... ]" : "[ EXECUTE SOLVER ]"}
+            {isLoading ? t.solveBusy : t.solveIdle}
           </button>
 
-          {error && (
+          {solveError && (
             <div className="terminal-alert">
               <span className="alert-marker">!</span>
-              <span>{error}</span>
+              <span>{t[solveError.key](solveError.detail)}</span>
             </div>
           )}
 
           {/* Engine Specs Sub-Card */}
           <div className="specs-subcard">
             <div className="spec-row">
-              <span className="spec-label">SOLVER ARCHITECTURE</span>
-              <span className="spec-val">MONTE CARLO / CANONICAL</span>
+              <span className="spec-label">{t.specArchitecture}</span>
+              <span className="spec-val">{t.specArchitectureVal}</span>
             </div>
             <div className="spec-row">
-              <span className="spec-label">COMBINATORIAL SPACE</span>
-              <span className="spec-val">22,100 COMBOS (455 CLS)</span>
+              <span className="spec-label">{t.specSpace}</span>
+              <span className="spec-val">{t.specSpaceVal}</span>
             </div>
             <div className="spec-row">
-              <span className="spec-label">ONLINE QUERY COMPLEXITY</span>
-              <span className="spec-val">O(1) CACHED LOOKUP</span>
+              <span className="spec-label">{t.specQuery}</span>
+              <span className="spec-val">{t.specQueryVal}</span>
             </div>
           </div>
         </section>
@@ -774,17 +1139,16 @@ verdict: the canonical class shows `[K-Q-J]`, the naming inconsistency from chap
 **How it works**
 
 - `onClick={handleSolve}` passes the function itself (no parentheses: we don't call it now, React calls it
-  on click).
-- `disabled={isLoading}` prevents double-submits while a request is running, and the label changes.
-- `{error && (…)}` renders the alert **only** when `error` is a non-empty string.
-- `</section>` closes the left column opened in Step 15.8.
+  on click). `disabled={isLoading}` prevents double-submits while a request is running.
+- **Translating a stored error:** `t[solveError.key](solveError.detail)`. `t["invalidInput"]` is a
+  function (Step 16.2); calling it with the detail produces the sentence in the **current** language.
+  Switch the language while an error is shown and it re-translates instantly.
+- `</section>` closes the left column opened in Step 16.10.
 
-(The specs card says "MONTE CARLO"; the shipped data was actually computed by **exact enumeration**,
-chapter 7.)
+(The specs card still says "MONTE CARLO"; the shipped data was actually computed by **exact
+enumeration**, chapter 7.)
 
----
-
-## Step 15.13 — Right column: the verdict banner
+## Step 16.16 — Right column: the verdict banner
 
 📄 **File:** `frontend/src/App.jsx` — *add to the end*
 
@@ -796,9 +1160,9 @@ chapter 7.)
           {handEval && (
             <div className={`verdict-banner ${isRaise ? "verdict-raise" : "verdict-fold"}`}>
               <div className="verdict-col-left">
-                <span className="verdict-label">// RECOMMENDED ACTION</span>
+                <span className="verdict-label">{t.recommendedAction}</span>
                 <h2 className="verdict-title">
-                  {isRaise ? "ACTION: RAISE / ALL-IN" : "ACTION: CHECK / FOLD"}
+                  {isRaise ? t.actionRaise : t.actionFold}
                 </h2>
                 <div className="verdict-meta">
                   <span className="holding-tag">{handEval.hand}</span>
@@ -810,12 +1174,12 @@ chapter 7.)
               </div>
 
               <div className="verdict-col-right">
-                <span className="verdict-label">// EXPECTED VALUE</span>
+                <span className="verdict-label">{t.expectedValueTag}</span>
                 <div className="verdict-ev">
                   {handEval.ev > 0 ? "+" : ""}{formatMoney(handEval.ev)} <span className="ev-currency">VND</span>
                 </div>
                 <div className="verdict-breakeven">
-                  BREAK-EVEN FOLD EQ: <span className="mono-green">{Math.round(handEval.break_even_fold_equity * 100)}%</span>
+                  {t.profitableWhen} <span className="mono-green">{formatZones(zones)}</span>
                 </div>
               </div>
             </div>
@@ -827,13 +1191,18 @@ chapter 7.)
 - Only shown when a hand was evaluated (`handEval && …`).
 - **One class switches the whole look:** `verdict-raise` (green border and title) or `verdict-fold`
   (red). The CSS (Part C) uses combined selectors like `.verdict-raise .verdict-title`.
-- Every value comes straight from the API's `hand_evaluation` object (chapter 12, Step 12.5).
-- The `+` sign is added only for positive EV; `formatMoney` already includes the minus sign for negative
-  numbers.
+- Every value comes straight from the API's `hand_evaluation` object (chapter 13, Step 13.8). The hand
+  name (`score_name`, e.g. "LIÊNG Q-K-A", "3 ĐIỂM") is produced by the backend in Vietnamese and isn't
+  translated, by design.
+- The bottom line used to show a single "break-even fold equity". It now shows **all** profitable zones:
+  "RAISE +EV WHEN OPP. FOLDS: 0%–8% · 51%–100%", because under the range model a single number can't
+  describe the answer (chapter 10).
 
----
+> ⚠️ **Pitfall: an empty answer.** If raising is never profitable, `zones` is `[]`, `formatZones` returns
+> `""`, and the banner reads "RAISE +EV WHEN OPP. FOLDS:" followed by nothing. A short "NEVER" text (a
+> new i18n key) would be clearer.
 
-## Step 15.14 — The four HUD metric cards
+## Step 16.17 — The four HUD metric cards
 
 📄 **File:** `frontend/src/App.jsx` — *add to the end*
 
@@ -842,49 +1211,59 @@ chapter 7.)
           {/* 4-Card Metrics HUD */}
           <div className="hud-metrics-grid">
             <div className="hud-card">
-              <div className="hud-label">RANGE COVERAGE</div>
+              <div className="hud-label">{t.rangeCoverage}</div>
               <div className="hud-value green-glow">
                 {summary?.range_coverage_percent?.toFixed(1) || "0.0"}%
               </div>
               <div className="hud-subtext">
-                {summary?.profitable_combinations?.toLocaleString() || "0"} / 22,100 COMBOS
+                {summary?.profitable_combinations?.toLocaleString(t.locale) || "0"} {t.combosOfTotal}
               </div>
             </div>
 
             <div className="hud-card">
-              <div className="hud-label">SHOWDOWN EQUITY</div>
+              <div className="hud-label">{t.showdownEquity}</div>
               <div className="hud-value white-metric">
-                {handEval ? `${(handEval.showdown_equity * 100).toFixed(1)}%` : "N/A"}
+                {handEval ? `${(handEval.showdown_equity * 100).toFixed(1)}%` : t.notAvailable}
               </div>
-              <div className="hud-subtext">VS UNKNOWN 49-CARD SPECTRUM</div>
+              <div className="hud-subtext">
+                {handEval && summary.opponent_model === "range"
+                  ? `${t.vsCallingRange(Math.round((1 - summary.fold_equity) * 100))} · ${t.vsRandomShort(
+                      `${(handEval.equity_vs_random * 100).toFixed(1)}%`
+                    )}`
+                  : t.showdownEquitySub}
+              </div>
             </div>
 
             <div className="hud-card">
-              <div className="hud-label">EXPECTED VALUE</div>
+              <div className="hud-label">{t.expectedValue}</div>
               <div className={`hud-value ${handEval?.ev > 0 ? "green-metric" : "dim-metric"}`}>
                 {handEval ? `${handEval.ev > 0 ? "+" : ""}${formatMoney(handEval.ev)}` : "0"}
               </div>
-              <div className="hud-subtext">NET VND GAIN PER DECISION</div>
+              <div className="hud-subtext">{t.expectedValueSub}</div>
             </div>
 
             <div className="hud-card">
-              <div className="hud-label">PURE BLUFF THRESHOLD</div>
+              <div className="hud-label">{t.bluffThreshold}</div>
               <div className="hud-value amber-metric">
-                {summary ? `${(summary.pure_bluff_break_even_fold_equity * 100).toFixed(1)}%` : "N/A"}
+                {summary ? `${(summary.pure_bluff_break_even_fold_equity * 100).toFixed(1)}%` : t.notAvailable}
               </div>
-              <div className="hud-subtext">MIN FOLD EQ FOR 0-PT AIR</div>
+              <div className="hud-subtext">{t.bluffThresholdSub}</div>
             </div>
           </div>
 ```
 
-Four cards, each a label, a big value and a sub-text (`DESIGN.md` §4.3): coverage (chapter 10), equity
-(chapter 7), EV (chapter 9) and the pure-bluff threshold `B/(P+B)` (chapter 9). Each value has a
-fallback (`"N/A"`, `"0"`) for when data hasn't arrived yet. `toLocaleString()` adds thousands separators
-using the browser's language.
+**How it works**
 
----
+- Four cards, each a label, a big value and a sub-text (`DESIGN.md` §4.3): coverage (chapter 11), equity
+  (chapters 7 and 9), EV (chapter 10) and the pure-bluff threshold `B/(P+B)` (chapter 10). Each value has
+  a fallback (`t.notAvailable`, `"0"`) for when data hasn't arrived yet.
+- `toLocaleString(t.locale)` formats the combo count for the current language (`22,100` / `22.100`).
+- **The equity card adapts to the model.** Under the range model its sub-text explains what the equity
+  is measured against *and* shows the random-hand equity for comparison:
+  "VS TOP 65% CALLING RANGE · RANDOM 99.7%". `Math.round((1 - fold_equity) * 100)` turns a 35% fold
+  frequency into "top 65%". Under the random model it shows the old generic text.
 
-## Step 15.15 — The category coverage matrix
+## Step 16.18 — The category coverage matrix
 
 📄 **File:** `frontend/src/App.jsx` — *add to the end*
 
@@ -893,33 +1272,33 @@ using the browser's language.
           {/* Range Breakdown Matrix Table */}
           <div className="terminal-card table-panel">
             <div className="panel-header">
-              <span className="panel-tag">// CATEGORY COVERAGE MATRIX</span>
-              <span className="panel-id">4 CORE HIERARCHIES</span>
+              <span className="panel-tag">{t.matrixTag}</span>
+              <span className="panel-id">{t.matrixId}</span>
             </div>
 
             <div className="table-wrapper">
               <table className="tactical-table">
                 <thead>
                   <tr>
-                    <th>CATEGORY</th>
-                    <th>DESCRIPTION</th>
-                    <th>CLASSES</th>
-                    <th>COMBOS</th>
-                    <th>PROFITABLE</th>
-                    <th>COVERAGE</th>
-                    <th>RADAR STATUS</th>
+                    <th>{t.colCategory}</th>
+                    <th>{t.colDescription}</th>
+                    <th>{t.colClasses}</th>
+                    <th>{t.colCombos}</th>
+                    <th>{t.colProfitable}</th>
+                    <th>{t.colCoverage}</th>
+                    <th>{t.colStatus}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {categoryMatrix.map((cat) => (
-                    <tr key={cat.name}>
+                    <tr key={cat.category}>
                       <td>
-                        <span className={`cat-pill cat-${cat.name}`}>{cat.name}</span>
+                        <span className={`cat-pill cat-${cat.category}`}>{CATEGORY_LABELS[cat.category]}</span>
                       </td>
-                      <td className="desc-cell">{cat.desc}</td>
+                      <td className="desc-cell">{t[CATEGORY_DESC_KEYS[cat.category]]}</td>
                       <td className="mono-num">{cat.classes}</td>
-                      <td className="mono-num">{cat.combos.toLocaleString()}</td>
-                      <td className="mono-num">{cat.profitable.toLocaleString()}</td>
+                      <td className="mono-num">{cat.combos.toLocaleString(t.locale)}</td>
+                      <td className="mono-num">{cat.profitable_combos.toLocaleString(t.locale)}</td>
                       <td className="mono-num highlight-val">{cat.pct}%</td>
                       <td>
                         <span
@@ -932,10 +1311,10 @@ using the browser's language.
                           }`}
                         >
                           {Number(cat.pct) === 100
-                            ? "100% PUSH"
+                            ? t.statusFull
                             : Number(cat.pct) > 0
-                            ? "PARTIAL"
-                            : "FOLD"}
+                            ? t.statusPartial
+                            : t.statusZero}
                         </span>
                       </td>
                     </tr>
@@ -948,16 +1327,15 @@ using the browser's language.
 
 **How it works**
 
-- A standard HTML table: `<thead>` with column titles, `<tbody>` with one `<tr>` per category from the
-  `categoryMatrix` array.
-- `cat-${cat.name}` produces class names like `cat-SÁP` or `cat-ĐĨ` (CSS class names may contain
-  Unicode letters); the stylesheet colours each category's "pill" differently.
+- A standard HTML table: `<thead>` with column titles, `<tbody>` with one `<tr>` per row of
+  `categoryMatrix` (Step 16.8), i.e. per row of the backend's `category_breakdown`.
+- The backend's ASCII names (`SAP`, `DI`…) are the `key`s and the CSS class suffix (`cat-SAP`), while the
+  visible label goes through `CATEGORY_LABELS` ("SÁP", "ĐĨ") and the description through the i18n key
+  table: `t[CATEGORY_DESC_KEYS[cat.category]]`. That's two lookups: category → key → text.
 - The status chip uses a **chained ternary** (`a ? x : b ? y : z`): 100% → "100% PUSH", more than 0 →
-  "PARTIAL", else "FOLD".
+  "PARTIAL", else "FOLD" (translated).
 
----
-
-## Step 15.16 — Top holdings table
+## Step 16.19 — Top holdings table
 
 📄 **File:** `frontend/src/App.jsx` — *add to the end*
 
@@ -967,20 +1345,20 @@ using the browser's language.
           {solveData?.top_hands && (
             <div className="terminal-card table-panel">
               <div className="panel-header">
-                <span className="panel-tag">// TOP PROFITABLE HOLDINGS</span>
-                <span className="panel-id">SAMPLE EQUIVALENCE CLASSES</span>
+                <span className="panel-tag">{t.topHandsTag}</span>
+                <span className="panel-id">{t.topHandsId}</span>
               </div>
 
               <div className="table-wrapper">
                 <table className="tactical-table">
                   <thead>
                     <tr>
-                      <th>CANONICAL ID</th>
-                      <th>CATEGORY</th>
-                      <th>SHOWDOWN EQUITY</th>
-                      <th>EXPECTED VALUE (EV)</th>
-                      <th>MULTIPLICITY</th>
-                      <th>ACTION</th>
+                      <th>{t.colCanonicalId}</th>
+                      <th>{t.colCategory}</th>
+                      <th>{t.colEquity}</th>
+                      <th>{t.colEv}</th>
+                      <th>{t.colMultiplicity}</th>
+                      <th>{t.colAction}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -988,16 +1366,16 @@ using the browser's language.
                       <tr key={item.canonical_id}>
                         <td className="mono-canonical">{item.canonical_id}</td>
                         <td>
-                          <span className={`cat-pill cat-${item.category}`}>{item.category}</span>
+                          <span className={`cat-pill cat-${item.category}`}>{CATEGORY_LABELS[item.category]}</span>
                         </td>
                         <td className="mono-num">{(item.equity * 100).toFixed(1)}%</td>
                         <td className={`mono-num bold-num ${item.ev > 0 ? "positive-ev" : "negative-ev"}`}>
                           {item.ev > 0 ? "+" : ""}{formatMoney(item.ev)} VND
                         </td>
-                        <td className="dim-cell">{item.multiplicity} combos</td>
+                        <td className="dim-cell">{item.multiplicity} {t.combosSuffix}</td>
                         <td>
                           <span className={`action-badge ${item.is_profitable ? "act-raise" : "act-fold"}`}>
-                            {item.is_profitable ? "RAISE" : "FOLD"}
+                            {item.is_profitable ? t.raise : t.fold}
                           </span>
                         </td>
                       </tr>
@@ -1010,16 +1388,14 @@ using the browser's language.
 ```
 
 The API sends the top 30 records; `.slice(0, 10)` shows the first 10. `canonical_id` is unique, so it's
-a good `key`. Here `item.category` is the API's ASCII name (`SAP`, `DI`…), which is why the CSS defines
-both `.cat-SÁP` and `.cat-SAP`.
+a good `key`. The equity shown is the one the selected model used (chapter 11).
 
 > 💡 Because the list is sorted by EV and the strongest hands always have the highest EV, this table is
 > almost always the same ten Sáp hands (A-A-A, K-K-K, …). Showing the **threshold** region (the
-> weakest hands that are still profitable, where decisions are actually hard) would be more informative.
+> weakest hands that are still profitable, where decisions are actually hard) would be more informative,
+> though under the range model that region contains many tied equity-0 hands (chapter 11's pitfall).
 
----
-
-## Step 15.17 — The notes drawer, and closing everything
+## Step 16.20 — The notes drawer, and closing everything
 
 📄 **File:** `frontend/src/App.jsx` — *add to the end*
 
@@ -1032,25 +1408,25 @@ both `.cat-SÁP` and `.cat-SAP`.
               className="drawer-toggle-btn"
               onClick={() => setIsNotesOpen(!isNotesOpen)}
             >
-              <span>{isNotesOpen ? "[ − COLLAPSE TELEMETRY NOTES ]" : "[ + MATHEMATICAL TELEMETRY NOTES ]"}</span>
+              <span>{isNotesOpen ? t.notesCollapse : t.notesExpand}</span>
               <span className="drawer-indicator">{isNotesOpen ? "▲" : "▼"}</span>
             </button>
 
             {isNotesOpen && (
               <div className="drawer-content">
                 <div className="drawer-header">
-                  <span className="drawer-title">// GAME-THEORETIC TELEMETRY ADVISORY</span>
+                  <span className="drawer-title">{t.notesTitle}</span>
                   <span className="drawer-sub">OPENROUTER / LLAMA 3.1 8B INSTRUCT</span>
                 </div>
 
                 {isAiLoading ? (
                   <div className="telemetry-loading">
                     <span className="radar-spinner"></span>
-                    <span>&gt; TRANSMITTING GAME-THEORETIC TELEMETRY QUERY...</span>
+                    <span>{t.notesLoading}</span>
                   </div>
                 ) : (
                   <div className="telemetry-body">
-                    {aiAdvice || "No active telemetry payload recorded for this game state."}
+                    {!aiAdvice ? t.notesEmpty : aiAdvice.text ?? t[aiAdvice.key](aiAdvice.detail)}
                   </div>
                 )}
               </div>
@@ -1066,17 +1442,21 @@ both `.cat-SÁP` and `.cat-SAP`.
 **How it works**
 
 - A **toggle**: `setIsNotesOpen(!isNotesOpen)` flips a boolean; the content renders only when open.
-- While the analysis is loading, show a spinner; then show the advice text. `&gt;` is the HTML escape for
-  `>` (a bare `>` would confuse the JSX parser).
+- While the analysis is loading, show a spinner; then show the advice:
+  `!aiAdvice ? t.notesEmpty : aiAdvice.text ?? t[aiAdvice.key](aiAdvice.detail)`. Read it as: no advice
+  yet → "empty" text; otherwise the server's text if there is one (`??` is the **nullish coalescing**
+  operator: use the right side only if the left is `null`/`undefined`), else translate our own notice.
 - The advice is Markdown (`**bold**`) but is shown as **plain text**, so you'll see the asterisks. A
   Markdown renderer library would display it properly. Never insert server-provided HTML directly
   (`dangerouslySetInnerHTML`): that opens the door to script-injection attacks (XSS).
+- The AI's text is in Vietnamese (the prompt asks for it, chapter 13) even when the UI is in English.
 - The last lines close `section`, `main`, the container `div`, the `return (`, and the `App` function.
 
 🧪 **Mini-check.** With Flask running, start Vite (`npm run dev`) and open http://localhost:5173. The page
-should work **completely**: the verdict "ACTION: RAISE / ALL-IN" with `+132.097 VND`, the HUD (100.0%
-coverage, 99.7% equity, 33.3% bluff threshold) and both tables. It just looks plain and white-on-black,
-because `App.css` is still empty. Let's fix that.
+should work **completely** (opponent model "WEAKEST HANDS" by default): the verdict "ACTION: RAISE /
+ALL-IN" with `+131.876 VND` and "RAISE +EV WHEN OPP. FOLDS: 0%–100%", the HUD (100.0% coverage, 99.5%
+equity "VS TOP 65% CALLING RANGE · RANDOM 99.7%", 33.3% bluff threshold) and both tables. Click **VI**:
+every label switches to Vietnamese. It just looks plain, because `App.css` is still empty. Let's fix that.
 
 ---
 
@@ -1085,7 +1465,7 @@ because `App.css` is still empty. Let's fix that.
 From here on, **every step leaves the page working**. Keep the browser open next to your editor: Vite
 reloads styles instantly when you save.
 
-## Step 15.18 — Container, header and branding
+## Step 16.21 — Container, header and branding
 
 📄 **File:** `frontend/src/App.css` — *create this file*
 
@@ -1105,6 +1485,8 @@ reloads styles instantly when you save.
    -------------------------------------------------------------------------- */
 .terminal-header {
   display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 2rem;
@@ -1150,7 +1532,8 @@ reloads styles instantly when you save.
 - `max-width: 1360px; margin: 0 auto;` centres the page and stops it from getting too wide on big screens.
 - `padding: 1.5rem 1.5rem 4rem;` is top, left/right, bottom.
 - The header is a **flex row**: `justify-content: space-between` pushes the title to the left and the
-  status tag to the right; `align-items: center` centres them vertically.
+  status tag to the right; `align-items: center` centres them vertically. `flex-wrap: wrap` plus `gap:
+  1rem` let the right-hand group drop below the title on narrow screens instead of squeezing it.
 - `.brand-group` is a flex **column** with a small `gap` between title and subtitle.
 - `text-shadow: 0 0 12px …` with no offset and a blur creates the green **glow**.
 - `letter-spacing` in `em` (relative to font size) gives the wide "terminal" lettering.
@@ -1159,7 +1542,7 @@ reloads styles instantly when you save.
 
 ---
 
-## Step 15.19 — The live-status tag and its pulsing beacon
+## Step 16.22 — The live-status tag and its pulsing beacon
 
 📄 **File:** `frontend/src/App.css` — *add to the end*
 
@@ -1225,7 +1608,71 @@ reloads styles instantly when you save.
 
 ---
 
-## Step 15.20 — The two-column grid and panels
+## Step 16.23 — The language toggle
+
+📄 **File:** `frontend/src/App.css` — *add to the end*
+
+```css
+
+/* Language Toggle (EN / VI) */
+.header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.lang-toggle {
+  display: inline-flex;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-base);
+  border-radius: 2px;
+  padding: 0.2rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.lang-toggle:hover,
+.lang-toggle:focus-visible {
+  border-color: var(--accent-green);
+  outline: none;
+}
+
+.lang-option {
+  padding: 0.25rem 0.6rem;
+  border-radius: 2px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  transition: all 0.15s;
+}
+
+.lang-option.active {
+  background: var(--accent-green-muted);
+  color: var(--accent-green);
+  font-weight: 700;
+}
+```
+
+**How it works**
+
+- `.header-actions` lays the status tag and the toggle side by side (flex row, `gap`), wrapping on
+  narrow screens.
+- `.lang-toggle` is one bordered button; inside it, each `.lang-option` is a small label. The **active**
+  language gets the green "chip" look (`.lang-option.active`), the same visual language as the preset
+  chips, so the UI stays consistent.
+- `:focus-visible` (instead of `:focus`) shows the focus border only when the user navigates with the
+  **keyboard**, not after a mouse click. It's accessible and doesn't add visual noise for mouse users.
+  `outline: none` is safe here because the border change replaces the outline.
+
+**Save → look:** a compact `EN | VI` switch appears next to the status tag. Click it: the labels
+change language, and the choice survives a page reload (`localStorage`).
+
+---
+
+## Step 16.24 — The two-column grid and panels
 
 📄 **File:** `frontend/src/App.css` — *add to the end*
 
@@ -1239,6 +1686,11 @@ reloads styles instantly when you save.
   grid-template-columns: 380px 1fr;
   gap: 1.5rem;
   align-items: start;
+}
+
+/* Let grid items shrink below their tables' min-content width (tables scroll instead) */
+.terminal-grid > * {
+  min-width: 0;
 }
 
 @media (max-width: 1024px) {
@@ -1286,6 +1738,10 @@ reloads styles instantly when you save.
 
 - **CSS Grid:** two columns, a fixed **380px** control panel and `1fr` (all remaining space) for results.
   `align-items: start` keeps each column only as tall as its content.
+- **`.terminal-grid > * { min-width: 0; }`** fixes a classic grid surprise: by default a grid item is never
+  narrower than its content's minimum width, so a wide table would push the whole column (and page)
+  sideways. With `min-width: 0` the column keeps its size and the table scrolls inside its
+  `.table-wrapper` (Step 16.31). The comment in the CSS says exactly that: comment the *why*.
 - **Responsive design:** on screens **1024px or narrower** (tablets, phones), the media query switches to
   a single column, so the results drop below the controls. Try it by narrowing your browser window.
 - `.terminal-card` is the reusable "dark panel" look, used by the control panel and both tables.
@@ -1294,7 +1750,7 @@ reloads styles instantly when you save.
 
 ---
 
-## Step 15.21 — Form controls: labels, inputs and preset chips
+## Step 16.25 — Form controls: labels, inputs and preset chips
 
 📄 **File:** `frontend/src/App.css` — *add to the end*
 
@@ -1385,13 +1841,13 @@ reloads styles instantly when you save.
   replaces it with a green border plus two shadows: a 1px "ring" and a soft glow (`DESIGN.md` §3).
   (When you remove the default focus outline, always provide a visible replacement, or keyboard users
   can't see where they are.)
-- **`.preset-chip.active`**: the class added in JSX (Step 15.8) when a chip matches the current value.
+- **`.preset-chip.active`**: the class added in JSX (Step 16.10) when a chip matches the current value.
 - `flex-wrap: wrap` lets chips flow onto a second line when there isn't room.
 - `transition: all 0.15s` animates colour changes on hover.
 
 ---
 
-## Step 15.22 — The slider
+## Step 16.26 — The slider
 
 📄 **File:** `frontend/src/App.css` — *add to the end*
 
@@ -1466,7 +1922,94 @@ reloads styles instantly when you save.
 
 ---
 
-## Step 15.23 — The action button, alert and specs card
+## Step 16.27 — The opponent-model row and the profit map
+
+📄 **File:** `frontend/src/App.css` — *add to the end*
+
+```css
+
+/* Opponent Model Toggle */
+.model-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  margin-top: 0.9rem;
+}
+
+.model-label {
+  margin-bottom: 0;
+}
+
+.model-chips {
+  margin-top: 0;
+}
+
+/* Raise Profit Map: red track = -EV, green zones = +EV, white marker = current fold frequency */
+.profit-map {
+  margin-top: 0.9rem;
+}
+
+.profit-map-label {
+  display: block;
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  letter-spacing: 0.04em;
+  margin-bottom: 0.35rem;
+}
+
+.profit-map-bar {
+  position: relative;
+  height: 10px;
+  background: var(--accent-red-muted);
+  border: 1px solid var(--border-base);
+  border-radius: 2px;
+}
+
+.profit-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--accent-green-muted);
+  border-left: 1px solid var(--accent-green);
+  border-right: 1px solid var(--accent-green);
+}
+
+.profit-marker {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  background: var(--text-white);
+  transform: translateX(-1px);
+  box-shadow: 0 0 4px var(--text-white);
+}
+```
+
+**How it works**
+
+- `.model-row` is a wrapping flex row: the "OPPONENT FOLDS" label on the left, the two chips on the
+  right. `.model-label` and `.model-chips` only cancel margins that `.form-label` and `.preset-chips`
+  would otherwise add. **Reusing existing classes and overriding one property** keeps the look
+  consistent without duplicating styles.
+- **The profit map** is the classic "absolute inside relative" layout:
+  - `.profit-map-bar` is `position: relative`, 10px tall, with a dark-red background (= −EV);
+  - each `.profit-zone` is `position: absolute` with `top: 0; bottom: 0` (full height). Its `left` and
+    `width` come from the **inline styles** set in JSX (Step 16.13), so the same CSS draws any zones;
+  - `.profit-marker` is a 2px white line that sticks out 4px above and below the bar
+    (`top: -4px; bottom: -4px`). `transform: translateX(-1px)` shifts it left by half its width, so it
+    is **centred** on the exact fold percentage.
+- The comment above the block documents the colour meaning (red = −EV, green = +EV, white = current
+  fold frequency). A chart with no legend should at least have its meaning written down somewhere.
+
+**Save → look:** set the hand to `Ks Qh 3d`, the bet to "1.0x Pot", keep "WEAKEST HANDS" and 35%, and
+execute: the map shows **green 0–8%, red 9–50%, green 51–100%** with the marker in the red. The
+verdict says CHECK / FOLD. Click "AT RANDOM" and execute again: the whole bar turns green.
+
+---
+
+## Step 16.28 — The action button, alert and specs card
 
 📄 **File:** `frontend/src/App.css` — *add to the end*
 
@@ -1566,7 +2109,7 @@ reloads styles instantly when you save.
 
 ---
 
-## Step 15.24 — Right column and the verdict banner
+## Step 16.29 — Right column and the verdict banner
 
 📄 **File:** `frontend/src/App.css` — *add to the end*
 
@@ -1633,7 +2176,7 @@ reloads styles instantly when you save.
 
 - `.results-container` stacks the right-hand blocks vertically with equal gaps (flex column + `gap`).
 - **One switch, many effects:** `.verdict-raise .verdict-title` means "a title *inside* a raise banner".
-  Changing the single class on the banner (Step 15.13) recolours the border, glow and title together.
+  Changing the single class on the banner (Step 16.16) recolours the border, glow and title together.
 
 📄 **File:** `frontend/src/App.css` — *add to the end*
 
@@ -1698,13 +2241,14 @@ reloads styles instantly when you save.
 }
 ```
 
-**Save → look:** click the "0 Điểm (Bù)" preset, set the slider to 5% and execute: the banner turns red
-("ACTION: CHECK / FOLD", −42.044 VND). Move the slider to 50% and execute again: green, +25.240.
-That's chapter 13's scenarios 2 and 3, live.
+**Save → look:** click the "0 Điểm (Bù)" preset, click **AT RANDOM**, set the slider to 5% and execute:
+the banner turns red ("ACTION: CHECK / FOLD", −42.044 VND). Move the slider to 50% and execute again:
+green, +25.240. That's chapter 14's scenarios 2 and 3, live. (With **WEAKEST HANDS** the numbers are
+−42.500 and +25.000: `2-3-5` can't beat any hand that calls, so its equity is exactly 0.)
 
 ---
 
-## Step 15.25 — The HUD metric cards
+## Step 16.30 — The HUD metric cards
 
 📄 **File:** `frontend/src/App.css` — *add to the end*
 
@@ -1787,7 +2331,7 @@ while sharing the base `.hud-value` size.
 
 ---
 
-## Step 15.26 — Tables
+## Step 16.31 — Tables
 
 📄 **File:** `frontend/src/App.css` — *add to the end*
 
@@ -1889,7 +2433,7 @@ while sharing the base `.hud-value` size.
 
 ---
 
-## Step 15.27 — Category pills, status chips, action badges
+## Step 16.32 — Category pills, status chips, action badges
 
 📄 **File:** `frontend/src/App.css` — *add to the end*
 
@@ -1986,7 +2530,7 @@ background, a solid text colour and a 35%-opacity border.
 
 ---
 
-## Step 15.28 — The notes drawer
+## Step 16.33 — The notes drawer
 
 📄 **File:** `frontend/src/App.css` — *add to the end*
 
@@ -2111,45 +2655,61 @@ make the open drawer look attached to the button above it.
 ## ✅ Checkpoint
 
 1. Flask running (`python app.py`), Vite running (`npm run dev`), open http://localhost:5173.
-2. On load you should see, without clicking anything:
-   - **ACTION: RAISE / ALL-IN**, `As Kh Qd • [Q-K-A] • LIÊNG Q-K-A`, **+132.097 VND**, break-even 0%;
-   - HUD: **100.0%** (22,100 / 22,100 combos), **99.7%**, **+132.097**, **33.3%**;
-   - the category matrix (all rows "100% PUSH") and the top-10 table starting with `A-A-A`.
-3. Click "0 Điểm (Bù)", drag the slider to **5%**, click **[ EXECUTE SOLVER ]** → red **CHECK / FOLD**,
-   **−42.044 VND**, coverage **77.8%**.
-4. Open the notes drawer: the Vietnamese rule-based analysis appears (or an LLM answer if you set
-   `OPENROUTER_API_KEY` before starting Flask).
-5. Narrow the window below 1024px: the layout becomes one column.
-6. `npm run lint`: **no errors, 3 warnings**. The linter found real issues on its own:
+2. On load you should see, without clicking anything (model "WEAKEST HANDS", fold 35%):
+   - **ACTION: RAISE / ALL-IN**, `As Kh Qd • [Q-K-A] • LIÊNG Q-K-A`, **+131.876 VND**, and
+     "RAISE +EV WHEN OPP. FOLDS: **0%–100%**";
+   - a fully green profit map with the marker at 35%;
+   - HUD: **100.0%** (22,100 / 22,100 combos), **99.5%** ("VS TOP 65% CALLING RANGE · RANDOM 99.7%"),
+     **+131.876**, **33.3%**;
+   - the category matrix with **52 / 768 / 144 / 21,136** combos (all "100% PUSH") and the top-10 table
+     starting with `A-A-A`.
+3. **The two models, side by side.** Hand `Ks Qh 3d`, bet "1.0x Pot", fold 35%:
+   - WEAKEST HANDS → red **CHECK / FOLD**, **−27.894 VND**, zones "0%–8% · 51%–100%", equity 1.1%
+     ("RANDOM 36.0%"), coverage 54.6%;
+   - AT RANDOM → green **RAISE**, zones "0%–100%", equity 36.0%, coverage 84.7%.
+4. Type an invalid hand (`Xx Kh Qd`) and execute → "INVALID INPUT: Invalid hand: Invalid rank 'X'…"
+   (not "offline"). Stop Flask and execute → "LOCAL SOLVER DAEMON OFFLINE…". Start Flask again.
+5. Click **VI** → everything switches to Vietnamese (the error box too, if shown); reload the page → still
+   Vietnamese.
+6. Open the notes drawer: the Vietnamese rule-based analysis appears, mentioning the opponent model (or
+   an LLM answer if you set `OPENROUTER_API_KEY` before starting Flask).
+7. Narrow the window below 1024px: the layout becomes one column, and the header wraps.
+8. `npm run lint`: **no errors, 2 warnings**:
 
    ```
-   src/App.jsx:77:14: warning eslint(no-unused-vars): Catch parameter 'err' is caught but never used.
-   src/App.jsx:86:5: warning react(set-state-in-effect): Calling setState synchronously within an effect can trigger cascading renders
-   src/App.jsx:86:5: warning react-hooks(exhaustive-deps): React Hook useEffect has a missing dependency: 'handleSolve'
+   src/App.jsx:127:5: warning react(set-state-in-effect): Calling setState synchronously within an effect can trigger cascading renders
+   src/App.jsx:127:5: warning react-hooks(exhaustive-deps): React Hook useEffect has a missing dependency: 'handleSolve'
    ```
 
-   - The first is exactly the "every error looks like server offline" pitfall from Step 15.4: the error
-     is caught and then ignored.
-   - The other two concern `useEffect(() => { handleSolve(); }, [])`. The effect calls a function
-     that is re-created on every render and that sets state. It works here, but React's recommended
-     pattern is to keep effects for syncing with external systems. **Linters are cheap code reviewers:
-     read their warnings.**
+   Both concern `useEffect(() => { handleSolve(); }, [])`: the effect calls a function that is
+   re-created on every render and that sets state. It works here, but React's recommended pattern is to
+   keep effects for syncing with external systems (like the language effect, which writes to
+   `document` and `localStorage`). The first version had a third warning (an unused `err`), fixed in
+   Step 16.7. **Linters are cheap code reviewers: read their warnings.**
 
-Compare your three files with the originals (`diff -B`; see chapter 5), then commit:
+Compare your four files with the originals (`diff -B`; see chapter 5), then commit:
 
 ```bash
-git add frontend && git commit -m "feat: LIÊNG SCOPE dashboard"
+git add frontend && git commit -m "feat: LIÊNG SCOPE dashboard with i18n and opponent models"
 ```
 
 ## Recap
 
-- `App` holds the inputs and results in **state**; `handleSolve` calls `/api/solve`, then `/api/analyze`, and every
-  state change re-renders the page.
-- Derived values (`handEval`, `isRaise`, `categoryMatrix`) are computed from state, not stored.
-- The CSS is built from **design tokens** (CSS variables), **flexbox** for rows, **grid** for the page and
-  HUD, **media queries** for small screens, and **keyframes** for the beacon and spinner.
-- Pitfalls: the category matrix uses wrong totals (Đĩ 288/Điểm 20,992 instead of 144/21,136) and guesses
-  what the backend should send; every error is shown as "server offline"; static "LIVE" status;
-  Markdown shown as raw text.
+- `App` holds inputs (including `opponentModel` and `lang`) and results in **state**; `handleSolve` calls
+  `/api/solve`, then `/api/analyze`; every state change re-renders the page.
+- **i18n:** all texts live in `STRINGS[lang]`; texts with variables are functions; state stores **keys**
+  (`{ key, detail }`), so switching language re-translates everything, errors included. The choice is
+  saved in `localStorage` and mirrored to `<html lang>`.
+- Derived values (`handEval`, `zones`, `categoryMatrix`) are computed from state, not stored. The category
+  matrix and the profit zones come **from the backend**, never guessed.
+- The **profit map** draws chapter 10's non-monotonic EV with absolutely-positioned spans on a
+  relatively-positioned bar.
+- The CSS is built from **design tokens**, **flexbox**, **grid** (with `min-width: 0` so tables scroll),
+  **media queries**, **keyframes**, and `:focus-visible` for keyboard users.
+- ✅ Fixed since the first version: guessed (and wrong) category totals, every error shown as
+  "offline", an unused-variable lint warning.
+- ⚠️ Still open: two number formats in English mode, empty zones show blank text, static "LIVE" status,
+  Markdown shown as raw text, repeated preset buttons, "MONTE CARLO" spec label, UI default model ≠ API
+  default.
 
-**Next:** [16 — Deployment](17-deployment.md)
+**Next:** [17 — Deployment](17-deployment.md)

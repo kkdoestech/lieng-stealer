@@ -1,10 +1,10 @@
-# 16 — Deployment
+# 17 — Deployment
 
 > **Goal:** run the backend with a production server, build the frontend into static files, and
 > understand how the two are configured to find each other on the internet.
 > **You will build:** `backend/Procfile`.
 > **Time:** ~45 minutes.
-> **Prerequisites:** [15](16-building-the-ui.md).
+> **Prerequisites:** [16](16-building-the-ui.md).
 
 ---
 
@@ -17,7 +17,7 @@ are built for convenience (auto-reload, helpful errors), not for real traffic. I
                        https://your-frontend.vercel.app                https://your-api.onrender.com
  user's browser ──────► static files (index.html, JS, CSS) ──fetch──► gunicorn ──► Flask app (app.py)
                         built once by `npm run build`                  2 worker processes, each with
-                        served by a CDN, no Python needed              its own WinRateDB in memory
+                        served by a CDN, no Python needed              its own WinRateDB + CallingRangeModel
 ```
 
 | Part | Development | Production |
@@ -50,7 +50,7 @@ variables**. The OpenRouter key stays on the backend for exactly this reason.
 
 ---
 
-## Step 16.1 — The Procfile
+## Step 17.1 — The Procfile
 
 📄 **File:** `backend/Procfile` — *create this file*
 
@@ -64,8 +64,10 @@ web: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
   run. `web:` is the one that receives HTTP traffic.
 - `app:app` = "module `app` (the file `app.py`), object `app` (the Flask instance)".
 - `--bind 0.0.0.0:$PORT`: listen on all interfaces, on the port the platform assigns in `$PORT`.
-- `--workers 2`: two processes. Each loads the 455-record database (~150 KB) at start-up, so memory is
-  no concern. Our requests are short and CPU-bound, so a rule of thumb is about 1–2 workers per CPU core.
+- `--workers 2`: two processes. Each imports `app.py`, so each loads the 455-record database (~150 KB)
+  **and** builds its own calling-range tables (~1.1 MB, ~50 ms, chapter 9) at start-up: about 0.25 s
+  and a few MB per worker, so memory is no concern. Our requests are short and CPU-bound, so a rule of
+  thumb is about 1–2 workers per CPU core.
 - `--timeout 120`: kill a worker stuck for more than 120 s. `/api/analyze` may wait up to 20 s for the
   LLM, well within that.
 
@@ -103,7 +105,7 @@ Stop it with Ctrl-C.
 
 ---
 
-## Step 16.2 — Build the frontend
+## Step 17.2 — Build the frontend
 
 From `frontend/`, build with the address where your API will live (here a placeholder):
 
@@ -116,11 +118,11 @@ VITE_API_URL=https://api.example.com npm run build
 Expected output (file hashes differ):
 
 ```
-✓ 17 modules transformed.
+✓ 18 modules transformed.
 dist/index.html                   0.72 kB │ gzip:  0.41 kB
-dist/assets/index-DqGmTrCk.css   12.43 kB │ gzip:  2.91 kB
-dist/assets/index-BIOuCm5V.js   233.11 kB │ gzip: 72.24 kB
-✓ built in 252ms
+dist/assets/index-58mHjLMI.css   13.86 kB │ gzip:  3.15 kB
+dist/assets/index-C98sTgSj.js   239.88 kB │ gzip: 74.84 kB
+✓ built in 170ms
 ```
 
 Vite has **bundled** all your JSX, React itself and the CSS into a few optimised files, with a hash in
@@ -131,7 +133,7 @@ grep -o "https://api.example.com" dist/assets/*.js
 ```
 
 ```
-dist/assets/index-BIOuCm5V.js:https://api.example.com
+dist/assets/index-C98sTgSj.js:https://api.example.com
 ```
 
 `npm run preview` serves `dist/` locally so you can test the production build. Instead of passing the
@@ -140,7 +142,7 @@ variable on the command line every time, you can create `frontend/.env.productio
 
 ---
 
-## Step 16.3 — Deploying (outline)
+## Step 17.3 — Deploying (outline)
 
 The exact clicks differ per platform and change over time, so here are the settings rather than
 screenshots.
@@ -187,7 +189,7 @@ A full check, from a clean terminal session:
 ```bash
 # 1. Backend tests
 cd backend && source .venv/bin/activate
-python -m pytest -q                                  # → 58 passed
+python -m pytest -q                                  # → 76 passed
 
 # 2. Data is reproducible
 python -m src.generator --exact --output /tmp/check.json
@@ -227,4 +229,4 @@ behaves the same.
 - `winrates.json` must be committed, because servers don't regenerate it.
 - Pitfall: CORS allows every origin; consider restricting it and rate-limiting the LLM endpoint.
 
-**Next:** [17 — Pitfalls and next steps](18-pitfalls-and-next-steps.md)
+**Next:** [18 — Pitfalls and next steps](18-pitfalls-and-next-steps.md)

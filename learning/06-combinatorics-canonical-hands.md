@@ -87,8 +87,9 @@ type with multiplicity 4.
 | Đĩ | 6 | J-J-Q, J-J-K, J-Q-Q, J-K-K, Q-Q-K, Q-K-K (all pairs) | 24 each | **144** |
 | Điểm | 455 − 13 − 12 − 6 = **424** | everything else | mixed | 22,100 − 52 − 768 − 144 = **21,136** |
 
-Remember **144** and **21,136**. In chapter 15 you'll find that the original frontend uses different
-(wrong) numbers.
+Remember **144** and **21,136**. The first version of this project's frontend (and its `DESIGN.md`) used
+different, **wrong** numbers (288 and 20,992). Chapters 13 and 16 show how the current code fixed that
+by computing the totals from the data instead of typing them.
 
 ---
 

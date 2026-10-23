@@ -125,7 +125,7 @@ boundary.
 
 ### 5. Precompute once, query forever
 
-The prefix tables cost 455 rows × 456 numbers ≈ 207,000 integers to build (≈ 60 ms, ≈ 830 KB). After that,
+The prefix tables cost 455 rows × 456 numbers ≈ 207,000 integers to build (≈ 50–60 ms, ≈ 1.1 MB). After that,
 **any** equity question is a handful of array lookups. It's the same "offline work, fast lookup" idea
 as the whole project (chapter 1), at a smaller scale.
 

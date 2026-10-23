@@ -1,9 +1,9 @@
-# 09 — Expected Value
+# 10 — Expected Value
 
 > **Goal:** turn "should I raise?" into a formula, derive it step by step, and implement it as pure functions.
-> **You will build:** `backend/src/ev.py` and `backend/tests/test_ev.py` (9 tests).
-> **Time:** ~1.5 hours.
-> **Prerequisites:** [08](08-database-layer.md). Re-read chapter 1, Part 3.
+> **You will build:** `backend/src/ev.py` and `backend/tests/test_ev.py` (13 tests).
+> **Time:** ~2 hours.
+> **Prerequisites:** [09](09-calling-range.md). Re-read chapter 1, Part 3.
 
 ---
 
@@ -18,8 +18,9 @@ folds. The EV formula combines all four numbers into one answer.
  bet size B ────┤
  fold equity f ─┼──► calculate_ev() ──► EV (VND)  ──► EV > 0 ?  ──► RAISE  /  CHECK-FOLD
  equity e ──────┘         ▲
- (from WinRateDB)         │
-                 calculate_break_even_fold_equity() ──► "you need the opponent to fold at least X%"
+ (WinRateDB, or           │
+  CallingRangeModel)      ├── calculate_break_even_fold_equity() ──► "the opponent must fold at least X%"
+                          └── profitable_fold_zones()            ──► "raising is +EV when folds are in 0–8% or 51–100%"
 ```
 
 `ev.py` is **pure maths**: no files, no printing, no global state. `AGENTS.md` requires this, and it
@@ -137,9 +138,34 @@ Two lessons hide in this table:
 2. **Monster hands want to be called.** Q-K-A's EV *drops* as `f` rises: a fold only wins `P`, while a
    call wins about `P + B`. At `f = 1.0` every hand earns exactly `P`, because nobody ever sees a showdown.
 
+### When folds change *who* calls: EV is no longer a straight line
+
+The table above keeps `e` fixed (random-hand model). Under the **range** model from chapter 9, `e`
+itself depends on `f`: the more the opponent folds, the stronger the hands that call, so `e` drops.
+Two effects now pull in opposite directions as `f` grows:
+
+- **more folds** → we win the pot without a fight more often (good);
+- **stronger callers** → we lose more of the showdowns we do get (bad).
+
+Look at `K-Q-3` (3 points) with `P = B = 100,000` (`e` from chapter 9's model):
+
+| `f` | 0.00 | 0.05 | 0.10 | 0.20 | 0.35 | 0.50 | 0.51 | 0.60 |
+|---|---|---|---|---|---|---|---|---|
+| `e` (range model) | 0.36 | 0.3238 | 0.2883 | 0.1976 | 0.0108 | 0.0 | 0.0 | 0.0 |
+| **EV** | **+8,000** | +2,283 | −2,159 | −12,576 | −27,894 | 0 | **+2,000** | +20,000 |
+
+EV starts positive (loose callers bring weak hands we can beat), falls **below zero**, and becomes
+positive again only once folds alone pay for the bet (the pure-bluff threshold `B / (P + B) = 50%`). So
+there are **two separate profitable zones** of fold frequency: about 0–8% and 51–100%. A single
+"break-even fold equity" number can't describe that. We need a function that returns the **zones**.
+
+**The approach:** check EV on a grid of fold frequencies `0.00, 0.01, …, 1.00` and record the runs where
+`EV > 0`. That's what `profitable_fold_zones` does (Step 10.5). The UI draws these zones as a green/red
+"profit map" (chapter 16).
+
 ---
 
-## Step 9.1 — Docstring, imports and the result object
+## Step 10.1 — Docstring, imports and the result object
 
 📄 **File:** `backend/src/ev.py` — *create this file*
 
@@ -154,6 +180,7 @@ EV = [P(Fold) * Pot] + [1 - P(Fold)] * [(P(Win|Call) * FinalPot) - BetSize]
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Callable
 
 
 @dataclass(frozen=True)
@@ -170,11 +197,12 @@ class EVResult:
 ```
 
 `EVResult` bundles **inputs and outputs together**, so whoever displays the result (the CLI, the API)
-has everything in one object and can't mix up numbers from different calculations.
+has everything in one object and can't mix up numbers from different calculations. (`Callable` is a
+type-hint helper used in Step 10.5.)
 
 ---
 
-## Step 9.2 — `calculate_ev`
+## Step 10.2 — `calculate_ev`
 
 📄 **File:** `backend/src/ev.py` — *add to the end*
 
@@ -231,12 +259,12 @@ def calculate_ev(
 
 > 💡 **Error type.** These checks raise the built-in `ValueError`, not a `LiengError`. That's a reasonable
 > choice for "bad numeric argument", but it means the API must validate numbers **before** calling
-> (which it does, in chapter 12). Otherwise a bad pot would crash with a 500 error instead of a
+> (which it does, in chapter 13). Otherwise a bad pot would crash with a 500 error instead of a
 > friendly 400.
 
 ---
 
-## Step 9.3 — `calculate_break_even_fold_equity`
+## Step 10.3 — `calculate_break_even_fold_equity`
 
 📄 **File:** `backend/src/ev.py` — *add to the end*
 
@@ -303,7 +331,7 @@ def calculate_break_even_fold_equity(
 
 ---
 
-## Step 9.4 — `is_profitable` and `evaluate_action`
+## Step 10.4 — `is_profitable` and `evaluate_action`
 
 📄 **File:** `backend/src/ev.py` — *add to the end*
 
@@ -366,13 +394,133 @@ At 35% it's barely profitable; at 5% it loses 42,044 per hand; at 50% it wins 25
 
 > ⚠️ **Pitfall: what the model leaves out.** This formula describes a single betting round:
 > the opponent can only fold or call, never re-raise; there are exactly two players; and the fold
-> probability `f` is a number **you guess**. It also uses the equity against a *random* hand (see the
-> chapter 7 pitfall), although the hands that call are usually stronger than random. Every model
-> simplifies; what matters is knowing **which** simplifications you made. Chapter 17 lists ideas to relax them.
+> probability `f` is a number **you guess**. Whether `e` is the equity against a random hand or against
+> a calling range is up to the **caller** (`ev.py` doesn't know or care); chapter 9 provides both. Every
+> model simplifies; what matters is knowing **which** simplifications you made. Chapter 18 lists ideas
+> to relax them.
 
 ---
 
-## Step 9.5 — The tests
+## Step 10.5 — `profitable_fold_zones`: scanning for +EV fold frequencies
+
+### Concept: passing a function as an argument
+
+`profitable_fold_zones` needs "the equity at fold frequency `f`", and that depends on the opponent
+model. Instead of knowing about models, it accepts a **function** `equity_at(f) -> equity` and simply
+calls it. The caller decides what that function does:
+
+```python
+equity_at = lambda f: 0.36                              # random model: same equity for every f
+equity_at = lambda f: model.equity("K-Q-3", f)         # range model: ask the CallingRangeModel
+```
+
+The type hint for "a function taking one float and returning a float" is `Callable[[float], float]`.
+The second lambda uses `model`, a variable from the place where the lambda was created. A function
+that remembers variables from its surroundings like this is called a **closure**. This keeps `ev.py`
+pure and independent: it never imports the calling-range module.
+
+📄 **File:** `backend/src/ev.py` — *add to the end*
+
+```python
+
+
+def profitable_fold_zones(
+    pot: float,
+    bet_size: float,
+    equity_at: Callable[[float], float],
+    steps: int = 100,
+) -> list[tuple[float, float]]:
+    """Scan opponent fold frequencies and return the intervals where raising is +EV.
+
+    When the opponent folds their weakest hands, a higher fold frequency also means
+    a stronger calling range, so EV is not monotonic in fold equity: a medium hand
+    can be profitable against loose callers, lose in the middle, and become
+    profitable again once folds alone pay for the bet.
+
+    Args:
+        pot: Current pot (must be > 0).
+        bet_size: Hero bet amount (must be > 0).
+        equity_at: Maps a fold frequency in [0.0, 1.0] to Hero's equity when called.
+        steps: Number of grid intervals over [0.0, 1.0]; resolution is 1 / steps.
+
+    Returns:
+        Sorted, non-overlapping (start, end) fold-frequency intervals on the grid
+        where EV > 0. Empty if raising is never profitable.
+
+    Raises:
+        ValueError: If steps < 1 or pot/bet_size violate calculate_ev bounds.
+    """
+    if steps < 1:
+        raise ValueError(f"Steps must be at least 1, got {steps}.")
+
+    zones: list[tuple[float, float]] = []
+    start: float | None = None
+    last = 0.0
+    for i in range(steps + 1):
+        f = i / steps
+        if is_profitable(calculate_ev(pot, bet_size, f, equity_at(f))):
+            if start is None:
+                start = f
+            last = f
+        elif start is not None:
+            zones.append((start, last))
+            start = None
+    if start is not None:
+        zones.append((start, last))
+    return zones
+
+```
+
+**How it works**
+
+- **The grid:** `steps = 100` means 101 points `f = 0/100, 1/100, …, 100/100`. Using `i / steps` instead of
+  adding 0.01 repeatedly avoids accumulating floating-point error (0.1 + 0.2 ≠ 0.3 in binary!).
+- **Building intervals** with a tiny "state machine". `start` is `None` while we're outside a profitable
+  run:
+  - profitable point and `start is None` → a zone **opens** at `f`;
+  - profitable point → remember it as the zone's `last` point so far;
+  - unprofitable point while a zone is open → the zone **closes** at `last`;
+  - after the loop, a zone still open (it reaches `f = 1.0`) is closed too.
+- For `K-Q-3` (`P = B = 100k`, range model) the scan gives `[(0.0, 0.08), (0.51, 1.0)]`: exactly the two
+  zones from the table above.
+- The function reuses `calculate_ev` and `is_profitable`. No new maths, just a loop around existing
+  functions.
+- Note the blank line at the end of the chunk: the original file ends with an empty line.
+
+> ⚠️ **Pitfall: grid resolution.** The answer is only as precise as the grid. A pure bluff with `P = B`
+> becomes profitable for any `f > 0.5`, but the first grid point strictly above 0.5 is **0.51**, so the zone
+> is reported as starting at 0.51. That's fine for a UI bar, but don't present it as an exact
+> break-even. (For the random model, `calculate_break_even_fold_equity` gives the exact value.)
+
+🧪 **Mini-check**
+
+```bash
+python -c "
+from src.calling_range import CallingRangeModel
+from src.ev import profitable_fold_zones
+m = CallingRangeModel()
+print(profitable_fold_zones(100000, 100000, lambda f: 0.0))
+print(profitable_fold_zones(100000, 100000, lambda f: 1.0))
+print(profitable_fold_zones(100000, 100000, lambda f: m.equity('K-Q-3', f)))
+print(profitable_fold_zones(100000, 100000, lambda f: 0.36))
+"
+```
+
+Expected output:
+
+```
+[(0.51, 1.0)]
+[(0.0, 1.0)]
+[(0.0, 0.08), (0.51, 1.0)]
+[(0.0, 1.0)]
+```
+
+Read the last two lines together: the **same hand** is profitable at every fold frequency under the
+random model (equity fixed at 0.36), but has a big losing gap from 9% to 50% under the range model.
+
+---
+
+## Step 10.6 — The tests
 
 📄 **File:** `backend/tests/test_ev.py` — *create this file*
 
@@ -392,11 +540,13 @@ Verifies:
 
 import pytest
 
+from src.calling_range import CallingRangeModel
 from src.ev import (
     calculate_break_even_fold_equity,
     calculate_ev,
     evaluate_action,
     is_profitable,
+    profitable_fold_zones,
 )
 
 
@@ -520,6 +670,52 @@ into `calculate_ev`, and expect ≈ 0. (It's −1.0 VND because `f` was rounded 
         assert res.ev > 0.0
 ```
 
+Finally, tests for `profitable_fold_zones`, in their own test class:
+
+📄 **File:** `backend/tests/test_ev.py` — *add to the end*
+
+```python
+
+
+class TestProfitableFoldZones:
+    """Test suite for scanning fold frequencies where raising is +EV."""
+
+    def test_pure_bluff_starts_above_closed_form_threshold(self) -> None:
+        """Air needs f > B / (P + B) = 50%; the first grid point strictly above is 51%."""
+        zones = profitable_fold_zones(pot=100000.0, bet_size=100000.0, equity_at=lambda f: 0.0)
+        assert zones == [(0.51, 1.0)]
+
+    def test_nuts_profitable_everywhere(self) -> None:
+        zones = profitable_fold_zones(pot=100000.0, bet_size=100000.0, equity_at=lambda f: 1.0)
+        assert zones == [(0.0, 1.0)]
+
+    def test_medium_hand_has_two_zones_against_calling_range(self) -> None:
+        """K-Q-3 wins against loose callers and as a bluff, but loses in between."""
+        model = CallingRangeModel()
+        zones = profitable_fold_zones(
+            pot=100000.0,
+            bet_size=100000.0,
+            equity_at=lambda f: model.equity("K-Q-3", f),
+        )
+        assert len(zones) == 2
+        assert zones[0][0] == 0.0
+        assert zones[1] == (0.51, 1.0)
+
+    def test_invalid_steps(self) -> None:
+        with pytest.raises(ValueError):
+            profitable_fold_zones(pot=100.0, bet_size=50.0, equity_at=lambda f: 0.5, steps=0)
+```
+
+**How it works**
+
+- The first two tests use **constant** equity functions (`lambda f: 0.0` is "pure air", `lambda f: 1.0`
+  is "the nuts"), so the expected zones can be worked out by hand: a bluff needs `f > 50%` (first grid
+  point 0.51); the nuts are always profitable.
+- The third test plugs in the real `CallingRangeModel`: a small **integration test** between chapter 9
+  and this chapter. It checks the *shape* (two zones, the first starting at 0, the second at 0.51) rather
+  than every number.
+- This file now imports `CallingRangeModel`, which is why chapter 9 had to come before this one.
+
 ---
 
 ## ✅ Checkpoint
@@ -528,21 +724,21 @@ into `calculate_ev`, and expect ≈ 0. (It's −1.0 VND because `f` was rounded 
 python -m pytest tests/test_ev.py -v
 ```
 
-Expected: **9 passed**. Then the whole suite:
+Expected: **13 passed** (9 in `TestEVEngine`, 4 in `TestProfitableFoldZones`). Then the whole suite:
 
 ```bash
 python -m pytest -q
 ```
 
 ```
-...........................................                              [100%]
-43 passed in 3.70s
+........................................................                 [100%]
+56 passed in 2.20s
 ```
 
 Commit:
 
 ```bash
-git add . && git commit -m "feat: EV engine with break-even fold equity"
+git add . && git commit -m "feat: EV engine with break-even fold equity and profit zones"
 ```
 
 ## Recap
@@ -550,7 +746,10 @@ git add . && git commit -m "feat: EV engine with break-even fold equity"
 - `EV = f·P + (1 − f)·[e·(P + 2B) − B]`, derived from a three-outcome tree (fold / call-win / call-lose).
 - **Raise iff EV > 0.** Break-even fold equity is `−S / (P − S)`, which for a pure bluff is `B / (P + B)`.
 - Junk hands depend on fold equity; monster hands prefer being called (their EV falls as `f` rises).
-- `ev.py` is pure: guard clauses, three lines of maths, rounding, and a facade (`evaluate_action`) that returns an `EVResult`.
-- Pitfalls: model limits (one street, no re-raise, guessed `f`, random-hand equity); a little dead code and repetition.
+- Under the range model, equity falls as `f` rises, so EV can be **non-monotonic**: `profitable_fold_zones`
+  scans a 1% grid and returns every +EV interval (e.g. `K-Q-3`: 0–8% and 51–100%).
+- `ev.py` stays pure: it receives equity as a number or as a function (`Callable`), never a model object.
+- Pitfalls: model limits (one street, no re-raise, guessed `f`); grid resolution (0.51 instead of exactly
+  0.5); a little dead code and repetition.
 
-**Next:** [10 — The range finder](11-range-finder.md)
+**Next:** [11 — The range finder](11-range-finder.md)

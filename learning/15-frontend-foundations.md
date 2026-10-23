@@ -1,11 +1,11 @@
-# 14 — Frontend Foundations
+# 15 — Frontend Foundations
 
 > **Goal:** set up a React project with Vite, learn the handful of React ideas the dashboard uses, and
 > make a first page that talks to the Flask API.
 > **You will build:** `frontend/package.json`, `frontend/vite.config.js`, `frontend/index.html`,
 > `frontend/.oxlintrc.json`, `frontend/.gitignore`, `frontend/src/main.jsx` (+ a temporary `App.jsx`).
 > **Time:** ~2 hours.
-> **Prerequisites:** [12](13-flask-api.md). **Node.js 20.19+ or 22.12+** installed (`node --version`).
+> **Prerequisites:** [13](13-flask-api.md). **Node.js 20.19+ or 22.12+** installed (`node --version`).
 
 ---
 
@@ -23,7 +23,7 @@ answers.
   └─────────────────────────────────────────────────────┼─────────────┘
                                                         │ HTTP + JSON
                                                         ▼
-                                  Flask (http://127.0.0.1:5000)  ← chapter 12
+                                  Flask (http://127.0.0.1:5000)  ← chapter 13
 ```
 
 The tools:
@@ -138,7 +138,7 @@ await fetch(url, {
 
 ---
 
-## Step 14.1 — Create the Vite project
+## Step 15.1 — Create the Vite project
 
 From the **project root** (`lieng-stealer/`, next to `backend/`):
 
@@ -158,7 +158,7 @@ or ignore them.
 
 ---
 
-## Step 14.2 — `package.json`: the project manifest
+## Step 15.2 — `package.json`: the project manifest
 
 Replace the generated file so your versions match the original project:
 
@@ -213,7 +213,7 @@ This creates `node_modules/` (thousands of files, never committed) and `package-
 
 ---
 
-## Step 14.3 — Vite configuration
+## Step 15.3 — Vite configuration
 
 📄 **File:** `frontend/vite.config.js` — *create this file*
 
@@ -242,14 +242,14 @@ export default defineConfig({
   (port 5173) is forwarded to Flask on port 5000. To the browser it looks like one origin, so **CORS isn't
   involved at all**.
 
-> ⚠️ **Pitfall: configured but unused.** The app (chapter 15) calls the API with an **absolute** URL,
+> ⚠️ **Pitfall: configured but unused.** The app (chapter 16) calls the API with an **absolute** URL,
 > `http://127.0.0.1:5000/api/solve`, so requests go straight to Flask and the proxy is never used (CORS
 > handles it instead). There are two mechanisms for one job, and only one is active. To use the proxy,
 > the app would call relative URLs (`fetch("/api/solve")`), so set the base URL to `""` in development.
 
 ---
 
-## Step 14.4 — Linter configuration
+## Step 15.4 — Linter configuration
 
 📄 **File:** `frontend/.oxlintrc.json` — *create this file*
 
@@ -273,7 +273,7 @@ Run it any time with `npm run lint`.
 
 ---
 
-## Step 14.5 — The HTML page and the entry point
+## Step 15.5 — The HTML page and the entry point
 
 📄 **File:** `frontend/index.html` — *create this file*
 
@@ -330,7 +330,7 @@ createRoot(document.getElementById('root')).render(
 
 ---
 
-## Step 14.6 — The frontend `.gitignore`
+## Step 15.6 — The frontend `.gitignore`
 
 📄 **File:** `frontend/.gitignore` — *create this file*
 
@@ -362,18 +362,18 @@ dist-ssr
 ```
 
 This is Vite's standard file (probably identical to what was generated). `dist` is the production build
-output (chapter 16), and `*.local` covers files like `.env.local`, where you'd keep private settings.
+output (chapter 17), and `*.local` covers files like `.env.local`, where you'd keep private settings.
 
 ---
 
-## Step 14.7 — A first page that talks to the API (temporary)
+## Step 15.7 — A first page that talks to the API (temporary)
 
 Before building the real dashboard, prove the whole chain works: browser → React → fetch → Flask →
 JSON → screen. Replace the generated `src/App.jsx` with this **temporary** version (no 📄 label;
-chapter 15 replaces it):
+chapter 16 replaces it):
 
 ```jsx
-// frontend/src/App.jsx  (temporary — replaced in chapter 15)
+// frontend/src/App.jsx  (temporary — replaced in chapter 16)
 import { useState, useEffect } from 'react';
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
@@ -399,12 +399,12 @@ export default function App() {
 
 - **`import.meta.env.VITE_API_URL`**: Vite exposes environment variables whose names start with
   `VITE_` to the browser code. If it isn't set, we fall back to the local Flask address. In production
-  (chapter 16) you set it to the deployed API's URL.
+  (chapter 17) you set it to the deployed API's URL.
 - `.then(...)` is the older way of writing `await`: "when the Promise resolves, do this".
 - The component has three states: error, loading (`health` still `null`), and loaded.
 
 If your starter `src/index.css` or `src/App.css` contains demo styles, you can empty them for now.
-Chapter 15 rewrites both.
+Chapter 16 rewrites both.
 
 ---
 
@@ -463,4 +463,4 @@ Check that `git status` doesn't list `frontend/node_modules`.
 - `fetch` + `async`/`await` call the API; `import.meta.env.VITE_API_URL` configures where it lives.
 - `StrictMode` runs effects twice in development; the Vite proxy is configured but unused by the app.
 
-**Next:** [15 — Building the UI](16-building-the-ui.md)
+**Next:** [16 — Building the UI](16-building-the-ui.md)

@@ -67,6 +67,7 @@ Exception                      (built into Python)
 └── LiengError                 "something went wrong in our engine"
     ├── InvalidCardError       bad card text, e.g. "11h"
     ├── InvalidHandSizeError   not exactly 3 different cards
+    ├── InvalidGameParamsError bad pot / bet / fold equity / opponent model   (chapter 13)
     └── DatabaseError          problem with winrates.json   (chapter 8)
         └── DatabaseNotLoadedError   asked a question before loading the data
 ```
@@ -92,6 +93,11 @@ class InvalidHandSizeError(LiengError):
     pass
 
 
+class InvalidGameParamsError(LiengError):
+    """Raised when pot, bet size, fold equity, or opponent model are invalid."""
+    pass
+
+
 class DatabaseError(LiengError):
     """Base error for precomputed database operations."""
     pass
@@ -108,9 +114,10 @@ class DatabaseNotLoadedError(DatabaseError):
   `except LiengError:` catches it.
 - The class bodies are empty except for a docstring. The `pass` lines are not needed (a docstring
   is already a valid body), but they do no harm.
-- Why so many classes with no code? The **type** is the information. In chapter 12 the web API does
+- Why so many classes with no code? The **type** is the information. In chapter 13 the web API does
   `except LiengError as err: return 400 Bad Request`: one line catches every "the user typed something
-  wrong" error.
+  wrong" error. It also registers a Flask *error handler* for `InvalidGameParamsError`, so any bad
+  pot/bet/fold value raised anywhere in a request automatically becomes a 400 response.
 
 🧪 **Mini-check** (from `backend/`, venv active)
 

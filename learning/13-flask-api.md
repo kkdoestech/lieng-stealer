@@ -1,10 +1,11 @@
-# 12 — The Flask Web API
+# 13 — The Flask Web API
 
 > **Goal:** put the engine behind a web API, so a web page (or any program) can send a game situation as
-> JSON and get the decision back as JSON.
-> **You will build:** `backend/app.py` (6 endpoints) and `backend/tests/test_api.py` (6 tests).
-> **Time:** ~2.5 hours.
-> **Prerequisites:** [11](12-cli.md). Flask is already installed (chapter 2).
+> JSON and get the decision back as JSON, with either opponent model.
+> **You will build:** `backend/app.py` (6 endpoints + shared helpers) and `backend/tests/test_api.py`
+> (11 tests).
+> **Time:** ~3 hours.
+> **Prerequisites:** [12](12-cli.md). Flask is already installed (chapter 2).
 
 ---
 
@@ -14,26 +15,33 @@ The CLI works for someone sitting at the terminal. A browser can't run Python, b
 requests. So we wrap the same engine in a small web server:
 
 ```
- Browser (React, ch 14–15)                         Flask server: backend/app.py  (port 5000)
+ Browser (React, ch 15–16)                         Flask server: backend/app.py  (port 5000)
  ─────────────────────────                         ─────────────────────────────────────────
  fetch("POST /api/solve",                    ┌──►  @app.route("/api/solve")
-       {"pot":100000, "bet_size":50000,      │       1. read JSON body
-        "fold_equity":0.35,                  │       2. validate numbers  ──► 400 if bad
-        "hand":"As Kh Qd"})  ────────────────┘       3. Hand.from_str     ──► 400 if bad hand
-                                                     4. WinRateDB + ev.py + RangeFinder   (engine, unchanged)
- ◄──────────────── 200 OK  {"summary": {...},        5. jsonify(result)
+       {"pot":100000, "bet_size":50000,      │       1. _parse_game_params(body)  ──► 400 if bad (error handler)
+        "fold_equity":0.35,                  │       2. Hand.from_str             ──► 400 if bad hand
+        "hand":"As Kh Qd",                   │       3. _evaluate_hand: EV + profitable fold zones
+        "opponent_model":"range"}) ──────────┘       4. RangeFinder.solve_range + _category_breakdown
+                                                     5. jsonify(result)
+ ◄──────────────── 200 OK  {"summary": {...},
                             "hand_evaluation": {...},
                             "top_hands": [...]}
+
+ created once at start-up:  WinRateDB (chapter 8) ─┐
+                            CallingRangeModel (ch 9)┴─► RangeFinder (chapter 11)
 ```
 
 | Method & path | Purpose |
 |---|---|
-| `GET /` | service info |
+| `GET /` | service info and the list of endpoints |
 | `GET /health` | is the database loaded? |
 | `POST /api/solve` | full range + optional single-hand decision (what the web page uses) |
 | `POST /api/evaluate` | single-hand decision only |
 | `POST /api/range` | range summary only |
 | `POST /api/analyze` | strategy commentary in Vietnamese, from an LLM (or a built-in fallback) |
+
+Every solver endpoint accepts an optional `"opponent_model"`: `"random"` (the **default**, so older
+clients keep working) or `"range"` (chapter 9).
 
 ---
 
@@ -79,6 +87,27 @@ def hello():
 - `request` is a special object holding the **current** request (Flask makes it work per request).
 - Returning `(body, status_code)` sets the status. Returning just a body means 200.
 
+### Error handlers: turning exceptions into responses
+
+Instead of writing `try/except` in every route, Flask lets you register **one** function for an
+exception type:
+
+```python
+@app.errorhandler(InvalidGameParamsError)
+def handle_invalid_params(err):
+    return jsonify({"error": str(err)}), 400
+```
+
+Now **any** code running during a request (a route, or a helper the route calls) can simply
+`raise InvalidGameParamsError("...")`, and Flask converts it into a `400` JSON response. Validation code
+gets short: no error-return plumbing.
+
+### A parameter object
+
+Four values travel together through every solver endpoint: pot, bet size, fold equity, opponent model.
+Instead of passing four loose variables around, the code bundles them in a small frozen dataclass,
+`GameParams`. This is called a **parameter object**: one validated value that can be passed to helpers.
+
 ### CORS: why the browser needs permission
 
 Our page will be served from `http://localhost:5173` (Vite) and the API from `http://localhost:5000`.
@@ -105,7 +134,7 @@ export OPENROUTER_API_KEY="sk-or-..."   # set it in your shell (Windows PowerShe
 
 ---
 
-## Step 12.1 — Docstring and imports
+## Step 13.1 — Docstring and imports
 
 📄 **File:** `backend/app.py` — *create this file*
 
@@ -119,27 +148,30 @@ and AI-powered strategic commentary via OpenRouter LLM.
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Sequence
 
 import requests
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
+from src.calling_range import CallingRangeModel, OpponentModel
 from src.db import WinRateDB
-from src.evaluator import Hand
-from src.exceptions import LiengError
-from src.ev import calculate_break_even_fold_equity, evaluate_action
+from src.evaluator import Hand, HandCategory
+from src.exceptions import InvalidGameParamsError, LiengError
+from src.ev import EVResult, calculate_break_even_fold_equity, evaluate_action, profitable_fold_zones
 from src.hands import to_canonical
-from src.range_finder import RangeFinder
+from src.range_finder import HandEVRecord, RangeFinder
 ```
 
 Note the location: `backend/app.py`, **next to** `src/`, not inside it. Run from `backend/`, the import
-`from src.db import WinRateDB` works exactly as in the tests.
+`from src.db import WinRateDB` works exactly as in the tests. The imports read like a table of contents:
+almost every module from chapters 4–11 is used here.
 
 ---
 
-## Step 12.2 — Create the app, enable CORS, load the database
+## Step 13.2 — Create the app, enable CORS, build the engine
 
 📄 **File:** `backend/app.py` — *add to the end*
 
@@ -149,12 +181,13 @@ app = Flask(__name__)
 # Explicitly enable CORS for all origins on /api/*, /, and /health
 CORS(app, resources={r"/api/*": {"origins": "*"}, r"/": {"origins": "*"}, r"/health": {"origins": "*"}})
 
-# Initialize WinRateDB at startup
+# Initialize WinRateDB and the calling-range model at startup
 DB_PATH = Path(__file__).resolve().parent / "data" / "winrates.json"
 win_rate_db = WinRateDB()
 if DB_PATH.is_file():
     win_rate_db.load(DB_PATH)
-range_finder = RangeFinder(win_rate_db)
+calling_model = CallingRangeModel()
+range_finder = RangeFinder(win_rate_db, calling_model)
 ```
 
 **How it works**
@@ -165,19 +198,21 @@ range_finder = RangeFinder(win_rate_db)
 - **Absolute path:** `Path(__file__).resolve().parent` is the folder containing `app.py`, so `DB_PATH`
   is correct no matter which folder the server is started from. (This is the explicit style suggested in
   chapter 8's pitfall.)
-- The database is loaded **once, when the module is imported**, and shared by all requests. Loading per
-  request would read an 83 KB file every time.
+- The engine is built **once, when the module is imported**, and shared by all requests: the database
+  (~2 ms), the calling-range tables (~60 ms, chapter 9) and the range finder, which receives both
+  (**dependency injection**). Building them per request would redo that work every time.
 
-> ⚠️ **Pitfall: module-level state.** `win_rate_db` and `range_finder` are global variables created at
-> import time, which `AGENTS.md` forbids ("no global mutable state"). If the file is missing,
-> `RangeFinder(...)` silently tries `load()` with the default path (chapter 10 pitfall) and the import
-> itself crashes. Flask's recommended alternative is an **application factory**:
+> ⚠️ **Pitfall: module-level state.** `win_rate_db`, `calling_model` and `range_finder` are global
+> variables created at import time, which `AGENTS.md` forbids ("no global mutable state"). Importing
+> `app` now takes ~0.25 s, and if the data file is missing, `RangeFinder(...)` silently tries `load()`
+> with the default path (chapter 11 pitfall) and the import itself crashes. Flask's recommended
+> alternative is an **application factory**:
 >
 > ```python
 > def create_app(db_path: Path) -> Flask:
 >     app = Flask(__name__)
->     db = WinRateDB(db_path)          # fails loudly if missing
->     finder = RangeFinder(db)
+>     db = WinRateDB(db_path)                         # fails loudly if missing
+>     finder = RangeFinder(db, CallingRangeModel())
 >     # ... register routes that use db/finder (via closures or app.extensions) ...
 >     return app
 > ```
@@ -186,7 +221,183 @@ range_finder = RangeFinder(win_rate_db)
 
 ---
 
-## Step 12.3 — The two simplest endpoints
+## Step 13.3 — `GameParams` and `_parse_game_params`: validate once
+
+📄 **File:** `backend/app.py` — *add to the end*
+
+```python
+
+
+@dataclass(frozen=True)
+class GameParams:
+    """Validated game-state parameters shared by the solver endpoints."""
+    pot: float
+    bet_size: float
+    fold_equity: float
+    opponent_model: OpponentModel
+
+
+def _parse_game_params(data: dict[str, Any]) -> GameParams:
+    """Parse and validate pot, bet size, fold equity, and opponent model from a request body.
+
+    Raises:
+        InvalidGameParamsError: If any parameter is missing a valid value or out of bounds.
+    """
+    try:
+        pot = float(data.get("pot", 100000.0))
+        bet_size = float(data.get("bet_size", data.get("bet", 50000.0)))
+        fold_equity = float(data.get("fold_equity", 0.35))
+    except (ValueError, TypeError) as err:
+        raise InvalidGameParamsError("Invalid numerical parameters for pot, bet_size, or fold_equity.") from err
+
+    if pot <= 0 or bet_size <= 0:
+        raise InvalidGameParamsError("Pot and bet_size must be strictly greater than zero.")
+    if not (0.0 <= fold_equity <= 1.0):
+        raise InvalidGameParamsError("Fold equity must be between 0.0 and 1.0.")
+
+    try:
+        opponent_model = OpponentModel(data.get("opponent_model", OpponentModel.RANDOM.value))
+    except ValueError as err:
+        choices = ", ".join(m.value for m in OpponentModel)
+        raise InvalidGameParamsError(f"opponent_model must be one of: {choices}.") from err
+
+    return GameParams(pot, bet_size, fold_equity, opponent_model)
+```
+
+**How it works**
+
+- **Never trust input from the network.** A client might send `"pot": "abc"` (→ `ValueError` in
+  `float`), `"pot": null` (→ `TypeError`), `-100`, or `"opponent_model": "psychic"`. Each case raises
+  `InvalidGameParamsError` (chapter 4) with a message that tells the client what to fix.
+- `data.get("bet_size", data.get("bet", 50000.0))` accepts **either** name (`bet_size` or `bet`), then
+  falls back to a default. Missing fields get the chapter 1 example values.
+- `OpponentModel(text)` turns the string into the enum, or raises `ValueError` for unknown text
+  (chapter 9). The error message lists the valid choices, built from the enum itself, so adding a third
+  model would update the message automatically.
+- `raise … from err` keeps the original error attached for debugging (chapter 3).
+- The result is one frozen `GameParams` object: validated once, then passed around safely.
+
+> ✅ **How the code fixed this (before → after).** The first version of this API copy-pasted the same
+> ~12 lines of "parse three numbers, check their ranges, return a 400" into **three** endpoints, and the
+> copies had already drifted apart (`/api/solve` accepted only `bet_size`; the others also accepted
+> `bet`; the error messages differed). Now there is **one** function, used by all three endpoints, and a
+> new parameter (`opponent_model`) only had to be added in one place. **Lesson:** when you see the same
+> block three times, extract it before the copies diverge.
+
+---
+
+## Step 13.4 — The error handler
+
+📄 **File:** `backend/app.py` — *add to the end*
+
+```python
+
+
+@app.errorhandler(InvalidGameParamsError)
+def handle_invalid_params(err: InvalidGameParamsError) -> Any:
+    """Render invalid game parameters as a 400 JSON error."""
+    return jsonify({"error": str(err)}), 400
+```
+
+This is the "Error handlers" concept above. Because of it, the endpoints just call
+`params = _parse_game_params(data)`: if the input is bad, the exception travels up out of the route and
+Flask answers `400 {"error": "..."}` by itself.
+
+---
+
+## Step 13.5 — `_equity_function` and `_evaluate_hand`: one hand, either model
+
+📄 **File:** `backend/app.py` — *add to the end*
+
+```python
+
+
+def _equity_function(canonical_id: str, random_equity: float, model: OpponentModel) -> Callable[[float], float]:
+    """Map a fold frequency to Hero's equity when called, under the chosen opponent model."""
+    if model is OpponentModel.RANGE:
+        return lambda f: calling_model.equity(canonical_id, f)
+    return lambda f: random_equity
+
+
+def _evaluate_hand(
+    canonical_id: str,
+    random_equity: float,
+    params: GameParams,
+) -> tuple[EVResult, list[tuple[float, float]], float]:
+    """Return the EV result, profitable fold-frequency zones, and break-even fold equity."""
+    equity_at = _equity_function(canonical_id, random_equity, params.opponent_model)
+    ev_res = evaluate_action(params.pot, params.bet_size, params.fold_equity, equity_at(params.fold_equity))
+    zones = profitable_fold_zones(params.pot, params.bet_size, equity_at)
+    if params.opponent_model is OpponentModel.RANGE:
+        # EV is not monotonic in fold equity here; report where raising stays +EV for good
+        break_even = zones[-1][0] if zones else 1.0
+    else:
+        break_even = ev_res.break_even_fold_equity
+    return ev_res, zones, break_even
+```
+
+**How it works**
+
+- **`_equity_function` returns a function** (a closure, chapter 10): "given a fold frequency, what is
+  this hand's equity when called?" For the range model it asks `calling_model`; for the random model it
+  ignores `f` and always returns the same number. Everything downstream works with either.
+- `_evaluate_hand` uses that one function **twice**:
+  1. at the current fold frequency, `equity_at(params.fold_equity)` → `evaluate_action` (chapter 10) →
+     EV and decision;
+  2. on the whole 0–100% grid → `profitable_fold_zones` → the zones for the UI's profit map.
+- **Break-even depends on the model:**
+  - random model: the exact closed-form value from `calculate_break_even_fold_equity`;
+  - range model: EV isn't monotonic, so there is no single break-even. The code reports where raising
+    becomes profitable **for good**: the start of the **last** zone (`zones[-1][0]`), or 1.0 if raising
+    is never profitable.
+- It returns a **tuple of three** values; callers unpack them (`ev_res, zones, break_even = ...`).
+
+> ⚠️ **Pitfall: one field, two meanings.** `break_even_fold_equity` in the responses means "the exact
+> fold frequency where EV = 0" under the random model, but "the grid point from which raising stays +EV"
+> under the range model (e.g. 0.51 for `K-Q-3`, although it is *also* profitable from 0 to 8%). A client
+> that doesn't check `opponent_model` can misread it. Clearer API design: a separate field name for each
+> meaning, or only the zones.
+
+---
+
+## Step 13.6 — `_category_breakdown`: per-category numbers for the UI
+
+📄 **File:** `backend/app.py` — *add to the end*
+
+```python
+
+
+def _category_breakdown(records: Sequence[HandEVRecord]) -> list[dict[str, Any]]:
+    """Summarize classes, combos, and profitable combos per hand category (strongest first)."""
+    breakdown = []
+    for category in sorted(HandCategory, reverse=True):
+        members = [r for r in records if r.category is category]
+        breakdown.append({
+            "category": category.name,
+            "classes": len(members),
+            "combos": sum(r.multiplicity for r in members),
+            "profitable_combos": sum(r.multiplicity for r in members if r.is_raise_profitable),
+        })
+    return breakdown
+```
+
+**How it works**
+
+- `sorted(HandCategory, reverse=True)` → `SAP, LIENG, DI, DIEM` (an `IntEnum` sorts by value, 4 → 1).
+- For each category: count its classes, sum its multiplicities (all combos), and sum the multiplicities
+  of the profitable ones. These totals are **computed from the data**: 52 / 768 / **144** / **21,136**,
+  never typed by hand.
+
+> ✅ **How the code fixed this (before → after).** The first version of the API sent only the *total*
+> number of profitable combos, and the web page **guessed** the per-category split, with wrong hard-coded
+> totals (288 for Đĩ instead of 144, 20,992 for Điểm instead of 21,136, copied from a wrong line in
+> `DESIGN.md`). Now the backend, which has the exact data, sends `category_breakdown`, and the frontend
+> just displays it (chapter 16). `DESIGN.md` and `README.md` were corrected too. **Lesson:** compute a fact
+> in the one place that has the data; don't re-derive it elsewhere.
+
+---
+
+## Step 13.7 — The two simplest endpoints
 
 📄 **File:** `backend/app.py` — *add to the end*
 
@@ -199,7 +410,7 @@ def root() -> Any:
     return jsonify({
         "service": "Lieng Stealer API",
         "status": "online",
-        "endpoints": ["/health", "/api/solve", "/api/analyze"],
+        "endpoints": ["/health", "/api/solve", "/api/evaluate", "/api/range", "/api/analyze"],
     }), 200
 
 
@@ -220,8 +431,9 @@ def health_check() -> Any:
 - A **health check** is a standard endpoint that hosting platforms call every few seconds to see if the
   service is alive. Reporting `classes_loaded: 455` also proves the data file was found.
 
-> 💡 The root endpoint lists only 3 of the 6 endpoints (`/api/evaluate` and `/api/range` are missing).
-> Hand-maintained lists drift. Flask can list routes for you: `[r.rule for r in app.url_map.iter_rules()]`.
+> ✅ **How the code fixed this.** The root endpoint used to list only 3 of the 5 API endpoints
+> (`/api/evaluate` and `/api/range` were missing). The list is complete now. It's still typed by hand,
+> though; Flask can generate it: `[r.rule for r in app.url_map.iter_rules()]`, which can never drift.
 
 🧪 **Mini-check.** Start the server (from `backend/`, venv active):
 
@@ -233,24 +445,26 @@ flask --app app run
 with `Running on http://127.0.0.1:5000`. Leave it running and open a **second terminal**:
 
 ```bash
+curl -s http://127.0.0.1:5000/
 curl -s http://127.0.0.1:5000/health
 ```
 
 Expected output:
 
 ```json
+{"endpoints":["/health","/api/solve","/api/evaluate","/api/range","/api/analyze"],"service":"Lieng Stealer API","status":"online"}
 {"classes_loaded":455,"database_loaded":true,"status":"healthy","version":"1.0.0"}
 ```
 
 Stop the server with Ctrl-C. After editing `app.py`, restart it to load your changes (or start it with
 `flask --app app run --debug`, which reloads automatically. Only ever use `--debug` on your own
-machine). In Step 12.10 we'll also make `python app.py` start the server.
+machine). In Step 13.15 we'll also make `python app.py` start the server.
 
 ---
 
-## Step 12.4 — `/api/solve`, part 1: read and validate the numbers
+## Step 13.8 — `/api/solve`, part 1: parameters and the optional hand
 
-`/api/solve` is the endpoint the web page uses. It's long, so we build it in three slices.
+`/api/solve` is the endpoint the web page uses. We build it in two slices.
 
 📄 **File:** `backend/app.py` — *add to the end*
 
@@ -266,40 +480,11 @@ def solve_api() -> Any:
         bet_size (float): Hero raise / wager amount (> 0).
         fold_equity (float): Opponent fold probability in [0.0, 1.0].
         hand (str, optional): Player 3-card hand notation (e.g. 'As Kh Qd').
+        opponent_model (str, optional): 'random' (default) or 'range'.
     """
     data = request.get_json(silent=True) or {}
-
-    try:
-        pot = float(data.get("pot", 100000.0))
-        bet_size = float(data.get("bet_size", 50000.0))
-        fold_equity = float(data.get("fold_equity", 0.35))
-    except (ValueError, TypeError):
-        return jsonify({"error": "Invalid numerical parameters for pot, bet_size, or fold_equity."}), 400
-
-    if pot <= 0 or bet_size <= 0:
-        return jsonify({"error": "Pot and bet_size must be strictly greater than zero."}), 400
-    if not (0.0 <= fold_equity <= 1.0):
-        return jsonify({"error": "Fold equity must be between 0.0 and 1.0."}), 400
-```
-
-**How it works**
-
-- `request.get_json(silent=True)` parses the body as JSON. With `silent=True` it returns `None` instead
-  of raising if the body is missing or invalid; `or {}` then gives an empty dict, so missing fields fall
-  back to defaults.
-- **Never trust input from the network.** A client might send `"pot": "abc"` (→ `ValueError` in
-  `float`), `"pot": null` (→ `TypeError`), or `-100`. Each case gets a **400** with a message that tells
-  the client what to fix, instead of a crash (500).
-- These checks duplicate `calculate_ev`'s guard clauses on purpose: the API turns bad input into
-  *friendly* errors before the engine raises a `ValueError`.
-
----
-
-## Step 12.5 — `/api/solve`, part 2: the optional hand
-
-📄 **File:** `backend/app.py` — *add to the end*
-
-```python
+    params = _parse_game_params(data)
+    pot, bet_size, fold_equity = params.pot, params.bet_size, params.fold_equity
 
     hand_input = data.get("hand")
     hand_eval_result = None
@@ -308,43 +493,55 @@ def solve_api() -> Any:
         try:
             player_hand = Hand.from_str(hand_input.strip())
             stats = win_rate_db.get_by_cards(player_hand.cards)
-            ev_res = evaluate_action(pot, bet_size, fold_equity, stats.equity)
             canonical = to_canonical(player_hand.cards)
-            hand_eval_result = {
-                "hand": str(player_hand),
-                "score_name": str(player_hand.score),
-                "category": stats.category.name,
-                "category_name": stats.category.display_name,
-                "canonical_id": canonical.canonical_id,
-                "showdown_equity": stats.equity,
-                "ev": ev_res.ev,
-                "break_even_fold_equity": ev_res.break_even_fold_equity,
-                "is_profitable": ev_res.is_profitable,
-                "decision": "RAISE" if ev_res.is_profitable else "CHECK/FOLD",
-            }
         except LiengError as err:
             return jsonify({"error": f"Invalid hand: {err}"}), 400
+
+        ev_res, zones, break_even = _evaluate_hand(canonical.canonical_id, stats.equity, params)
+        hand_eval_result = {
+            "hand": str(player_hand),
+            "score_name": str(player_hand.score),
+            "category": stats.category.name,
+            "category_name": stats.category.display_name,
+            "canonical_id": canonical.canonical_id,
+            "showdown_equity": ev_res.win_rate_when_called,
+            "equity_vs_random": stats.equity,
+            "ev": ev_res.ev,
+            "break_even_fold_equity": break_even,
+            "profitable_fold_zones": [[start, end] for start, end in zones],
+            "is_profitable": ev_res.is_profitable,
+            "decision": "RAISE" if ev_res.is_profitable else "CHECK/FOLD",
+        }
 ```
 
 **How it works**
 
-- The hand is optional. We only evaluate it if it's a non-empty string.
-- The engine pipeline is the same four steps as the CLI (chapter 11): text → `Hand` → `HandStats` →
-  `EVResult`. Then we turn the objects into a plain dict, because JSON can't hold Python objects or enums:
-  `.name` gives `"LIENG"`, `str(...)` gives `"Liêng Q-K-A"`.
-- **`except LiengError`**: here the custom exception family pays off. Bad rank, bad suit, wrong number of
-  cards, duplicate cards: one line turns them all into a 400 with the engine's own message.
+- `request.get_json(silent=True)` parses the body as JSON. With `silent=True` it returns `None` instead
+  of raising if the body is missing or invalid; `or {}` then gives an empty dict, so every field falls
+  back to its default.
+- **One line of validation** (`_parse_game_params`), thanks to Steps 13.3–13.4. The tuple assignment
+  `pot, bet_size, fold_equity = …` copies three fields into short local names.
+- The hand is **optional**: we only evaluate it if it's a non-empty string.
+- **The `try` block is kept small**: only the three lines that can raise `LiengError` (parsing,
+  lookup, canonical ID) are inside it, so an unrelated bug in `_evaluate_hand` can't be mis-reported as
+  "Invalid hand". `except LiengError` turns a bad rank, bad suit, wrong card count or duplicate card into a
+  400 with the engine's own message.
+- The response dict converts objects to JSON-friendly values (`.name` → `"LIENG"`, `str(...)` →
+  `"Liêng Q-K-A"`). New fields compared with a random-only API:
+  - `showdown_equity`: the equity **actually used** (depends on the model);
+  - `equity_vs_random`: the random-hand equity, always included for comparison;
+  - `profitable_fold_zones`: the zones as a list of `[start, end]` pairs (JSON has no tuples).
 
 ---
 
-## Step 12.6 — `/api/solve`, part 3: the range and the response
+## Step 13.9 — `/api/solve`, part 2: the range and the response
 
 📄 **File:** `backend/app.py` — *add to the end*
 
 ```python
 
     # Solve full range
-    records = range_finder.solve_range(pot, bet_size, fold_equity)
+    records = range_finder.solve_range(pot, bet_size, fold_equity, params.opponent_model)
     profitable_records = [r for r in records if r.is_raise_profitable]
     coverage = range_finder.calculate_range_coverage(profitable_records)
     be_bluff = calculate_break_even_fold_equity(pot, bet_size, win_rate_when_called=0.0)
@@ -369,6 +566,7 @@ def solve_api() -> Any:
             "pot": pot,
             "bet_size": bet_size,
             "fold_equity": fold_equity,
+            "opponent_model": params.opponent_model.value,
             "final_pot": pot + 2.0 * bet_size,
             "pure_bluff_break_even_fold_equity": be_bluff,
             "total_canonical_classes": len(records),
@@ -380,6 +578,7 @@ def solve_api() -> Any:
             "highest_ev_value": records[0].ev if records else None,
             "threshold_hand": profitable_records[-1].canonical_id if profitable_records else None,
             "threshold_ev_value": profitable_records[-1].ev if profitable_records else None,
+            "category_breakdown": _category_breakdown(records),
         },
         "hand_evaluation": hand_eval_result,
         "top_hands": top_hands,
@@ -388,62 +587,78 @@ def solve_api() -> Any:
 
 **How it works**
 
-- Same calculations as `run_solver` in the CLI, but the result is **data** (a JSON document), not text.
-  The API doesn't decide how things look; the frontend does. That's the separation between backend and
-  frontend.
-- Only the **top 30** records are sent, to keep the response small. The summary carries the totals.
+- Same calculations as `run_solver` in the CLI, plus the opponent model, but the result is **data** (a
+  JSON document), not text. The API doesn't decide how things look; the frontend does. That's the
+  separation between backend and frontend.
+- Only the **top 30** records are sent, to keep the response small. The summary carries the totals, and
+  `category_breakdown` (Step 13.6) carries the per-category numbers.
 - `hand_evaluation` is `null` in JSON when no hand was sent.
+- `params.opponent_model.value` echoes back `"random"` or `"range"`, so the client can see which model
+  produced the numbers.
 
-> 💡 **A missed opportunity.** The response has totals but no **per-category** breakdown (how many Đĩ
-> combos are profitable, etc.). The frontend needs exactly that for its category table and, lacking it,
-> *guesses* (badly; see chapter 15). Adding `"categories": {...}` here, computed like the CLI's table,
-> would fix the frontend properly.
-
-🧪 **Mini-check** (restart the server first):
+🧪 **Mini-check** (restart the server first). A medium hand, pot-sized bet, range model:
 
 ```bash
 curl -s -X POST http://127.0.0.1:5000/api/solve \
   -H "Content-Type: application/json" \
-  -d '{"pot": 100000, "bet_size": 50000, "fold_equity": 0.35, "hand": "As Kh Qd"}'
+  -d '{"pot": 100000, "bet_size": 100000, "fold_equity": 0.35, "hand": "Ks Qh 3d", "opponent_model": "range"}'
 ```
 
 The response is long. The `hand_evaluation` part should be (Flask sorts keys alphabetically):
 
 ```json
 {
-  "break_even_fold_equity": 0.0,
-  "canonical_id": "Q-K-A",
-  "category": "LIENG",
-  "category_name": "Liêng",
-  "decision": "RAISE",
-  "ev": 132097.0,
-  "hand": "As Kh Qd",
-  "is_profitable": true,
-  "score_name": "Liêng Q-K-A",
-  "showdown_equity": 0.9969
+  "break_even_fold_equity": 0.51,
+  "canonical_id": "K-Q-3",
+  "category": "DIEM",
+  "category_name": "Điểm",
+  "decision": "CHECK/FOLD",
+  "equity_vs_random": 0.36,
+  "ev": -27894.0,
+  "hand": "Ks Qh 3d",
+  "is_profitable": false,
+  "profitable_fold_zones": [[0.0, 0.08], [0.51, 1.0]],
+  "score_name": "3 điểm",
+  "showdown_equity": 0.0108
 }
 ```
 
-and the summary should include `"range_coverage_percent": 100.0`, `"threshold_hand": "4-3-3"` and
-`"pure_bluff_break_even_fold_equity": 0.3333`. Now try a bad hand:
+Compare with chapter 9's worked example (0.0108) and chapter 10's zones. In `summary` you should find
+`"opponent_model": "range"`, `"range_coverage_percent": 54.57` and
+
+```json
+"category_breakdown": [
+  {"category": "SAP", "classes": 13, "combos": 52, "profitable_combos": 52},
+  {"category": "LIENG", "classes": 12, "combos": 768, "profitable_combos": 768},
+  {"category": "DI", "classes": 6, "combos": 144, "profitable_combos": 144},
+  {"category": "DIEM", "classes": 424, "combos": 21136, "profitable_combos": 11096}
+]
+```
+
+Repeat the request **without** `"opponent_model"` (so the random model): the decision flips to `RAISE`,
+`showdown_equity` equals `equity_vs_random` (0.36), and the zones become `[[0.0, 1.0]]`.
+
+Now try bad input:
 
 ```bash
 curl -s -i -X POST http://127.0.0.1:5000/api/solve -H "Content-Type: application/json" \
-  -d '{"pot": 100000, "bet_size": 50000, "hand": "Xx Kh Qd"}'
+  -d '{"pot": 100, "bet_size": 50, "opponent_model": "psychic"}'
 ```
 
 ```
 HTTP/1.1 400 BAD REQUEST
 ...
-{"error":"Invalid hand: Invalid rank 'X'. Must be 2-10, T, J, Q, K, or A."}
+{"error":"opponent_model must be one of: random, range."}
 ```
 
-(`-i` makes curl print the status line and headers too.) If you use Windows PowerShell, `curl` may be
-an alias for a different command; use `curl.exe`, or test with Python's `requests` instead.
+(`-i` makes curl print the status line and headers too.) A bad hand such as `"Xx Kh Qd"` gives
+`{"error":"Invalid hand: Invalid rank 'X'. Must be 2-10, T, J, Q, K, or A."}`. If you use Windows
+PowerShell, `curl` may be an alias for a different command; use `curl.exe`, or test with Python's
+`requests` instead.
 
 ---
 
-## Step 12.7 — `/api/evaluate`: one hand only
+## Step 13.10 — `/api/evaluate`: one hand only
 
 📄 **File:** `backend/app.py` — *add to the end*
 
@@ -454,17 +669,8 @@ an alias for a different command; use `curl.exe`, or test with Python's `request
 def evaluate_api() -> Any:
     """Evaluate a single 3-card hand against current game parameters."""
     data = request.get_json(silent=True) or {}
-    try:
-        pot = float(data.get("pot", 100000.0))
-        bet = float(data.get("bet", data.get("bet_size", 50000.0)))
-        fold_equity = float(data.get("fold_equity", 0.35))
-    except (ValueError, TypeError):
-        return jsonify({"error": "Invalid numerical parameters for pot, bet, or fold_equity."}), 400
-
-    if pot <= 0 or bet <= 0:
-        return jsonify({"error": "Pot and bet must be strictly greater than zero."}), 400
-    if not (0.0 <= fold_equity <= 1.0):
-        return jsonify({"error": "Fold equity must be between 0.0 and 1.0."}), 400
+    params = _parse_game_params(data)
+    pot, bet, fold_equity = params.pot, params.bet_size, params.fold_equity
 
     hand_input = data.get("hand")
     if not hand_input or not isinstance(hand_input, str) or not hand_input.strip():
@@ -473,59 +679,43 @@ def evaluate_api() -> Any:
     try:
         player_hand = Hand.from_str(hand_input.strip())
         stats = win_rate_db.get_by_cards(player_hand.cards)
-        ev_res = evaluate_action(pot, bet, fold_equity, stats.equity)
         canonical = to_canonical(player_hand.cards)
-        return jsonify({
-            "hand": str(player_hand),
-            "canonical_id": canonical.canonical_id,
-            "category": stats.category.name,
-            "pot": pot,
-            "bet": bet,
-            "fold_equity": fold_equity,
-            "showdown_equity": stats.equity,
-            "ev": ev_res.ev,
-            "break_even_fold_equity": ev_res.break_even_fold_equity,
-            "recommended_action": "RAISE" if ev_res.is_profitable else "CHECK/FOLD",
-            "is_profitable": ev_res.is_profitable,
-        }), 200
     except LiengError as err:
         return jsonify({"error": f"Invalid hand: {err}"}), 400
+
+    ev_res, _, break_even = _evaluate_hand(canonical.canonical_id, stats.equity, params)
+    return jsonify({
+        "hand": str(player_hand),
+        "canonical_id": canonical.canonical_id,
+        "category": stats.category.name,
+        "pot": pot,
+        "bet": bet,
+        "fold_equity": fold_equity,
+        "opponent_model": params.opponent_model.value,
+        "showdown_equity": ev_res.win_rate_when_called,
+        "equity_vs_random": stats.equity,
+        "ev": ev_res.ev,
+        "break_even_fold_equity": break_even,
+        "recommended_action": "RAISE" if ev_res.is_profitable else "CHECK/FOLD",
+        "is_profitable": ev_res.is_profitable,
+    }), 200
 ```
 
 **How it works**
 
 - Here `hand` is **required**: a missing hand is a 400, not "skip it".
-- `data.get("bet", data.get("bet_size", 50000.0))` accepts **either** name, `bet` or `bet_size`,
-  then falls back to the default.
+- The same helpers as `/api/solve`. `ev_res, _, break_even = …` unpacks the tuple; `_` is the
+  conventional name for a value we don't need (the zones aren't part of this response).
 
-> ⚠️ **Pitfall: copy-paste validation and inconsistent names.** The "parse three numbers and check
-> their ranges" block appears **three times** (solve, evaluate, range). Copies drift apart: `/api/solve`
-> only reads `bet_size`, the others accept `bet` too; the error messages differ; the response keys
-> differ (`decision` vs `recommended_action`, `equity` vs `showdown_equity`). **Better:** one helper
-> used by every endpoint:
->
-> ```python
-> def _parse_game_params(data: dict[str, Any]) -> tuple[float, float, float]:
->     """Return (pot, bet, fold_equity) or raise ValueError with a client-facing message."""
->     try:
->         pot = float(data.get("pot", 100000.0))
->         bet = float(data.get("bet", data.get("bet_size", 50000.0)))
->         fe = float(data.get("fold_equity", 0.35))
->     except (ValueError, TypeError):
->         raise ValueError("Invalid numerical parameters for pot, bet, or fold_equity.")
->     if pot <= 0 or bet <= 0:
->         raise ValueError("Pot and bet must be strictly greater than zero.")
->     if not 0.0 <= fe <= 1.0:
->         raise ValueError("Fold equity must be between 0.0 and 1.0.")
->     return pot, bet, fe
-> ```
->
-> Each endpoint then does `try: pot, bet, fe = _parse_game_params(data) except ValueError as err: return
-> jsonify({"error": str(err)}), 400`.
+> ⚠️ **Still inconsistent: response field names.** Validation is shared now, but the responses still
+> name things differently: `/api/solve` says `"bet_size"` and `"decision"`; `/api/evaluate` says `"bet"`
+> and `"recommended_action"`; `/api/range` calls equity `"showdown_equity"` where `/api/solve`'s
+> `top_hands` says `"equity"`. Clients must remember which endpoint uses which name. A shared
+> "serialise a record" helper (like `_parse_game_params` for input) would fix the output side.
 
 ---
 
-## Step 12.8 — `/api/range`: range only
+## Step 13.11 — `/api/range`: range only
 
 📄 **File:** `backend/app.py` — *add to the end*
 
@@ -536,19 +726,10 @@ def evaluate_api() -> Any:
 def range_api() -> Any:
     """Scan and return full combinatorial range coverage and thresholds."""
     data = request.get_json(silent=True) or {}
-    try:
-        pot = float(data.get("pot", 100000.0))
-        bet = float(data.get("bet", data.get("bet_size", 50000.0)))
-        fold_equity = float(data.get("fold_equity", 0.35))
-    except (ValueError, TypeError):
-        return jsonify({"error": "Invalid numerical parameters for pot, bet, or fold_equity."}), 400
+    params = _parse_game_params(data)
+    pot, bet, fold_equity = params.pot, params.bet_size, params.fold_equity
 
-    if pot <= 0 or bet <= 0:
-        return jsonify({"error": "Pot and bet must be strictly greater than zero."}), 400
-    if not (0.0 <= fold_equity <= 1.0):
-        return jsonify({"error": "Fold equity must be between 0.0 and 1.0."}), 400
-
-    records = range_finder.solve_range(pot, bet, fold_equity)
+    records = range_finder.solve_range(pot, bet, fold_equity, params.opponent_model)
     profitable = [r for r in records if r.is_raise_profitable]
     coverage = range_finder.calculate_range_coverage(profitable)
     be_bluff = calculate_break_even_fold_equity(pot, bet, win_rate_when_called=0.0)
@@ -558,6 +739,7 @@ def range_api() -> Any:
         "pot": pot,
         "bet": bet,
         "fold_equity": fold_equity,
+        "opponent_model": params.opponent_model.value,
         "final_pot": pot + 2.0 * bet,
         "pure_bluff_break_even_fold_equity": be_bluff,
         "total_combinations": 22100,
@@ -580,17 +762,15 @@ def range_api() -> Any:
 ```
 
 Nothing new: the range part of `/api/solve` with a flat response. (The literal `22100` appears again;
-`TOTAL_COMBINATIONS` from `range_finder.py` would be better.)
+`TOTAL_COMBINATIONS` would be better.)
 
 ---
 
-## Step 12.9 — `/api/analyze`: commentary from an LLM, with a fallback
+## Step 13.12 — `/api/analyze`, part 1: inputs and the prompt
 
 This endpoint asks a **Large Language Model** (an AI text generator, here Llama 3.1 via the OpenRouter
 service) to write a short strategic analysis in Vietnamese. If no API key is configured, it builds
 a rule-based text itself, so the feature always works.
-
-### Part 1: read the inputs and build the prompt
 
 📄 **File:** `backend/app.py` — *add to the end*
 
@@ -608,15 +788,21 @@ def analyze_api() -> Any:
     hand = data.get("hand", "None")
     hand_eval = data.get("hand_evaluation") or {}
     coverage = data.get("range_coverage_percent", 0.0)
+    folds_weakest = data.get("opponent_model") == OpponentModel.RANGE.value
 
     api_key = os.environ.get("OPENROUTER_API_KEY")
 
+    if folds_weakest:
+        model_line = f"folds their weakest hands (calls only with the top {(1 - float(fold_equity)) * 100:.0f}%)"
+    else:
+        model_line = "folds at random, regardless of hand strength"
     prompt = (
         f"You are a World-Class Game Theory Expert and High-Stakes Vietnamese Liêng Solver.\n"
         f"Analyze this decision spot with precision and strategic depth in Vietnamese:\n\n"
         f"- Current Pot: {pot:,.0f} VND\n"
         f"- Bet / Raise Size: {bet_size:,.0f} VND\n"
         f"- Opponent Fold Equity: {float(fold_equity) * 100:.1f}%\n"
+        f"- Opponent Model: {model_line}\n"
         f"- Total Range Coverage (Hands with EV > 0): {coverage}%\n"
     )
 
@@ -641,15 +827,16 @@ def analyze_api() -> Any:
 **How it works**
 
 - The frontend sends back the numbers **it already got** from `/api/solve` (including
-  `hand_evaluation`), so this endpoint doesn't recompute anything.
+  `hand_evaluation` and the `opponent_model`), so this endpoint doesn't recompute anything.
 - A **prompt** is the text instruction given to the LLM. It contains the role ("You are a … Solver"),
-  the facts (pot, EV, decision) and the desired output structure (three numbered sections). Putting the
-  *computed* numbers in the prompt matters: LLMs are bad at arithmetic, so we do the maths and let the
-  model only explain it.
+  the facts (pot, EV, decision, and now **how the opponent folds**) and the desired output structure
+  (three numbered sections). Putting the *computed* numbers in the prompt matters: LLMs are bad at
+  arithmetic, so we do the maths and let the model only explain it.
+- `folds_weakest` is a boolean computed once and used twice (prompt and fallback).
 
-> ⚠️ **Pitfall: no input validation here.** Unlike the other endpoints, these values are **not** converted
-> or checked. Send `{"pot": "abc"}` and `f"{pot:,.0f}"` raises `ValueError` ("Unknown format code 'f'
-> for object of type 'str'"), and Flask answers **500 Internal Server Error**. Try it:
+> ⚠️ **Pitfall: this endpoint is still unvalidated.** The other endpoints use `_parse_game_params`;
+> this one reads raw values. Send `{"pot": "abc"}` and `f"{pot:,.0f}"` raises `ValueError` ("Unknown
+> format code 'f' for object of type 'str'"), and Flask answers **500 Internal Server Error**:
 >
 > ```bash
 > curl -s -i -X POST http://127.0.0.1:5000/api/analyze -H "Content-Type: application/json" -d '{"pot":"abc"}' | head -1
@@ -659,9 +846,12 @@ def analyze_api() -> Any:
 > HTTP/1.1 500 INTERNAL SERVER ERROR
 > ```
 >
-> The `_parse_game_params` helper from Step 12.7 would fix this too.
+> The fix is now one line, because the helper exists: `params = _parse_game_params(data)` at the top, then
+> use `params.pot` etc. (the error handler turns bad input into a 400 automatically).
 
-### Part 2: the offline fallback
+---
+
+## Step 13.13 — `/api/analyze`, part 2: the offline fallback
 
 📄 **File:** `backend/app.py` — *add to the end*
 
@@ -673,8 +863,10 @@ def analyze_api() -> Any:
             f"**[Phân Tích Chiến Thuật Hệ Thống (Offline Solver)]**\n\n"
             f"1. **Quyết định Toán học:** Với Pot = {pot:,.0f}, Cược = {bet_size:,.0f}, và Fold Equity = {float(fold_equity)*100:.1f}%, "
             f"ngưỡng hòa vốn cược hù (bluff) là {(bet_size / (pot + bet_size))*100:.1f}%. "
-            f"Khoảng bài có lãi (EV > 0) chiếm **{coverage}%** toàn bộ thế bài có thể có.\n\n"
-            f"2. **Hành động Khuyến nghị:** "
+            f"Khoảng bài có lãi (EV > 0) chiếm **{coverage}%** toàn bộ thế bài có thể có. "
+            + ("Giả định đối thủ bỏ những bài yếu nhất, nên khi bị theo, Hero đối đầu với nhóm bài mạnh hơn.\n\n" if folds_weakest
+               else "Giả định đối thủ bỏ bài ngẫu nhiên, không phụ thuộc độ mạnh của bài.\n\n")
+            + "2. **Hành động Khuyến nghị:** "
         )
         if hand_eval:
             decision = hand_eval.get("decision", "EVALUATE")
@@ -704,12 +896,17 @@ def analyze_api() -> Any:
 
 - **Graceful degradation:** without a key, the endpoint still returns useful text (in Markdown:
   `**bold**`), built from the same numbers. The UI never shows an empty box, and tests can run offline.
-- `bet_size / (pot + bet_size)` is the pure-bluff break-even `B / (P + B)` from chapter 9, written out
-  by hand. Calling `calculate_break_even_fold_equity(pot, bet_size, 0.0)` would avoid a second copy of
-  the formula.
-- `"text" + ("A" if ev > 0 else "B")` picks one of two closing sentences.
+- The text is assembled from pieces with `+`. One piece is chosen with a conditional expression
+  (`"A" if folds_weakest else "B"`): it explains which opponent model the numbers assume ("the opponent
+  folds their weakest hands, so when called, Hero faces a stronger group of hands" vs "the opponent folds
+  at random").
+- `bet_size / (pot + bet_size)` is the pure-bluff break-even `B / (P + B)` from chapter 10, written out by
+  hand. Calling `calculate_break_even_fold_equity(pot, bet_size, 0.0)` would avoid a second copy of the
+  formula.
 
-### Part 3: calling OpenRouter
+---
+
+## Step 13.14 — `/api/analyze`, part 3: calling OpenRouter
 
 📄 **File:** `backend/app.py` — *add to the end*
 
@@ -780,7 +977,7 @@ def analyze_api() -> Any:
 
 ---
 
-## Step 12.10 — Running the server directly
+## Step 13.15 — Running the server directly
 
 📄 **File:** `backend/app.py` — *add to the end*
 
@@ -799,11 +996,11 @@ if __name__ == "__main__":
 - `host="0.0.0.0"` listens on all network interfaces (so other devices on your network can connect),
   not just `127.0.0.1`.
 - `debug=False`: debug mode shows an interactive debugger in the browser on errors, which must **never**
-  be enabled on a public server (anyone could run code on it). For production, use gunicorn (chapter 16).
+  be enabled on a public server (anyone could run code on it). For production, use gunicorn (chapter 17).
 
 ---
 
-## Step 12.11 — The tests
+## Step 13.16 — The tests
 
 Flask has a built-in **test client**: it sends fake requests straight to your app, without starting a
 server or using the network.
@@ -830,7 +1027,7 @@ def test_root_endpoint(client):
     data = res.get_json()
     assert data["service"] == "Lieng Stealer API"
     assert data["status"] == "online"
-    assert data["endpoints"] == ["/health", "/api/solve", "/api/analyze"]
+    assert data["endpoints"] == ["/health", "/api/solve", "/api/evaluate", "/api/range", "/api/analyze"]
 
 
 def test_health_endpoint(client):
@@ -858,7 +1055,7 @@ def test_solve_endpoint_general(client):
 **How it works**
 
 - `from app import app` imports our Flask object. (pytest puts `backend/` on the path because
-  `tests/` is a package, so `app.py` is importable.)
+  `tests/` is a package, so `app.py` is importable.) Importing it builds the engine once (Step 13.2).
 - The fixture uses **`yield`** instead of `return`: code before `yield` is set-up, the yielded value goes
   to the test, and code after it (here, leaving the `with` block) is clean-up.
 - `client.get("/")` / `client.post("/api/solve", json=payload)` send requests; `res.status_code` and
@@ -895,6 +1092,10 @@ def test_solve_endpoint_invalid_inputs(client):
     res3 = client.post("/api/solve", json={"pot": 100, "bet_size": 50, "hand": "InvalidHand"})
     assert res3.status_code == 400
 ```
+
+The first two invalid requests are rejected by `_parse_game_params` + the error handler; the third by
+`except LiengError` in the route. The test doesn't care which mechanism answers, only that it's a 400.
+That's good testing: test **behaviour**, not implementation.
 
 📄 **File:** `backend/tests/test_api.py` — *add to the end*
 
@@ -934,6 +1135,84 @@ def test_analyze_endpoint(client):
 >     ...
 > ```
 
+Now the tests for the opponent models. (The original file has three blank lines before this test; two
+are standard, the third is harmless.)
+
+📄 **File:** `backend/tests/test_api.py` — *add to the end*
+
+```python
+
+
+
+def test_solve_default_model_is_random_hand(client):
+    """Omitting opponent_model keeps the original random-hand equity for existing clients."""
+    res = client.post("/api/solve", json={"pot": 100000, "bet_size": 100000, "fold_equity": 0.35, "hand": "Ks Qh 3d"})
+    data = res.get_json()
+    hand_eval = data["hand_evaluation"]
+    assert data["summary"]["opponent_model"] == "random"
+    assert hand_eval["showdown_equity"] == hand_eval["equity_vs_random"]
+    assert hand_eval["decision"] == "RAISE"
+    assert hand_eval["profitable_fold_zones"] == [[0.0, 1.0]]
+
+
+def test_solve_range_model_flips_medium_hand(client):
+    """An opponent who folds their weakest 35% leaves 3 points almost drawing dead when called."""
+    payload = {"pot": 100000, "bet_size": 100000, "fold_equity": 0.35, "hand": "Ks Qh 3d", "opponent_model": "range"}
+    data = client.post("/api/solve", json=payload).get_json()
+    hand_eval = data["hand_evaluation"]
+    assert data["summary"]["opponent_model"] == "range"
+    assert hand_eval["equity_vs_random"] == 0.36
+    assert hand_eval["showdown_equity"] < 0.02
+    assert hand_eval["decision"] == "CHECK/FOLD"
+    assert len(hand_eval["profitable_fold_zones"]) == 2
+    assert hand_eval["break_even_fold_equity"] == 0.51
+```
+
+**In plain words:** the **same request** about `K-Q-3`, once per model. With the default (random) model
+it's a raise everywhere; with the range model it's a fold at 35%, with two profit zones and the
+"stays-profitable-from" point at 0.51. The first test is a **backward-compatibility test**: it guarantees
+that clients written before the range model existed still get the old behaviour.
+
+📄 **File:** `backend/tests/test_api.py` — *add to the end*
+
+```python
+
+
+def test_solve_invalid_opponent_model(client):
+    res = client.post("/api/solve", json={"pot": 100, "bet_size": 50, "opponent_model": "psychic"})
+    assert res.status_code == 400
+    assert "opponent_model" in res.get_json()["error"]
+
+
+def test_solve_category_breakdown(client):
+    data = client.post("/api/solve", json={"pot": 100000, "bet_size": 50000, "fold_equity": 0.0}).get_json()
+    breakdown = {row["category"]: row for row in data["summary"]["category_breakdown"]}
+    assert [row["category"] for row in data["summary"]["category_breakdown"]] == ["SAP", "LIENG", "DI", "DIEM"]
+    assert {cat: row["combos"] for cat, row in breakdown.items()} == {"SAP": 52, "LIENG": 768, "DI": 144, "DIEM": 21136}
+    assert {cat: row["classes"] for cat, row in breakdown.items()} == {"SAP": 13, "LIENG": 12, "DI": 6, "DIEM": 424}
+    assert sum(row["profitable_combos"] for row in breakdown.values()) == data["summary"]["profitable_combinations"]
+
+
+def test_evaluate_and_range_accept_opponent_model(client):
+    payload = {"pot": 100000, "bet": 100000, "fold_equity": 0.35, "hand": "Ks Qh 3d", "opponent_model": "range"}
+    evaluated = client.post("/api/evaluate", json=payload).get_json()
+    assert evaluated["recommended_action"] == "CHECK/FOLD"
+    assert evaluated["opponent_model"] == "range"
+
+    random_range = client.post("/api/range", json={**payload, "opponent_model": "random"}).get_json()
+    calling_range = client.post("/api/range", json=payload).get_json()
+    assert calling_range["range_coverage_percent"] < random_range["range_coverage_percent"]
+```
+
+**How it works**
+
+- `test_solve_category_breakdown` pins the per-category totals to the numbers proven in chapter 6
+  (52 / 768 / 144 / 21,136), plus a **consistency check**: the categories' profitable combos must add up to
+  the overall total. That test would have caught the old frontend bug immediately.
+- `{**payload, "opponent_model": "random"}` copies a dict and overrides one key (**dict unpacking**).
+- The last test checks a **relationship** instead of exact numbers: range-model coverage must be lower
+  than random-model coverage (54.57% vs 84.65%).
+
 ---
 
 ## ✅ Checkpoint
@@ -944,43 +1223,47 @@ Stop the dev server if it's running (Ctrl-C), then:
 python -m pytest -q
 ```
 
-Expected output (47 engine tests + 6 API tests):
+Expected output (60 engine tests + 11 API tests):
 
 ```
-.....................................................                    [100%]
-53 passed in 1.50s
+.......................................................................  [100%]
+71 passed in 2.50s
 ```
 
-Then start the server with `python app.py` and check all three POST endpoints with curl, e.g.:
+Then start the server with `python app.py` and check the evaluate endpoint with curl:
 
 ```bash
 curl -s -X POST http://127.0.0.1:5000/api/evaluate -H "Content-Type: application/json" \
-  -d '{"pot": 100000, "bet": 50000, "fold_equity": 0.35, "hand": "As Kh Qd"}'
+  -d '{"pot": 100000, "bet": 100000, "fold_equity": 0.35, "hand": "Ks Qh 3d", "opponent_model": "range"}'
 ```
 
 ```json
-{"bet":50000.0,"break_even_fold_equity":0.0,"canonical_id":"Q-K-A","category":"LIENG","ev":132097.0,"fold_equity":0.35,"hand":"As Kh Qd","is_profitable":true,"pot":100000.0,"recommended_action":"RAISE","showdown_equity":0.9969}
+{"bet":100000.0,"break_even_fold_equity":0.51,"canonical_id":"K-Q-3","category":"DIEM","equity_vs_random":0.36,"ev":-27894.0,"fold_equity":0.35,"hand":"Ks Qh 3d","is_profitable":false,"opponent_model":"range","pot":100000.0,"recommended_action":"CHECK/FOLD","showdown_equity":0.0108}
 ```
 
-> 💡 The project's `README.md` documents this response with `"hand": "A♠ K♥ Q♦"` and a break-even of
-> `0.3333333333333333`. The real values are `"As Kh Qd"` and `0.3333` (rounded by `ev.py`). Trust the
-> running code.
+> 💡 The project's `README.md` still documents parts of the API from the first version (e.g.
+> `"hand": "A♠ K♥ Q♦"` and a break-even of `0.3333333333333333`; the real values are `"As Kh Qd"` and
+> `0.3333`). Trust the running code and the tests.
 
 Commit:
 
 ```bash
-git add . && git commit -m "feat: Flask REST API with LLM commentary"
+git add . && git commit -m "feat: Flask REST API with opponent models and LLM commentary"
 ```
 
 ## Recap
 
 - An HTTP API = routes (`@app.route`) that read JSON (`request.get_json`) and return JSON (`jsonify`) plus
   a status code.
-- **Validate everything** from the network: bad numbers → 400, bad hands (`LiengError`) → 400, failures of
-  services we call → 502. Never let user input cause a 500.
-- **CORS** lets the browser page on port 5173 read responses from port 5000.
-- Secrets come from **environment variables**; external calls always have a **timeout**; offline fallbacks keep features working.
-- Pitfalls: validation copied three times (and missing in `/api/analyze`); module-level globals; a test
-  that can hit the internet; a hard-coded model name.
+- **Validate once:** `_parse_game_params` builds a frozen `GameParams` or raises `InvalidGameParamsError`;
+  one `@app.errorhandler` turns that into a 400 for every endpoint.
+- `_equity_function` returns a closure, so one `_evaluate_hand` serves both opponent models, producing EV,
+  profit zones and a model-dependent break-even.
+- The backend computes `category_breakdown` from the data, so the frontend no longer guesses.
+- **CORS** lets the browser page on port 5173 read responses from port 5000. Secrets come from
+  **environment variables**; external calls always have a **timeout**; offline fallbacks keep features working.
+- ✅ Fixed since the first version: duplicated validation, missing endpoints in `/`, guessed category numbers.
+- ⚠️ Still open: `/api/analyze` unvalidated (500), module-level globals, inconsistent response field
+  names, `break_even_fold_equity` meaning depends on the model, a test that can hit the internet.
 
-**Next:** [13 — Testing and performance](14-testing-and-performance.md)
+**Next:** [14 — Testing and performance](14-testing-and-performance.md)

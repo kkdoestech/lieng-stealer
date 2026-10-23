@@ -45,7 +45,7 @@ equity    = (wins + 0.5 × ties) / n
 ```
 
 **Equity** treats a tie as "half a win", because in a tie the pot is split. It's the number used in
-the EV formula (chapter 9) as `P(Win | Call)`.
+the EV formula (chapter 10) as `P(Win | Call)`.
 
 ### Exact enumeration vs Monte Carlo
 
@@ -573,7 +573,7 @@ rm data/winrates_mc.json
 
 > ⚠️ **Always generate the official file with `--exact`.** The default mode is Monte Carlo with 10,000
 > samples. That file would have slightly different numbers and `"samples": 10000`, and the tests in
-> chapters 7, 8 and 13 (which expect exact values like `0.9969` and `"samples": 18424`) would fail.
+> chapters 7, 8 and 14 (which expect exact values like `0.9969` and `"samples": 18424`) would fail.
 > A safer design would make `--exact` the default, since it's both correct and fast enough here.
 
 > 🔬 **Reproducibility check.** Exact enumeration has no randomness, so your file should be
@@ -587,11 +587,12 @@ rm data/winrates_mc.json
 > very strong end-to-end test of chapters 4–7.
 
 > ⚠️ **Pitfall: the big modelling assumption.** The equity we compute is "how often do I win against
-> a **random** hand?" But in the EV formula (chapter 9) we need "how often do I win **when the opponent
+> a **random** hand?" But in the EV formula (chapter 10) we need "how often do I win **when the opponent
 > calls**?" Real opponents call with **good** hands and fold bad ones, so the hands that call are
 > stronger than random. Our equities are therefore **too optimistic**, especially for medium hands.
-> This is the biggest simplification in the whole project. Chapter 17 suggests how to fix it
-> (computing equity against a "calling range" such as "the top 40% of hands").
+> This is the biggest simplification in the data file. **Chapter 9 builds the fix**: a second
+> "opponent model" that computes equity against a **calling range** (the opponent's strongest hands),
+> and uses this file to double-check itself. The random-hand model stays available as the default.
 
 ---
 
@@ -775,6 +776,7 @@ git add . && git commit -m "feat: equity generator and precomputed winrates.json
 - **`ProcessPoolExecutor`** spreads the 455 hand types over all CPU cores; `executor.map` keeps the order.
 - The result is an ~83 KB JSON file that, in exact mode, is **byte-identical** on every machine.
 - Pitfalls: global `random.seed`; hard-coded `18424`; Monte Carlo is the default but tests require `--exact`;
-  and the big one: equity is measured against a **random** hand, not against the hands that would call.
+  and the big one: equity is measured against a **random** hand, not against the hands that would call
+  (fixed by the calling-range model in chapter 9).
 
 **Next:** [08 — The database layer](08-database-layer.md)

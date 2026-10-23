@@ -238,7 +238,7 @@ class WinRateDB:
 > `load` silently uses `backend/data/winrates.json` instead. Try it: run Python from `/tmp` and
 > `WinRateDB("data/winrates.json")` still loads 455 hands, from a file you never pointed to. This hides
 > mistakes (you think you're loading a test file but you get the real one). **Better:** let the
-> **caller** build an absolute path (as `app.py` does in chapter 12 with
+> **caller** build an absolute path (as `app.py` does in chapter 13 with
 > `Path(__file__).resolve().parent / "data" / "winrates.json"`) and make `load` fail if that exact
 > file is missing. Explicit beats implicit.
 
@@ -326,7 +326,7 @@ class WinRateDB:
   answer among only 455 records.
 
 > 💡 **Design question.** Unknown IDs raise a built-in `KeyError`, not a `LiengError`. The web API
-> (chapter 12) only catches `LiengError` to return "400 Bad Request". In practice `get_by_cards` always
+> (chapter 13) only catches `LiengError` to return "400 Bad Request". In practice `get_by_cards` always
 > produces a valid key, so this can't happen through the API. But `get("J-Q-K")` (a spelling a human
 > might type) raises a `KeyError`. A `HandNotFoundError(LiengError, KeyError)` would fit the project's
 > own error hierarchy better while staying compatible.
@@ -355,7 +355,7 @@ class WinRateDB:
 **How it works**
 
 - `all_items` returns a **copy** (`dict(self._cache)`), so a caller who modifies the result can't damage
-  the database. Copying 455 references takes microseconds. The range finder (chapter 10) loops over it.
+  the database. Copying 455 references takes microseconds. The range finder (chapter 11) loops over it.
 - `__len__` makes `len(db)` work; `__contains__` makes `"Q-K-A" in db` work. Implementing these
   "protocol" methods makes your class feel like a built-in container.
 
@@ -544,4 +544,4 @@ git add . && git commit -m "feat: in-memory WinRateDB with O(1) lookup"
 - The object holds its own state, so it can be **injected** into other classes instead of living in a global.
 - Pitfalls: the silent path fallback; `get` raises a plain `KeyError` outside the `LiengError` family.
 
-**Next:** [09 — Expected Value](10-expected-value.md)
+**Next:** [09 — The calling-range model](09-calling-range.md)

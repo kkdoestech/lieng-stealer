@@ -1,10 +1,10 @@
-# 11 — The Command-Line Interface
+# 12 — The Command-Line Interface
 
 > **Goal:** give the engine a usable face in the terminal: options like `--pot 100000 --hand "As Kh Qd"`,
 > nicely formatted panels and tables, and an interactive question-and-answer mode.
 > **You will build:** `backend/src/cli.py`.
 > **Time:** ~1 hour.
-> **Prerequisites:** [10](11-range-finder.md).
+> **Prerequisites:** [11](11-range-finder.md).
 
 ---
 
@@ -12,7 +12,7 @@
 
 The engine is finished. This chapter adds no new maths: it's **presentation**. Keeping presentation in its
 own module (Separation of Concerns, `AGENTS.md` §1) means the same engine can later be used by a web API
-(chapter 12) without touching any calculation code.
+(chapter 13) without touching any calculation code.
 
 ```
   terminal ──► argparse (main) ──► run_solver ──► WinRateDB + RangeFinder + ev.py   (engine)
@@ -66,7 +66,7 @@ If the import fails, the program still works, just without colours. That's a gra
 
 ---
 
-## Step 11.1 — Imports, UTF-8 output, and optional `rich`
+## Step 12.1 — Imports, UTF-8 output, and optional `rich`
 
 📄 **File:** `backend/src/cli.py` — *create this file*
 
@@ -129,7 +129,7 @@ except ImportError:
 
 ---
 
-## Step 11.2 — Formatting money
+## Step 12.2 — Formatting money
 
 📄 **File:** `backend/src/cli.py` — *add to the end*
 
@@ -145,7 +145,7 @@ def format_currency(val: float) -> str:
 
 ---
 
-## Step 11.3 — The game-state banner
+## Step 12.3 — The game-state banner
 
 📄 **File:** `backend/src/cli.py` — *add to the end*
 
@@ -191,7 +191,7 @@ def render_banner(
 
 ---
 
-## Step 11.4 — The tactical overview
+## Step 12.4 — The tactical overview
 
 📄 **File:** `backend/src/cli.py` — *add to the end*
 
@@ -234,14 +234,14 @@ def render_tactical_overview(
 
 **How it works**
 
-- Because `records` is sorted best-first (chapter 10), `records[0]` is the best hand and
+- Because `records` is sorted best-first (chapter 11), `records[0]` is the best hand and
   `profitable[-1]` (last profitable) is the **threshold hand**: the weakest hand still worth raising.
 - `x if condition else "None"` protects against empty lists (`records[0]` on an empty list would crash).
 - `{total_combos:,}` adds thousands separators to an integer.
 
 ---
 
-## Step 11.5 — The single-hand decision
+## Step 12.5 — The single-hand decision
 
 📄 **File:** `backend/src/cli.py` — *add to the end*
 
@@ -291,7 +291,7 @@ red) and the action text are chosen once and reused, so they can't disagree.
 
 ---
 
-## Step 11.6 — The category breakdown table
+## Step 12.6 — The category breakdown table
 
 This function is long, so it comes in two slices. The first builds the table's columns and constants.
 
@@ -328,11 +328,12 @@ def render_categorized_heatmap(records: list[HandEVRecord]) -> None:
 ```
 
 These are the per-category totals from chapter 6 (52 / 768 / **144** / **21,136**). They're **correct**
-here, unlike the frontend (chapter 15).
+here. (The first version of the frontend typed them in wrongly; the current API computes them from the
+data instead, chapter 13.)
 
 > 💡 **Hard-coded facts.** These totals can be *computed* from the data:
 > `sum(s.multiplicity for s in db.all_items().values() if s.category == cat)`. Computed numbers can't
-> drift out of sync with the data; typed ones can, as the frontend proves.
+> drift out of sync with the data; typed ones can, as the first version of the frontend proved.
 
 The second slice fills one row per category:
 
@@ -381,7 +382,7 @@ The second slice fills one row per category:
 
 ---
 
-## Step 11.7 — The pipeline and the interactive mode
+## Step 12.7 — The pipeline and the interactive mode
 
 📄 **File:** `backend/src/cli.py` — *add to the end*
 
@@ -447,9 +448,16 @@ def interactive_mode(db_path: str = "data/winrates.json") -> None:
 > `--hand "Xx Kh Qd"` on the command line. The custom hierarchy from chapter 4 was built precisely so
 > you could write `except LiengError as err: print(f"Invalid input: {err}")`. **Use it.**
 
+> 💡 **The CLI only knows the random model.** `run_solver` builds `RangeFinder(db)` without a
+> `CallingRangeModel`, and `render_single_hand_decision` uses `stats.equity` (random-hand equity). So the
+> CLI's answers match the API's `opponent_model: "random"`, not the web page's default (`range`). Adding
+> it is a good exercise: an `--opponent-model {random,range}` option (argparse `choices=`), a
+> `CallingRangeModel()` passed into `RangeFinder`, and `model.equity(cid, f)` for the single hand. Note
+> also that building the model costs ~60 ms, which matters for a command meant to answer in < 50 ms.
+
 ---
 
-## Step 11.8 — Command-line arguments
+## Step 12.8 — Command-line arguments
 
 📄 **File:** `backend/src/cli.py` — *add to the end*
 
@@ -566,7 +574,7 @@ decision panel:
 ```
 
 Try interactive mode too (`python -m src.cli` with no options) and press Enter four times to accept the
-defaults. The test suite is unchanged (**47 passed**): the CLI has no automated tests. Commit:
+defaults. The test suite is unchanged (**60 passed**): the CLI has no automated tests. Commit:
 
 ```bash
 git add . && git commit -m "feat: rich CLI with interactive mode"
@@ -578,6 +586,6 @@ git add . && git commit -m "feat: rich CLI with interactive mode"
 - Each renderer has a **rich** branch and a **plain** fallback, chosen by `HAS_RICH`.
 - Defaults of `None` distinguish "no options given" (interactive mode) from "some options given".
 - Pitfalls: import-time side effects and a swallowed exception; `LiengError` not caught for bad hands;
-  hard-coded category totals.
+  hard-coded category totals; only the random opponent model is available.
 
-**Next:** [12 — The Flask web API](13-flask-api.md)
+**Next:** [13 — The Flask web API](13-flask-api.md)

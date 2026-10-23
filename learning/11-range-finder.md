@@ -1,23 +1,24 @@
-# 10 — The Range Finder
+# 11 — The Range Finder
 
-> **Goal:** for a given pot, bet and fold equity, compute the EV of **every** hand type, sort them, and
-> measure what fraction of all hands is profitable to raise.
+> **Goal:** for a given pot, bet, fold equity and opponent model, compute the EV of **every** hand type,
+> sort them, and measure what fraction of all hands is profitable to raise.
 > **You will build:** `backend/src/range_finder.py` and `backend/tests/test_range_finder.py` (4 tests).
 > **Time:** ~1 hour.
-> **Prerequisites:** [09](10-expected-value.md).
+> **Prerequisites:** [10](10-expected-value.md).
 
 ---
 
 ## The big picture
 
-Chapter 9 answered "should I raise **this** hand?". Strategy questions are bigger: *"Against this
+Chapter 10 answered "should I raise **this** hand?". Strategy questions are bigger: *"Against this
 opponent, which hands should I raise with at all?"* A set of hands is called a **range**. The range
 finder answers that question for all 455 hand types at once.
 
 ```
- WinRateDB (455 × equity) ──┐
-                            ├──► for each hand type: calculate_ev(P, B, f, equity)
- pot, bet, fold equity ─────┘                │
+ opponent_model = RANDOM ──► equity from WinRateDB (455 × equity vs a random hand)
+ opponent_model = RANGE  ──► equity from CallingRangeModel.equity_table(f)   (chapter 9)
+                                             │
+ pot, bet, fold equity ──────────────────────┼──► for each hand type: calculate_ev(P, B, f, equity)
                                              ▼
                               455 HandEVRecords, sorted by EV (best first)
                                              │
@@ -67,9 +68,26 @@ coverage % = (sum of multiplicities of profitable types) / 22,100 × 100
 
 At `f = 0`: 16,612 real hands of 22,100 → **75.17%**.
 
+### Two opponent models, one solver
+
+The same reasoning works for the **range** model from chapter 9: at a *fixed* `f`, every hand faces the
+same calling range, and stronger hands beat more of it. So equity still falls as we go down the strength
+order, and the profitable hands are still "the top N". But N is smaller, because equities against a
+calling range are lower:
+
+| Situation (pot 100k) | Random model: profitable types / coverage | Range model: profitable types / coverage |
+|---|---|---|
+| bet 50k, `f = 0.00` | 343 / 75.17% | 343 / 75.17% (no folds → same as random) |
+| bet 50k, `f = 0.20` | 397 / 87.55% | 318 / 69.92% |
+| bet 100k, `f = 0.35` | 387 / 84.65% | 250 / 54.57% |
+| bet 50k, `f = 0.35` | 455 / 100% | 455 / 100% (35% folds > 33.3% bluff threshold) |
+
+With a pot-sized bet against an opponent who folds their weakest 35%, the honest profitable range
+covers about **half** of all hands, not 85%. That's the practical value of the range model.
+
 ---
 
-## Step 10.1 — Imports, a constant, and the record type
+## Step 11.1 — Imports, a constant, and the record type
 
 📄 **File:** `backend/src/range_finder.py` — *create this file*
 
@@ -85,6 +103,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Final, Sequence
 
+from src.calling_range import CallingRangeModel, OpponentModel
 from src.db import HandStats, WinRateDB
 from src.evaluator import HandCategory
 from src.ev import calculate_ev, is_profitable
@@ -112,7 +131,7 @@ class HandEVRecord:
 
 ---
 
-## Step 10.2 — `RangeFinder`: construction
+## Step 11.2 — `RangeFinder`: construction
 
 📄 **File:** `backend/src/range_finder.py` — *add to the end*
 
@@ -122,20 +141,29 @@ class HandEVRecord:
 class RangeFinder:
     """Solves and ranks profitable ranges across all canonical hands."""
 
-    def __init__(self, db: WinRateDB) -> None:
-        """Initialize RangeFinder with a populated WinRateDB instance."""
+    def __init__(self, db: WinRateDB, calling_model: CallingRangeModel | None = None) -> None:
+        """Initialize RangeFinder with a populated WinRateDB instance.
+
+        Args:
+            db: Win-rate database (equity against a random opponent hand).
+            calling_model: Calling-range model, required only for OpponentModel.RANGE.
+        """
         if not db.is_loaded:
             db.load()
         self._db = db
+        self._calling_model = calling_model
 ```
 
-This is **dependency injection** from chapter 8: the finder doesn't create or find its database, it
-**receives** it.
+This is **dependency injection** from chapter 8: the finder doesn't create or find its data sources,
+it **receives** them. The calling-range model is **optional** (`= None`): code that only needs the
+random model (the CLI, the old tests) can keep writing `RangeFinder(db)`. Adding a parameter with a
+default value is a classic way to extend a class **without breaking existing callers** (backward
+compatibility).
 
 > ⚠️ **Pitfall: a hidden side effect in a constructor.** If the database isn't loaded yet, the
 > constructor quietly calls `db.load()` with the **default path** (`"data/winrates.json"`, plus the
 > silent fallback from chapter 8). So building an object can read a file you never mentioned, and can
-> raise a `DatabaseError` from a line that looks harmless. In `app.py` (chapter 12) this line runs
+> raise a `DatabaseError` from a line that looks harmless. In `app.py` (chapter 13) this line runs
 > **at import time**. Constructors should be cheap and predictable. **Better:** fail fast:
 >
 > ```python
@@ -145,7 +173,7 @@ This is **dependency injection** from chapter 8: the finder doesn't create or fi
 
 ---
 
-## Step 10.3 — `solve_range`: score and sort every hand type
+## Step 11.3 — `solve_range`: score and sort every hand type
 
 📄 **File:** `backend/src/range_finder.py` — *add to the end*
 
@@ -156,6 +184,7 @@ This is **dependency injection** from chapter 8: the finder doesn't create or fi
         pot: float,
         bet_size: float,
         fold_equity: float,
+        opponent_model: OpponentModel = OpponentModel.RANDOM,
     ) -> list[HandEVRecord]:
         """Evaluate and rank all 455 canonical hands sorted descending by EV.
 
@@ -163,25 +192,37 @@ This is **dependency injection** from chapter 8: the finder doesn't create or fi
             pot: Dead pot size before hero's bet (must be > 0).
             bet_size: Additional bet / raise amount (must be > 0).
             fold_equity: Opponent fold probability in [0.0, 1.0].
+            opponent_model: RANDOM uses equity vs a random hand; RANGE uses equity
+                vs an opponent who folds their weakest hands.
 
         Returns:
             List of all 455 HandEVRecord instances sorted by EV descending.
+
+        Raises:
+            ValueError: If RANGE is requested without a CallingRangeModel.
         """
         all_stats = self._db.all_items()
         records: list[HandEVRecord] = []
 
+        range_equity: dict[str, float] | None = None
+        if opponent_model is OpponentModel.RANGE:
+            if self._calling_model is None:
+                raise ValueError("OpponentModel.RANGE requires a CallingRangeModel.")
+            range_equity = self._calling_model.equity_table(fold_equity)
+
         for cid, stats in all_stats.items():
+            equity = range_equity[cid] if range_equity is not None else stats.equity
             ev = calculate_ev(
                 pot=pot,
                 bet_size=bet_size,
                 fold_equity=fold_equity,
-                win_rate_when_called=stats.equity,
+                win_rate_when_called=equity,
             )
             records.append(
                 HandEVRecord(
                     canonical_id=cid,
                     category=stats.category,
-                    equity=stats.equity,
+                    equity=equity,
                     ev=ev,
                     multiplicity=stats.multiplicity,
                     is_raise_profitable=is_profitable(ev),
@@ -195,12 +236,28 @@ This is **dependency injection** from chapter 8: the finder doesn't create or fi
 
 **How it works**
 
-- Loop over all 455 `(id, stats)` pairs and build one record each, reusing `calculate_ev` and
-  `is_profitable` from chapter 9. **No new maths here, just orchestration.**
+- **Choose the equity source once, before the loop.** For the range model, `equity_table(fold_equity)`
+  computes all 455 equities in one call (~0.6 ms, chapter 9). Inside the loop each hand just picks its
+  number: `range_equity[cid]` or the random-hand `stats.equity`.
+- `opponent_model is OpponentModel.RANGE` uses `is`: enum members are **singletons** (there is exactly
+  one `OpponentModel.RANGE` object), so identity comparison is the idiomatic check.
+- Asking for the range model without having injected one is a programming error, so it raises
+  `ValueError` immediately (**fail fast**) instead of silently falling back to random equity.
+- Then, as before: build one record per hand, reusing `calculate_ev` and `is_profitable` from chapter 10.
+  **No new maths, just orchestration.** The record stores the equity actually used, so tables and the
+  UI show the model's equity.
 - `records.sort(key=lambda r: (r.ev, r.equity), reverse=True)` sorts in place by a **tuple key**: by EV,
   and if two EVs are equal, by equity. That matters at `f = 1.0`, where every hand has EV = `P`. The
   equity tie-break still lists the strongest hands first.
 - The function doesn't modify the database or any global; it returns a fresh list.
+
+> ⚠️ **Pitfall: the "threshold hand" can be arbitrary.** Under the range model many weak hands have
+> equity exactly **0** (they can't beat anything that calls), so they all get the **same** EV, e.g.
+> `0.35 × 100,000 − 0.65 × 50,000 = +2,500`. Both sort keys tie, and Python's sort is **stable**: tied
+> items keep their original order, which is the database's insertion order. The "weakest profitable
+> hand" reported by the API (`threshold_hand`) then comes out as `A-A-K` at `f = 0.35`, a meaningless
+> choice among hundreds of equal hands. A third tie-break key (e.g. hand strength) would make the order
+> meaningful.
 
 🧪 **Mini-check** (a calling station: `f = 0`)
 
@@ -229,9 +286,36 @@ Q-Q-2 0.2473 -540.0
 The cut is exactly at equity 0.25, as predicted: `K-6-6` (2 points, King high, 25.41%) is the weakest
 hand still worth raising; `Q-Q-2` (2 points, Queen high, 24.73%) is the first one that isn't.
 
+🧪 **Mini-check** (both models, pot-sized bet, opponent folds 35%):
+
+```bash
+python -c "
+from src.calling_range import CallingRangeModel, OpponentModel
+from src.db import WinRateDB
+from src.range_finder import RangeFinder
+rf = RangeFinder(WinRateDB('data/winrates.json'), CallingRangeModel())
+for model in OpponentModel:
+    recs = rf.solve_range(100000, 100000, 0.35, model)
+    prof = [r for r in recs if r.is_raise_profitable]
+    print(model.value, len(prof), rf.calculate_range_coverage(prof), prof[-1].canonical_id, prof[-1].equity)
+"
+```
+
+Expected output:
+
+```
+random 387 84.65 K-8-3 0.1557
+range 250 54.57 K-Q-4 0.156
+```
+
+Both models cut at the **same threshold equity** (≈ 0.154, from the formula above with `B = P`,
+`f = 0.35`), because the EV formula is the same. What differs is **which hands reach it**: against a
+calling range, `K-8-3` no longer has 15.6% equity, so only hands down to `K-Q-4` stay profitable.
+(`for model in OpponentModel` loops over the enum members, as in chapter 3.)
+
 ---
 
-## Step 10.4 — Filtering and coverage
+## Step 11.4 — Filtering and coverage
 
 📄 **File:** `backend/src/range_finder.py` — *add to the end*
 
@@ -283,9 +367,16 @@ hand still worth raising; `Q-Q-2` (2 points, Queen high, 24.73%) is the first on
 > (`coverage(records)`), or not re-filter. When a function doesn't trust its own parameter name, the
 > name is probably wrong.
 
+> ⚠️ **Pitfall: a method left behind.** `solve_range` learned the `opponent_model` parameter, but
+> `get_profitable_range` did not: it always calls `solve_range(pot, bet_size, fold_equity)`, i.e. the
+> **random** model. Nothing breaks today (the API filters `solve_range` results itself), but a future
+> caller asking for "the profitable range against a calling range" would silently get the wrong answer.
+> When you add a parameter to a function, check every function that wraps it. The fix is one line:
+> accept `opponent_model: OpponentModel = OpponentModel.RANDOM` and pass it through.
+
 ---
 
-## Step 10.5 — The tests
+## Step 11.5 — The tests
 
 📄 **File:** `backend/tests/test_range_finder.py` — *create this file*
 
@@ -390,6 +481,11 @@ These are **property tests** in spirit: instead of checking one magic number, th
 that must hold whatever the data is (sorted order, the 25% threshold, coverage never shrinking as `f`
 grows). Such tests survive regenerating the data with a different method.
 
+All four tests use `RangeFinder(db)` without a calling model, i.e. the default random model, and still
+pass unchanged: the backward compatibility from Step 11.2 in action. The range model is tested through
+the API in chapter 13 (`test_evaluate_and_range_accept_opponent_model` checks that range-model coverage
+is lower than random-model coverage).
+
 ---
 
 ## ✅ Checkpoint
@@ -401,23 +497,28 @@ python -m pytest -q
 Expected output:
 
 ```
-...............................................                          [100%]
-47 passed in 3.90s
+............................................................             [100%]
+60 passed in 2.30s
 ```
 
-That's the whole **core engine**: 47 tests over evaluator, hands, generator, database, EV and range
-finder. Commit:
+That's the whole **core engine**: 60 tests over evaluator, hands, generator, database, calling range,
+EV and range finder. Commit:
 
 ```bash
-git add . && git commit -m "feat: range finder and coverage"
+git add . && git commit -m "feat: range finder with opponent models"
 ```
 
 ## Recap
 
-- `solve_range` computes EV for all 455 types and sorts them by `(ev, equity)`, best first, in ~1.6 ms.
+- `solve_range` computes EV for all 455 types and sorts them by `(ev, equity)`, best first, in ~1–2 ms.
+- `opponent_model` picks the equity source: `RANDOM` → `winrates.json`, `RANGE` → the injected
+  `CallingRangeModel` (one `equity_table` call per solve). The model is an optional constructor argument,
+  so old callers keep working.
 - EV is a straight line in equity with positive slope, so **the profitable range is always "every hand
-  above a threshold equity"**: 0.25 for a calling station at ½-pot, falling as fold equity rises.
+  above a threshold equity"**. The range model keeps the threshold but lowers equities, shrinking the
+  range (e.g. 84.65% → 54.57% coverage for a pot-sized bet at 35% folds).
 - **Coverage** is weighted by multiplicity: profitable real hands / 22,100.
-- Pitfall: the constructor silently loads a default file; the coverage function re-filters its input.
+- Pitfalls: the constructor silently loads a default file; the coverage function re-filters its input;
+  `get_profitable_range` ignores the opponent model; ties at equity 0 make `threshold_hand` arbitrary.
 
-**Next:** [11 — The command-line interface](12-cli.md)
+**Next:** [12 — The command-line interface](12-cli.md)
