@@ -22,7 +22,7 @@ if sys.stdout and hasattr(sys.stdout, "reconfigure"):
     except Exception:
         pass
 
-from app import app
+from app import create_app
 from src.db import WinRateDB
 from src.range_finder import RangeFinder
 
@@ -31,8 +31,7 @@ DB_PATH = Path(__file__).resolve().parent.parent / "data" / "winrates.json"
 
 @pytest.fixture(scope="module")
 def client():
-    app.config["TESTING"] = True
-    with app.test_client() as c:
+    with create_app(config={"TESTING": True}).test_client() as c:
         yield c
 
 
