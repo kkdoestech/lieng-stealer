@@ -3,8 +3,8 @@
 Provides rich visual displays of game states, solver summaries, categorized
 range matrices, and single-hand decision recommendations.
 
-Exit codes: 0 success, 1 the win-rate database could not be loaded, 2 invalid input,
-130 interrupted with Ctrl-C.
+Exit codes: 0 success, 1 the win-rate database could not be loaded (or the model is broken),
+2 invalid input, 130 interrupted with Ctrl-C.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ from src.ev import (
     final_pot,
 )
 from src.evaluator import Hand, HandCategory
-from src.exceptions import DatabaseError, InvalidGameParamsError, LiengError
+from src.exceptions import DatabaseError, InvalidGameParamsError, LiengError, ModelError
 from src.hands import TOTAL_COMBINATIONS, to_canonical
 from src.paths import DEFAULT_DB_PATH
 from src.range_finder import HandEVRecord, RangeFinder, category_breakdown
@@ -186,7 +186,7 @@ def render_single_hand_decision(
         print(f" Hand:               {hand} ({hand.score})")
         print(f" Canonical Class:    {canonical_id} ({stats.category.display_name})")
         print(f" Showdown Equity:    {equity * 100:.2f}%")
-        print(f" Expected Value:     {format_currency(ev_result.ev)}")
+        print(f" Expected Value:     {'+' if ev_result.ev > 0 else ''}{format_currency(ev_result.ev)}")
         print(f" Break-Even FE:      {break_even_text}")
         print(f" >>> ACTION: {action_text} <<<")
         print("=================================================\n")
@@ -297,6 +297,9 @@ def interactive_mode(
     except DatabaseError as err:
         print(f"Cannot load the win-rate database: {err}", file=sys.stderr)
         return EXIT_DATABASE_ERROR
+    except ModelError as err:
+        print(f"Internal model error: {err}", file=sys.stderr)
+        return EXIT_DATABASE_ERROR
     except (ValueError, LiengError) as err:
         print(f"\nExiting session: {err}")
         return EXIT_INVALID_INPUT
@@ -363,6 +366,9 @@ def main(argv: Sequence[str] | None = None) -> None:
         )
     except DatabaseError as err:
         print(f"Cannot load the win-rate database: {err}", file=sys.stderr)
+        sys.exit(EXIT_DATABASE_ERROR)
+    except ModelError as err:
+        print(f"Internal model error: {err}", file=sys.stderr)
         sys.exit(EXIT_DATABASE_ERROR)
     except (LiengError, ValueError) as err:
         # Bad hand text or out-of-range numbers: a clear message and the usage-error exit code

@@ -84,3 +84,25 @@ def test_interactive_mode_uses_the_opponent_model_flag_as_default(monkeypatch, c
     _answer_prompts(monkeypatch, ["100000", "100000", "0.35", "", "Ks Qh 3d"])
     main(["--opponent-model", "range"])
     assert "CHECK / FOLD RECOMMENDED" in capsys.readouterr().out
+
+
+def test_plain_text_report_shows_the_sign_of_a_positive_ev(monkeypatch, capsys):
+    import src.cli as cli
+
+    monkeypatch.setattr(cli, "HAS_RICH", False)
+    main(["--hand", "As Kh Qd"])
+    assert "Expected Value:     +132,097" in capsys.readouterr().out
+
+
+def test_a_broken_model_is_an_internal_error_not_invalid_input(monkeypatch, capsys):
+    import src.cli as cli
+    from src.exceptions import ModelError
+
+    def broken_model(*args, **kwargs):
+        raise ModelError("classes are not distinct")
+
+    monkeypatch.setattr(cli, "CallingRangeModel", broken_model)
+    with pytest.raises(SystemExit) as exc:
+        main(["--hand", "As Kh Qd", "--opponent-model", "range"])
+    assert exc.value.code == 1
+    assert "Internal model error: classes are not distinct" in capsys.readouterr().err

@@ -279,9 +279,13 @@ class TestHashing:
         a, b = Hand.from_str("As Kh Qd").score, Hand.from_str("Ac Kd Qh").score
         assert a == b and hash(a) == hash(b)
 
-    def test_score_is_computed_once(self) -> None:
+    def test_score_is_cached_on_the_hand(self) -> None:
+        """cached_property stores the score in the instance dict on first access (a plain
+        @property would not), so later comparisons don't evaluate the hand again."""
         hand = Hand.from_str("As Kh Qd")
-        assert hand.score is hand.score
+        assert "score" not in hand.__dict__
+        first = hand.score
+        assert hand.__dict__["score"] is first
 
 
 class TestErrorsAndSpeed:

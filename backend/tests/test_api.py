@@ -364,7 +364,7 @@ def test_analyze_is_rate_limited(shared_services):
     db, model = shared_services
     app = create_app(
         db=db, calling_model=model,
-        config={"TESTING": True, "RATELIMIT_ENABLED": True, "ANALYZE_RATE_LIMIT": "2 per minute"},
+        config={"TESTING": True, "OPENROUTER_API_KEY": "", "RATELIMIT_ENABLED": True, "ANALYZE_RATE_LIMIT": "2 per minute"},
     )
     client = app.test_client()
     statuses = [client.post("/api/analyze", json=ANALYZE_PAYLOAD).status_code for _ in range(3)]
@@ -384,3 +384,59 @@ def test_create_app_uses_the_injected_database(shared_services):
     db, model = shared_services
     app = create_app(db=db, calling_model=model, config={"TESTING": True})
     assert app.extensions["lieng"].db is db
+
+
+# --- Follow-up fixes --------------------------------------------------------------------------
+
+def test_body_that_is_not_json_is_rejected(client):
+    broken = client.post("/api/solve", data="{not json", content_type="application/json")
+    assert broken.status_code == 400 and broken.get_json()["code"] == "invalid_params"
+    form = client.post("/api/solve", data={"pot": "100000"})
+    assert form.status_code == 400
+    assert client.post("/api/solve").status_code == 200  # no body at all: the defaults
+
+
+def test_rate_limit_response_says_when_to_retry(shared_services):
+    db, model = shared_services
+    app = create_app(db=db, calling_model=model,
+                     config={"TESTING": True, "RATELIMIT_ENABLED": True, "ANALYZE_RATE_LIMIT": "1 per minute"})
+    client = app.test_client()
+    client.post("/api/analyze", json=ANALYZE_PAYLOAD)
+    limited = client.post("/api/analyze", json=ANALYZE_PAYLOAD)
+    assert limited.status_code == 429
+    assert "Retry-After" in limited.headers
+    assert limited.get_json()["error"].startswith("Too many analysis requests (limit: 1 per 1 minute)")
+
+
+def test_testing_apps_ignore_a_key_in_the_environment(shared_services, monkeypatch):
+    db, model = shared_services
+    monkeypatch.setenv("OPENROUTER_API_KEY", "a-real-looking-key")
+
+    def no_network(*args, **kwargs):
+        raise AssertionError("a test tried to call OpenRouter")
+
+    monkeypatch.setattr(requests, "post", no_network)
+    app = create_app(db=db, calling_model=model, config={"TESTING": True})
+    assert app.test_client().post("/api/analyze", json=ANALYZE_PAYLOAD).get_json()["model"].startswith("rule-based")
+
+
+def test_non_numeric_setting_in_the_environment_is_a_clear_error(shared_services, monkeypatch):
+    db, model = shared_services
+    monkeypatch.setenv("OPENROUTER_TIMEOUT", "abc")
+    with pytest.raises(ValueError, match="OPENROUTER_TIMEOUT must be a number"):
+        create_app(db=db, calling_model=model, config={"TESTING": True})
+
+
+@pytest.mark.parametrize(("proxy_hops", "second_status"), [(0, 429), (1, 200)])
+def test_proxy_fix_counts_each_forwarded_client(shared_services, proxy_hops, second_status):
+    """Behind a proxy every request comes from the proxy's address; with PROXY_FIX_X_FOR the
+    limiter counts the visitor named in X-Forwarded-For instead."""
+    db, model = shared_services
+    app = create_app(db=db, calling_model=model, config={
+        "TESTING": True, "RATELIMIT_ENABLED": True, "ANALYZE_RATE_LIMIT": "1 per minute",
+        "PROXY_FIX_X_FOR": proxy_hops,
+    })
+    client = app.test_client()
+    first = client.post("/api/analyze", json=ANALYZE_PAYLOAD, headers={"X-Forwarded-For": "203.0.113.1"})
+    second = client.post("/api/analyze", json=ANALYZE_PAYLOAD, headers={"X-Forwarded-For": "203.0.113.2"})
+    assert (first.status_code, second.status_code) == (200, second_status)

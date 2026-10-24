@@ -13,7 +13,7 @@ from src.calling_range import CallingRangeModel, OpponentModel
 from src.db import WinRateDB
 from src.ev import calculate_ev, is_profitable
 from src.evaluator import HandCategory
-from src.exceptions import DatabaseNotLoadedError
+from src.exceptions import DatabaseNotLoadedError, ModelError
 from src.hands import TOTAL_COMBINATIONS as TOTAL_COMBINATIONS  # re-exported for callers and tests
 from src.hands import generate_all_canonical_hands
 
@@ -70,7 +70,7 @@ class RangeFinder:
             List of all 455 HandEVRecord instances sorted by EV descending.
 
         Raises:
-            ValueError: If RANGE is requested without a CallingRangeModel.
+            ModelError: If RANGE is requested without a CallingRangeModel.
         """
         all_stats = self._db.all_items()
         records: list[HandEVRecord] = []
@@ -78,7 +78,7 @@ class RangeFinder:
         range_equity: dict[str, float] | None = None
         if opponent_model is OpponentModel.RANGE:
             if self._calling_model is None:
-                raise ValueError("OpponentModel.RANGE requires a CallingRangeModel.")
+                raise ModelError("OpponentModel.RANGE requires a CallingRangeModel.")
             range_equity = self._calling_model.equity_table(fold_equity)
 
         for cid, stats in all_stats.items():

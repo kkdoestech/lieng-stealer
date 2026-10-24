@@ -15,6 +15,7 @@ from src.exceptions import (
     InvalidGameParamsError,
     InvalidHandSizeError,
     LiengError,
+    ModelError,
     UnknownHandError,
 )
 
@@ -27,6 +28,7 @@ from src.exceptions import (
         (DuplicateCardError, (InvalidHandSizeError, LiengError)),
         (InvalidGameParamsError, (LiengError, ValueError)),
         (UnknownHandError, (LiengError, KeyError)),
+        (ModelError, (LiengError,)),
         (DatabaseError, (LiengError,)),
         (DatabaseNotLoadedError, (DatabaseError, LiengError)),
     ],

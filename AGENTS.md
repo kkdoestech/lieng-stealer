@@ -17,7 +17,7 @@ The system strictly adheres to:
 - **Typing**: Strict type annotations, enforced by `mypy --strict` and `ruff` (configured in `backend/pyproject.toml`, run in CI). No untyped functions or use of `Any` without explicit justification.
 - **Data Structures**: Prefer `@dataclass(frozen=True)` or `typing.NamedTuple` for domain entities (`Card`, `Hand`, `HandScore`, `EVResult`).
 - **Docstrings**: Google style with explicit `Args`, `Returns`, and `Raises` sections for all public classes and functions.
-- **Error Handling**: Explicit custom exception hierarchy inherited from `LiengError` (e.g., `InvalidCardError`, `InvalidHandSizeError`, `DuplicateCardError`, `DatabaseNotLoadedError`). `InvalidGameParamsError` is also a `ValueError` and `UnknownHandError` also a `KeyError`, so code written against the built-ins keeps working; `tests/test_exceptions.py` pins the hierarchy. Never silently swallow exceptions.
+- **Error Handling**: Explicit custom exception hierarchy inherited from `LiengError` (e.g., `InvalidCardError`, `InvalidHandSizeError`, `DuplicateCardError`, `DatabaseNotLoadedError`, and `ModelError` for a missing or inconsistent model, which is a bug rather than bad input). `InvalidGameParamsError` is also a `ValueError` and `UnknownHandError` also a `KeyError`, so code written against the built-ins keeps working; `tests/test_exceptions.py` pins the hierarchy. Never silently swallow exceptions.
 
 ### 2.2 Functional & Architectural Constraints
 - **Pure Functions**: `evaluator.py` and `ev.py` must be completely deterministic and free of side effects or external I/O.
@@ -100,7 +100,7 @@ Because Liêng hand strength is suit-invariant pre-showdown:
   - 12 Liêng forms (`A-2-3` to `Q-K-A`).
   - 6 Đĩ forms (`J-J-Q`, `J-J-K`, `J-Q-Q`, `J-K-K`, `Q-Q-K`, `Q-K-K`).
   - 424 Điểm forms.
-- Reducing $22,100 \rightarrow 455$ canonical keys minimizes offline Monte Carlo overhead and compresses database size below 100 KB.
+- Reducing $22,100 \rightarrow 455$ canonical keys cuts the offline work to $455 \times 18{,}424 \approx 8.4$ million exact showdowns and keeps the database below 100 KB.
 
 ---
 

@@ -32,7 +32,7 @@ npm install
 
 ### 2.1 Run All Backend Tests
 ```bash
-python -m pytest -q                   # 159 passed
+python -m pytest -q                   # 172 passed
 ```
 
 ### 2.2 Run Specific Test Suites
@@ -58,7 +58,7 @@ PERF_BUDGET_FACTOR=3 python -m pytest -q          # loosen timing budgets on a s
 ### 2.4 Frontend Tests
 ```bash
 cd frontend
-npm test                                          # Vitest: 18 passed
+npm test                                          # Vitest: 20 passed
 ```
 
 ---
@@ -113,7 +113,7 @@ python -m src.cli                                 # asks for pot, bet, fold rate
 python -m src.cli --opponent-model range          # same, with "range" as the default model answer
 ```
 
-Exit codes: 0 success, 1 the win-rate file can't be loaded, 2 invalid input, 130 Ctrl-C.
+Exit codes: 0 success, 1 the win-rate file can't be loaded (or the model is broken), 2 invalid input, 130 Ctrl-C.
 
 ---
 

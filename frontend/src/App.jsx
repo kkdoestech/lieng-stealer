@@ -36,12 +36,13 @@ function loadSavedLang() {
 }
 
 // Map a failed /api/solve response to the message shown under the button ({ key, detail }).
-// The API answers every error with { error, code }; a 5xx without a code did not come from Flask
-// (e.g. the dev proxy could not reach it), so it means the solver is not running.
-function solveErrorFor(status, body) {
-  if (status >= 500) return body.code ? { key: "serverError" } : { key: "solverOffline" };
+// The API answers every error with { error, code }. A response without a code did not come from
+// Flask (e.g. the dev proxy's 502, or a 404 from the wrong server), so the solver isn't reachable.
+function solveErrorFor(body) {
+  if (!body.code) return { key: "solverOffline" };
   if (body.code === "invalid_hand") return { key: "invalidHand", detail: body.error };
-  return { key: "invalidParams", detail: body.error ?? `HTTP ${status}` };
+  if (body.code === "invalid_params") return { key: "invalidParams", detail: body.error };
+  return { key: "serverError" };
 }
 
 // One solve + analysis round trip. It holds no state: it reports each step through the callbacks
@@ -56,7 +57,7 @@ async function fetchSolveAndAnalysis(body, signal, { onSolved, onSolveFailed, on
     if (signal.aborted) return;
     if (!solveRes.ok) {
       const errorBody = await solveRes.json().catch(() => ({}));
-      if (!signal.aborted) onSolveFailed(solveErrorFor(solveRes.status, errorBody));
+      if (!signal.aborted) onSolveFailed(solveErrorFor(errorBody));
       return;
     }
     try {

@@ -106,6 +106,15 @@ def compute_hand_equity(
     }
 
 
+def _file_mode(path: Path) -> int:
+    """Permissions for the written file: keep the old file's mode, or use 0644 minus the umask."""
+    if path.exists():
+        return path.stat().st_mode & 0o777
+    umask = os.umask(0)
+    os.umask(umask)
+    return 0o644 & ~umask
+
+
 def _worker_task(args: tuple[CanonicalHand, bool, int, int | None]) -> tuple[str, dict[str, Any]]:
     """Worker task wrapper for ProcessPoolExecutor."""
     canonical_hand, exact, samples, seed = args
@@ -155,7 +164,14 @@ def generate_winrates_database(
     with tempfile.NamedTemporaryFile(
         "w", encoding="utf-8", dir=out_file.parent, suffix=".tmp", delete=False
     ) as tmp:
-        json.dump(results, tmp, indent=2)
+        try:
+            json.dump(results, tmp, indent=2)
+        except BaseException:
+            tmp.close()
+            os.unlink(tmp.name)
+            raise
+    # NamedTemporaryFile creates the file as owner-only (0600); give it normal permissions first.
+    os.chmod(tmp.name, _file_mode(out_file))
     os.replace(tmp.name, out_file)
 
     return results

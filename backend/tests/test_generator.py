@@ -151,3 +151,40 @@ class TestGeneratorSafety:
         generate_winrates_database(exact=False, samples=5, output_path=out, workers=1)
         assert len(json.loads(out.read_text(encoding="utf-8"))) == 455
         assert [p.name for p in out.parent.iterdir()] == ["winrates.json"]
+
+
+class TestGeneratorFileHandling:
+    def test_new_file_gets_normal_permissions(self, tmp_path: Path) -> None:
+        import os
+
+        from src.generator import generate_winrates_database
+
+        umask = os.umask(0)
+        os.umask(umask)
+        out = tmp_path / "winrates.json"
+        generate_winrates_database(exact=False, samples=2, output_path=out, workers=1)
+        assert out.stat().st_mode & 0o777 == 0o644 & ~umask
+
+    def test_existing_file_keeps_its_permissions(self, tmp_path: Path) -> None:
+        from src.generator import generate_winrates_database
+
+        out = tmp_path / "winrates.json"
+        out.write_text("{}", encoding="utf-8")
+        out.chmod(0o640)
+        generate_winrates_database(exact=False, samples=2, output_path=out, workers=1)
+        assert out.stat().st_mode & 0o777 == 0o640
+
+    def test_failed_write_leaves_the_old_file_and_no_temp_file(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from src import generator
+
+        out = tmp_path / "winrates.json"
+        out.write_text('{"old": true}', encoding="utf-8")
+
+        def broken_dump(*args, **kwargs):
+            raise OSError("disk full")
+
+        monkeypatch.setattr(generator.json, "dump", broken_dump)
+        with pytest.raises(OSError):
+            generator.generate_winrates_database(exact=False, samples=2, output_path=out, workers=1)
+        assert out.read_text(encoding="utf-8") == '{"old": true}'
+        assert [p.name for p in tmp_path.iterdir()] == ["winrates.json"]

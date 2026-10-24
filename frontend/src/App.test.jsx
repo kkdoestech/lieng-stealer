@@ -97,6 +97,8 @@ describe("App", () => {
     ["a network failure", new TypeError("Failed to fetch"), "Can't reach the solver"],
     ["a server error", reply(500, { error: "Internal server error.", code: "internal_error" }), "internal error"],
     ["a 5xx that did not come from the API", reply(502, {}), "Can't reach the solver"],
+    ["a 404 that did not come from the API", reply(404, {}), "Can't reach the solver"],
+    ["an API error that isn't about the input", reply(404, { error: "Not found.", code: "not_found" }), "internal error"],
   ])("%s shows the matching message", async (_name, result, message) => {
     mockFetch({ "/api/solve": result, "/api/analyze": reply(200, ANALYZE_OK) });
     render(<App />);

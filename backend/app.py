@@ -23,6 +23,7 @@ from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from werkzeug.exceptions import HTTPException
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from src.calling_range import CallingRangeModel, OpponentModel
 from src.db import HandStats, WinRateDB
@@ -54,6 +55,9 @@ DEFAULT_CONFIG: Final[dict[str, Any]] = {
     "ANALYZE_RATE_LIMIT": "10 per minute",
     "RATELIMIT_STORAGE_URI": "memory://",
     "RATELIMIT_ENABLED": True,
+    # Number of reverse proxies in front of the app whose X-Forwarded-For header to trust (0 = none).
+    # Behind a hosting proxy, set it to 1 so the rate limit counts each visitor, not the proxy.
+    "PROXY_FIX_X_FOR": 0,
     "OPENROUTER_API_KEY": "",
     "OPENROUTER_MODEL": "meta-llama/llama-3.1-8b-instruct:free",
     "OPENROUTER_TIMEOUT": 15.0,
@@ -108,18 +112,25 @@ def create_app(
         db: A loaded win-rate database. Defaults to loading backend/data/winrates.json.
         calling_model: The calling-range model. Defaults to building one (about 60 ms).
         config: Settings that override DEFAULT_CONFIG and the environment. ``TESTING=True``
-            also turns the rate limiter off unless ``RATELIMIT_ENABLED`` is given explicitly.
+            also turns the rate limiter off and ignores any OPENROUTER_API_KEY from the
+            environment (so a test can never call the real service), unless the config sets
+            ``RATELIMIT_ENABLED`` / ``OPENROUTER_API_KEY`` explicitly.
 
     Raises:
         DatabaseError: If the default database file is missing or invalid (fail fast at start-up).
+        ValueError: If a numeric setting in the environment is not a number.
     """
     app = Flask(__name__)
     app.config.update(DEFAULT_CONFIG)
     app.config.update(_settings_from_env())
     overrides = dict(config or {})
-    if overrides.get("TESTING") and "RATELIMIT_ENABLED" not in overrides:
-        overrides["RATELIMIT_ENABLED"] = False
+    if overrides.get("TESTING"):
+        overrides.setdefault("RATELIMIT_ENABLED", False)
+        overrides.setdefault("OPENROUTER_API_KEY", "")
     app.config.update(overrides)
+
+    if int(app.config["PROXY_FIX_X_FOR"]) > 0:
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=int(app.config["PROXY_FIX_X_FOR"]))  # type: ignore[method-assign]
 
     if db is None:
         db = WinRateDB(DEFAULT_DB_PATH)
@@ -135,6 +146,7 @@ def create_app(
         app=app,
         storage_uri=app.config["RATELIMIT_STORAGE_URI"],
         enabled=bool(app.config["RATELIMIT_ENABLED"]),
+        headers_enabled=True,  # Retry-After and X-RateLimit-* headers tell clients when to retry
     )
     limiter.limit(lambda: str(current_app.config["ANALYZE_RATE_LIMIT"]))(analysis)
 
@@ -153,8 +165,11 @@ def _settings_from_env() -> dict[str, Any]:
             continue
         if isinstance(default, bool):
             settings[key] = raw.strip().lower() in {"1", "true", "yes", "on"}
-        elif isinstance(default, float):
-            settings[key] = float(raw)
+        elif isinstance(default, int | float):
+            try:
+                settings[key] = type(default)(raw)
+            except ValueError as err:
+                raise ValueError(f"Environment variable {key} must be a number, got {raw!r}.") from err
         else:
             settings[key] = raw
     return settings
@@ -193,7 +208,10 @@ def _register_error_handlers(app: Flask) -> None:
     @app.errorhandler(HTTPException)
     def handle_http_error(err: HTTPException) -> tuple[Response, int]:
         status = err.code or 500
-        return _error(err.description or err.name, _HTTP_CODES.get(status, "http_error"), status)
+        message = err.description or err.name
+        if status == 429:
+            message = f"Too many analysis requests (limit: {message}). Wait a moment, then try again."
+        return _error(message, _HTTP_CODES.get(status, "http_error"), status)
 
     @app.errorhandler(Exception)
     def handle_unexpected(err: Exception) -> tuple[Response, int]:
@@ -206,9 +224,11 @@ def _register_error_handlers(app: Flask) -> None:
 # Request parsing
 # --------------------------------------------------------------------------------------------
 def _request_body() -> Json:
-    """The JSON body as a dict. No body means "use the defaults"; any other JSON type is an error."""
+    """The JSON body as a dict. No body means "use the defaults"; anything else must be a JSON object."""
     data = request.get_json(silent=True)
     if data is None:
+        if request.get_data():
+            raise InvalidGameParamsError("The request body must be valid JSON (Content-Type: application/json).")
         return {}
     if not isinstance(data, dict):
         raise InvalidGameParamsError("The request body must be a JSON object.")
@@ -536,7 +556,7 @@ def _build_prompt(params: GameParams, coverage: float, result: HandResult | None
         "\nProvide a structured breakdown:\n"
         "1. [Quyết định Toán học & EV]: Phân tích EV, Fold Equity và ngưỡng hòa vốn.\n"
         "2. [Chiến thuật Bluff & Giá trị]: Hero có nên Tố (Raise)/Tất tay hay Check/Bỏ bài? Giải thích tâm lý đối thủ.\n"
-        "3. [Lời khuyên GTO]: Nhận xét ngắn gọn về độ rủi ro và cách khai thác đối thủ."
+        "3. [Lời khuyên chiến thuật]: Nhận xét ngắn gọn về độ rủi ro và cách khai thác đối thủ."
     )
 
 
@@ -565,7 +585,7 @@ def _fallback_advice(params: GameParams, coverage: float, result: HandResult | N
         f"với xác suất thắng đối đầu {result.ev.win_rate_when_called*100:.1f}%. "
         f"Kỳ vọng thu nhập (EV) đạt **{ev:+,.0f} VND**. "
         f"Khuyến nghị tối ưu: **{_decision(result.ev.is_profitable)}**.\n\n"
-        f"3. **GTO Insight:** "
+        f"3. **Nhận định chiến thuật:** "
         + ("Bài có EV dương rõ rệt nhờ cả showdown equity lẫn fold equity. Tố lớn để tối đa hóa lợi nhuận." if ev > 0
            else "EV âm. Showdown equity quá thấp và đối thủ ít bỏ bài. Không nên mạo hiểm, hãy Bỏ bài (Fold) hoặc Theo nhẹ nếu có thể.")
     )

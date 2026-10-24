@@ -34,6 +34,10 @@ class UnknownHandError(LiengError, KeyError):
         return str(self.args[0]) if self.args else ""
 
 
+class ModelError(LiengError):
+    """Raised when the solver's own model is missing or inconsistent (a bug or bad setup, not bad input)."""
+
+
 class DatabaseError(LiengError):
     """Base error for precomputed database operations."""
 

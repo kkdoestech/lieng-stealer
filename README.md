@@ -7,7 +7,7 @@ Given the pot, your bet, how often the opponent folds and your three cards, it t
 It ships as a Python engine with a command-line tool, a Flask JSON API, and a bilingual (English /
 Vietnamese) React web app called **LIÊNG SCOPE**.
 
-`Python 3.11+` · `Flask 3` · `React 19 + Vite 8` · `159 backend + 18 frontend tests` · `MIT license`
+`Python 3.11+` · `Flask 3` · `React 19 + Vite 8` · `172 backend + 20 frontend tests` · `MIT license`
 
 ---
 
@@ -40,7 +40,7 @@ Vietnamese) React web app called **LIÊNG SCOPE**.
 - **Computes the decision.** EV of raising, a break-even fold frequency, and every fold-frequency range in
   which raising is profitable.
 - **Scans the whole range.** Which of the 22,100 hands are worth raising in this spot, per category.
-- **Answers instantly.** The slow work (≈ 30 s) runs once, offline; each question is a lookup plus a
+- **Answers instantly.** The slow work (≈ 10 s) runs once, offline; each question is a lookup plus a
   little arithmetic (≈ 1–2 ms for all 455 hand types).
 
 ---
@@ -202,7 +202,7 @@ It prints the game state, a range summary, a per-category table and the decision
 
 Run it with no options (or only `--opponent-model`, which becomes the default answer) for an
 **interactive** session. Every input is checked before anything is printed. Exit codes: **0** success,
-**1** the win-rate file can't be loaded, **2** invalid input (`Invalid input: …` on stderr), **130** Ctrl-C.
+**1** the win-rate file can't be loaded (or the solver's model is broken), **2** invalid input (`Invalid input: …` on stderr), **130** Ctrl-C.
 
 **Card notation** (CLI and API): rank `2`–`10` (or `T`), `J`, `Q`, `K`, `A`, followed by a suit `s` `c`
 `d` `h` (or `♠ ♣ ♦ ♥`); upper or lower case. Separate cards with spaces, commas or hyphens.
@@ -239,10 +239,10 @@ rejected). Missing fields take the defaults above.
 
 | `code` | Status | When |
 | :--- | :--- | :--- |
-| `invalid_params` | 400 | A body that isn't an object, a bad number, an unknown `opponent_model`, a missing `hand` on `/api/evaluate` |
+| `invalid_params` | 400 | A body that isn't valid JSON or isn't an object, a bad number, an unknown `opponent_model`, a missing `hand` on `/api/evaluate` |
 | `invalid_hand` | 400 | The hand text isn't three valid, different cards |
 | `not_found` / `method_not_allowed` | 404 / 405 | Unknown URL / wrong HTTP method |
-| `rate_limited` | 429 | Too many `/api/analyze` calls |
+| `rate_limited` | 429 | Too many `/api/analyze` calls (the `Retry-After` header says when to try again) |
 | `upstream_error` | 502 | The LLM service failed or sent something unexpected (details are logged, not returned) |
 | `internal_error` | 500 | A bug; the server logs the traceback |
 
@@ -391,7 +391,7 @@ lieng-stealer/
 │   │   ├── ev.py               EV, break-even fold equity, profitable fold zones
 │   │   ├── range_finder.py     EV of all 455 types, sorting, coverage
 │   │   └── cli.py              command-line interface
-│   └── tests/                  pytest suite (159 tests)
+│   └── tests/                  pytest suite (172 tests)
 ├── frontend/
 │   ├── index.html, vite.config.js, package.json, .oxlintrc.json
 │   └── src/
@@ -399,7 +399,7 @@ lieng-stealer/
 │       ├── i18n.js             English and Vietnamese UI text
 │       ├── format.js           money and fold-zone formatting
 │       ├── index.css, App.css  colour tokens and layout
-│       └── *.test.js(x)        Vitest tests (18 tests)
+│       └── *.test.js(x)        Vitest tests (20 tests)
 ├── .github/workflows/ci.yml    CI: backend, frontend and course checks on every push
 ├── learning/                   guided tour of the codebase: 18 lessons, start at COURSE.md
 ├── AGENTS.md                   engineering spec: rules, data model, maths, performance budgets
@@ -416,9 +416,9 @@ lieng-stealer/
 From the repository root:
 
 ```bash
-(cd backend && python -m pytest -q)                          # 159 passed
+(cd backend && python -m pytest -q)                          # 172 passed
 (cd backend && ruff check . && mypy)                         # lint + strict type check: 0 issues
-(cd frontend && npm test)                                    # 18 passed (Vitest)
+(cd frontend && npm test)                                    # 20 passed (Vitest)
 (cd frontend && npm run lint && npm run build)               # 0 warnings; production build in dist/
 python3 learning/verify_course.py                            # the course still matches the code
 ```
@@ -430,16 +430,16 @@ budgets by `PERF_BUDGET_FACTOR` (CI sets 3, because shared runners are slower).
 | :--- | ---: | :--- |
 | `test_evaluator.py` | 27 | Card parsing, category order, straight edge cases, Đĩ rules, points mod 10, tie-break house rules, hashing, the 1 µs budget |
 | `test_hands.py` | 8 | 455 types, multiplicities summing to 22,100, suit invariance, duplicate cards, ordering |
-| `test_exceptions.py` | 8 | The exception hierarchy callers rely on |
-| `test_generator.py` | 12 | Exact equities, rate invariants, Monte Carlo convergence, data-file schema, CLI flags, atomic write, private RNG |
+| `test_exceptions.py` | 9 | The exception hierarchy callers rely on |
+| `test_generator.py` | 15 | Exact equities, rate invariants, Monte Carlo convergence, data-file schema, CLI flags, atomic write, file permissions, private RNG |
 | `test_db.py` | 13 | Loading, lookup latency, error handling, validation of malformed or incomplete files |
 | `test_calling_range.py` | 12 | Card removal, exact match with `winrates.json` at 0% folds, monotonicity, latency, model invariants |
 | `test_ev.py` | 15 | EV boundaries, bluffing, break-even, profitable fold zones, strong hands |
-| `test_range_finder.py` | 8 | Range scan, coverage, opponent models, tie ordering, category breakdown |
-| `test_cli.py` | 10 | Decisions per model, interactive mode, exit codes, validation before output |
-| `test_api.py` | 40 | Every endpoint, both models, one shared vocabulary, JSON errors, validation, `/api/analyze` (OpenRouter mocked), rate limit, CORS |
+| `test_range_finder.py` | 9 | Range scan, coverage, opponent models, tie ordering, category breakdown |
+| `test_cli.py` | 12 | Decisions per model, interactive mode, exit codes, validation before output, plain-text fallback |
+| `test_api.py` | 46 | Every endpoint, both models, one shared vocabulary, JSON errors, validation, `/api/analyze` (OpenRouter mocked), rate limit and `Retry-After`, proxy handling, CORS, settings |
 | `test_dynamic_scenarios.py` | 6 | End-to-end player stories (value raise, junk fold, pure bluff, coverage sweep, both models) |
-| frontend `App.test.jsx` | 12 | Rendering, error messages, stale results cleared, language toggle, steppers, request cancelling |
+| frontend `App.test.jsx` | 14 | Rendering, error messages, stale results cleared, language toggle, steppers, request cancelling |
 | frontend `format.test.js`, `i18n.test.js` | 6 | Locale-aware money formatting, zone formatting, EN/VI dictionary parity |
 
 The tests never call the internet: the LLM calls are mocked or use the offline fallback.
@@ -448,8 +448,6 @@ The tests never call the internet: the LLM calls are mocked or use the offline f
 
 ## Configuration and deployment
 
-| Variable | Used by | Purpose |
-| :--- | :--- | :--- |
 All backend variables are listed in [`backend/.env.example`](backend/.env.example); every one is optional.
 
 | Variable | Used by | Purpose |
@@ -458,10 +456,14 @@ All backend variables are listed in [`backend/.env.example`](backend/.env.exampl
 | `OPENROUTER_MODEL`, `OPENROUTER_TIMEOUT` | backend | LLM model (default `meta-llama/llama-3.1-8b-instruct:free`) and timeout in seconds (default 15) |
 | `CORS_ORIGINS` | backend | Comma-separated browser origins allowed to call the API (default `http://localhost:5173,http://127.0.0.1:5173`). Set it to your frontend's URL in production. |
 | `ANALYZE_RATE_LIMIT`, `RATELIMIT_STORAGE_URI` | backend | Per-client limit for `/api/analyze` (default `10 per minute`) and where counts live (default `memory://`, which counts per worker; use e.g. `redis://…` for one shared limit) |
+| `RATELIMIT_ENABLED` | backend | `false` turns the limiter off (default `true`; test apps turn it off themselves) |
+| `PROXY_FIX_X_FOR` | backend | How many reverse proxies to trust for `X-Forwarded-For` (default `0`). Behind a hosting proxy set it to `1`, or every visitor shares one rate-limit budget. |
 | `HOST`, `PORT` | backend | Address for `python app.py` (default `127.0.0.1:5000`; `HOST=0.0.0.0` shares it on your network). The `Procfile` uses `$PORT`. |
 | `VITE_API_URL` | frontend, **at build time** | Backend URL. Without it the page calls `/api` on its own origin. It ends up in the public JavaScript bundle, so never put secrets in it. |
 
-`.env` files are git-ignored, so real keys stay out of the repository.
+`.env` files are git-ignored, so real keys stay out of the repository. Nothing loads `.env` automatically:
+export the variables in your shell (for example `set -a; . backend/.env; set +a`) or set them in your
+hosting platform's settings.
 
 | Part | Example platform | Build | Run |
 | :--- | :--- | :--- | :--- |

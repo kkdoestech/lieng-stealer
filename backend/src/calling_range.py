@@ -20,7 +20,7 @@ from enum import StrEnum
 from math import comb
 from typing import Final
 
-from src.exceptions import InvalidGameParamsError, LiengError, UnknownHandError
+from src.exceptions import InvalidGameParamsError, ModelError, UnknownHandError
 from src.hands import OPPONENT_COMBINATIONS as OPPONENT_COMBINATIONS  # re-exported: C(49, 3) = 18,424
 from src.hands import TOTAL_COMBINATIONS as TOTAL_COMBINATIONS  # re-exported: C(52, 3) = 22,100
 from src.hands import CanonicalHand, generate_all_canonical_hands
@@ -53,7 +53,7 @@ class CallingRangeModel:
                 still cover all 22,100 combinations.
 
         Raises:
-            LiengError: If the hands don't cover the full deck, or two classes are equally strong.
+            ModelError: If the hands don't cover the full deck, or two classes are equally strong.
                 The equity maths below counts "beaten" and "tied" by position in a strict order,
                 so tied classes would give silently wrong numbers.
         """
@@ -63,9 +63,9 @@ class CallingRangeModel:
             reverse=True,
         )
         if sum(h.multiplicity for h in ordered) != TOTAL_COMBINATIONS:
-            raise LiengError(f"The calling-range model needs classes covering all {TOTAL_COMBINATIONS} hands.")
+            raise ModelError(f"The calling-range model needs classes covering all {TOTAL_COMBINATIONS} hands.")
         if len({h.score.score_tuple for h in ordered}) != len(ordered):
-            raise LiengError("The calling-range model needs every canonical class to have a distinct strength.")
+            raise ModelError("The calling-range model needs every canonical class to have a distinct strength.")
         self._ids: tuple[str, ...] = tuple(h.canonical_id for h in ordered)
         self._index: dict[str, int] = {cid: i for i, cid in enumerate(self._ids)}
         self._mult: tuple[int, ...] = tuple(h.multiplicity for h in ordered)

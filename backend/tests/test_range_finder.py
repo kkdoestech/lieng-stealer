@@ -129,3 +129,10 @@ class TestConstructionAndSummaries:
         assert [(r.category.name, r.classes, r.combos) for r in rows] == [
             ("SAP", 13, 52), ("LIENG", 12, 768), ("DI", 6, 144), ("DIEM", 424, 21136),
         ]
+
+
+def test_range_model_without_calling_model_is_a_model_error(loaded_finder: RangeFinder) -> None:
+    from src.exceptions import ModelError
+
+    with pytest.raises(ModelError):
+        loaded_finder.solve_range(100000.0, 50000.0, 0.35, OpponentModel.RANGE)

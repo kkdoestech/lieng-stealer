@@ -82,22 +82,22 @@ class TestCallingRangeModel:
 
 class TestModelInvariants:
     def test_rejects_a_subset_of_hands(self) -> None:
-        from src.exceptions import LiengError
+        from src.exceptions import ModelError
         from src.hands import generate_all_canonical_hands
 
-        with pytest.raises(LiengError, match="22100"):
+        with pytest.raises(ModelError, match="22100"):
             CallingRangeModel(generate_all_canonical_hands()[:100])
 
     def test_rejects_classes_with_equal_strength(self) -> None:
         """Making two classes tie (e.g. all Đĩ equal) must fail loudly, not give wrong equities."""
         import dataclasses
 
-        from src.exceptions import LiengError
+        from src.exceptions import ModelError
         from src.hands import generate_all_canonical_hands
 
         hands = generate_all_canonical_hands()
         hands[1] = dataclasses.replace(hands[1], score=hands[0].score)
-        with pytest.raises(LiengError, match="distinct strength"):
+        with pytest.raises(ModelError, match="distinct strength"):
             CallingRangeModel(hands)
 
     def test_errors_are_project_errors(self, model: CallingRangeModel) -> None:
