@@ -93,6 +93,9 @@ Every term the course uses, with the lesson that explains it properly. Back to [
 | **`SystemExit`** | The exception `sys.exit()` raises; tests catch it to check a CLI's exit code. | [09](09-cli.md) |
 | **Fixture scope / `tmp_path` / `xfail`** | How often pytest rebuilds a fixture; a fresh temporary folder per test; marking a test as expected to fail. | [15](15-tests-and-performance.md) |
 | **`time.perf_counter`** | The clock to use for measuring short durations. | [15](15-tests-and-performance.md) |
+| **ruff / mypy (strict)** | The Python linter and type checker. `backend/pyproject.toml` configures both; CI runs them on every push. | [15](15-tests-and-performance.md) |
+| **`functools.cached_property`** | A property computed on first access and stored on the instance; `Hand.score` uses it. | [02](02-hand-evaluation.md) |
+| **Lookup table** | Precomputed answers keyed by the input: `evaluate_hand` looks up 455 scores by sorted ranks instead of recomputing them. | [02](02-hand-evaluation.md) |
 
 ## Web and frontend
 
@@ -103,7 +106,7 @@ Every term the course uses, with the lesson that explains it properly. Back to [
 | **Status code** | The number that says how a request went: 200 OK, 400 bad input, 404 not found, 500 server error, 502 upstream failed. | [10](10-flask-api.md) |
 | **CORS** | Browser rules for which other sites may call an API. The backend allows every origin (`*`). | [10](10-flask-api.md) |
 | **Test client** | Flask's in-process fake browser: `app.test_client().post(...)` calls a route without starting a server. | [10](10-flask-api.md) |
-| **App factory** | A `create_app()` function that builds the app and its dependencies, instead of module-level globals. Suggested, not yet used. | [17](17-weak-spots-and-next-steps.md) |
+| **App factory** | A `create_app()` function that builds the app and its dependencies, instead of module-level globals. `app.py` uses one; tests pass in their own database. | [10](10-flask-api.md) |
 | **LLM / OpenRouter** | A large language model, reached through the OpenRouter service. Used only by `/api/analyze`, which falls back to a rule-based answer without a key. | [10](10-flask-api.md) |
 | **gunicorn / WSGI** | The production server that runs the Flask app with several worker processes. | [16](16-deployment.md) |
 | **Procfile** | A one-line file telling a hosting platform how to start the web process. | [16](16-deployment.md) |
@@ -138,4 +141,12 @@ Every term the course uses, with the lesson that explains it properly. Back to [
 | **`rem`** | A CSS length relative to the root font size (15px here), so 0.87rem ≈ 13px. | [14](14-styling.md) |
 | **CSS grid / media query** | The two-column layout (`340px 1fr`) / rules that apply only below a width (1024, 640, 480px). | [14](14-styling.md) |
 | **`tabular-nums`** | A font setting that gives every digit the same width, so numbers line up in tables. | [14](14-styling.md) |
+| **Error code** | The stable `code` in every API error (`invalid_hand`, `rate_limited`, …), so clients react to the kind of error, not to its English text. | [10](10-flask-api.md) |
+| **Rate limit / Flask-Limiter** | A cap on how often one client may call an endpoint; `/api/analyze` allows 10 per minute by default. | [10](10-flask-api.md) |
+| **Blueprint** | A group of Flask routes that an app registers; `app.py` has `api` and `analysis` (the rate-limited one). | [10](10-flask-api.md) |
+| **`AbortController`** | A browser object that cancels a `fetch`; the page gives every solve run one, so a newer run cancels an older one. | [13](13-frontend-app.md) |
+| **`useEffectEvent`** | A React 19 hook for effect code that reads the latest props/state without becoming an effect dependency. | [13](13-frontend-app.md) |
+| **Vitest / Testing Library** | The frontend test runner, and helpers that render components and find elements the way a user would. | [15](15-tests-and-performance.md) |
+| **`color-mix()`** | CSS that blends two colours; the profit-map tokens are `--good` / `--bad` mixed with transparency. | [14](14-styling.md) |
+| **CI (GitHub Actions)** | Checks that run on every push: backend lint/types/tests, frontend lint/tests/build, the course checker. | [16](16-deployment.md) |
 

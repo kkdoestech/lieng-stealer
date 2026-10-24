@@ -3,7 +3,7 @@
 > **Goal:** understand every line of `ev.py`: the EV formula, the break-even fold rate, and why the
 > code scans for *zones* of fold rates instead of trusting a single threshold.
 > **Files:** [`backend/src/ev.py`](../backend/src/ev.py), [`backend/tests/test_ev.py`](../backend/tests/test_ev.py),
-> and the two places that call it in [`backend/app.py`](../backend/app.py#L81-L115).
+> and the code that calls it in [`backend/app.py`](../backend/app.py#L282-L327).
 > **Time:** ~60 min. **Before this:** [06 — The calling range](06-calling-range.md).
 
 ---
@@ -39,13 +39,14 @@ the best one to understand first in full.
 | # | Location | What to look for |
 |---|----------|------------------|
 | 1 | [ev.py:1-6](../backend/src/ev.py#L1-L6) | The formula, written once in the module docstring. |
-| 2 | [ev.py:14-24](../backend/src/ev.py#L14-L24) | `EVResult`: everything one calculation produces. |
-| 3 | [ev.py:27-64](../backend/src/ev.py#L27-L64) | `calculate_ev`: input checks, then three lines of maths. |
-| 4 | [ev.py:67-106](../backend/src/ev.py#L67-L106) | `calculate_break_even_fold_equity`: the formula solved for `f`. |
-| 5 | [ev.py:109-133](../backend/src/ev.py#L109-L133) | `is_profitable` and `evaluate_action`, which bundle the above. |
-| 6 | [ev.py:136-179](../backend/src/ev.py#L136-L179) | `profitable_fold_zones`: a scan over 101 fold rates. |
-| 7 | [app.py:81-115](../backend/app.py#L81-L115) | How the API feeds `ev.py` and turns zones into two JSON fields. |
-| 8 | [test_ev.py](../backend/tests/test_ev.py) | 13 tests that pin the boundary cases and the K-Q-3 zones. |
+| 2 | [ev.py:15-18](../backend/src/ev.py#L15-L18) | The default pot, bet and fold rate that the CLI and the API share. |
+| 3 | [ev.py:21-36](../backend/src/ev.py#L21-L36) | `EVResult`: everything one calculation produces, and `final_pot()`: the one place that writes `P + 2B`. |
+| 4 | [ev.py:39-78](../backend/src/ev.py#L39-L78) | `calculate_ev`: input checks, then two lines of maths. |
+| 5 | [ev.py:81-121](../backend/src/ev.py#L81-L121) | `calculate_break_even_fold_equity`: the formula solved for `f`. |
+| 6 | [ev.py:124-147](../backend/src/ev.py#L124-L147) | `is_profitable` and `evaluate_action`, which bundle the above. |
+| 7 | [ev.py:150-194](../backend/src/ev.py#L150-L194) | `profitable_fold_zones`: a scan over 101 fold rates. |
+| 8 | [app.py:282-327](../backend/app.py#L282-L327) | How the API feeds `ev.py` (`_equity_function`, `_evaluate_hand`) and turns zones into two JSON fields (`_hand_payload`). |
+| 9 | [test_ev.py](../backend/tests/test_ev.py) | 15 tests that pin the boundary cases, the K-Q-3 zones and the strong-hand slope. |
 
 ---
 
@@ -82,39 +83,56 @@ Two choices are built into this formula. Both matter later:
 - **The baseline is "give up" = 0.** EV is profit compared with *not* raising and losing the pot.
   That is why winning the dead pot `P` counts as profit.
 - **The opponent calls exactly `B`.** There is no re-raise, so the final pot is always `P + 2B`.
-  AGENTS.md §5.1 writes the general `P + B + C_opp`; the code fixes `C_opp = B`.
+  AGENTS.md §5.1 writes the general `P + B + C_opp`; the code fixes `C_opp = B`, in one helper:
 
-### 2. `calculate_ev`: three lines of maths behind four guards
+📍 [`backend/src/ev.py:34-36`](../backend/src/ev.py#L34-L36)
+```python
+def final_pot(pot: float, bet_size: float) -> float:
+    """Pot after Hero bets and the opponent calls the same amount: P + 2B (AGENTS.md: C_opp = B)."""
+    return pot + 2.0 * bet_size
+```
 
-📍 [`backend/src/ev.py:51-64`](../backend/src/ev.py#L51-L64)
+Every function in `ev.py` calls `final_pot()`, and so do the API's range summary
+([app.py:339](../backend/app.py#L339)) and the CLI report ([cli.py:100](../backend/src/cli.py#L100)).
+If the call model ever changes, this is the line to change.
+
+### 2. `calculate_ev`: two lines of maths behind four guards
+
+📍 [`backend/src/ev.py:64-78`](../backend/src/ev.py#L64-L78)
 ```python
     if pot <= 0:
-        raise ValueError(f"Pot must be strictly positive, got {pot}.")
+        raise InvalidGameParamsError(f"Pot must be strictly positive, got {pot}.")
     if bet_size <= 0:
-        raise ValueError(f"Bet size must be strictly positive, got {bet_size}.")
+        raise InvalidGameParamsError(f"Bet size must be strictly positive, got {bet_size}.")
     if not (0.0 <= fold_equity <= 1.0):
-        raise ValueError(f"Fold equity must be between 0.0 and 1.0, got {fold_equity}.")
+        raise InvalidGameParamsError(f"Fold equity must be between 0.0 and 1.0, got {fold_equity}.")
     if not (0.0 <= win_rate_when_called <= 1.0):
-        raise ValueError(f"Win rate when called must be between 0.0 and 1.0, got {win_rate_when_called}.")
+        raise InvalidGameParamsError(
+            f"Win rate when called must be between 0.0 and 1.0, got {win_rate_when_called}."
+        )
 
-    final_pot = pot + 2.0 * bet_size
-    showdown_value = (win_rate_when_called * final_pot) - bet_size
+    showdown_value = (win_rate_when_called * final_pot(pot, bet_size)) - bet_size
 
     ev = (fold_equity * pot) + (1.0 - fold_equity) * showdown_value
     return round(ev, 4)
 ```
 
-The guards raise the built-in `ValueError`, not one of the project's `LiengError` types
-(lesson 01). The API never reaches them, because `_parse_game_params` in `app.py` rejects bad
-input first. Tests and the CLI can reach them.
+The guards raise `InvalidGameParamsError`, the project's error for bad numbers (lesson 01). It
+derives from both `LiengError` and the built-in `ValueError`
+([exceptions.py:25-26](../backend/src/exceptions.py#L25-L26)), so code that catches either one
+works. The API rarely reaches these guards, because `_parse_game_params`
+([app.py:236-259](../backend/app.py#L236-L259)) rejects bad input first with the same error type,
+which the API turns into a `400 invalid_params` answer (lesson 10). Tests and the CLI can reach them.
 
 **Worked example.** This is the default hand in the web UI, Q-K-A, with pot 100,000, bet 50,000,
 the opponent folding 35% of the time, and equity 0.9969 against a random hand (from
-`winrates.json`, lesson 04):
+`winrates.json`, lesson 04). The three game numbers are also `DEFAULT_POT`, `DEFAULT_BET_SIZE` and
+`DEFAULT_FOLD_EQUITY` ([ev.py:15-18](../backend/src/ev.py#L15-L18)), which the API and the CLI use
+when you leave a value out:
 
 | Step | Value |
 |------|-------|
-| `final_pot` = 100,000 + 2 × 50,000 | 200,000 |
+| `final_pot(100,000, 50,000)` = 100,000 + 2 × 50,000 | 200,000 |
 | `showdown_value` = 0.9969 × 200,000 − 50,000 | 149,380 |
 | fold part = 0.35 × 100,000 | 35,000 |
 | showdown part = 0.65 × 149,380 | 97,097 |
@@ -127,9 +145,9 @@ gives Q-K-A slightly less equity (0.9952) because the hands that call are strong
 
 | Situation | EV | Pinned by |
 |-----------|----|-----------|
-| Opponent always folds, `f = 1` | `P` (any `w`) | [test_ev.py:29](../backend/tests/test_ev.py#L29) |
-| Never folds, you always win, `f = 0`, `w = 1` | `P + B` | [test_ev.py:36](../backend/tests/test_ev.py#L36) |
-| Never folds, you always lose, `f = 0`, `w = 0` | `−B` | [test_ev.py:44](../backend/tests/test_ev.py#L44) |
+| Opponent always folds, `f = 1` | `P` (any `w`) | [test_ev.py:30](../backend/tests/test_ev.py#L30) |
+| Never folds, you always win, `f = 0`, `w = 1` | `P + B` | [test_ev.py:37](../backend/tests/test_ev.py#L37) |
+| Never folds, you always lose, `f = 0`, `w = 0` | `−B` | [test_ev.py:45](../backend/tests/test_ev.py#L45) |
 
 There is a fourth one hiding in the formula. When `f = 0`, raising pays only if
 `w > B / (P + 2B)`. With the default sizes that is `50,000 / 200,000 = 0.25`. These are the
@@ -143,25 +161,24 @@ Set `EV = 0` and solve for `f`. Write `S` for the showdown value:
 f · P + (1 − f) · S = 0   →   f = −S / (P − S)
 ```
 
-📍 [`backend/src/ev.py:94-106`](../backend/src/ev.py#L94-L106)
+📍 [`backend/src/ev.py:113-121`](../backend/src/ev.py#L113-L121)
 ```python
-    final_pot = pot + 2.0 * bet_size
-    showdown_value = (win_rate_when_called * final_pot) - bet_size
+    showdown_value = (win_rate_when_called * final_pot(pot, bet_size)) - bet_size
 
     # If showdown value is already non-negative, zero fold equity is needed
     if showdown_value >= 0.0:
         return 0.0
 
-    denominator = pot - showdown_value
-    if denominator <= 0.0:
-        return 0.0
-
-    req_fe = -showdown_value / denominator
+    # Here showdown_value < 0 and pot > 0, so the denominator pot - showdown_value is positive.
+    req_fe = -showdown_value / (pot - showdown_value)
     return round(min(1.0, max(0.0, req_fe)), 4)
 ```
 
 - If `S ≥ 0`, you profit even when called, so you need no folds at all: the function returns 0.0.
-- Otherwise the answer is `−S / (P − S)`. For a **pure bluff** (`w = 0`, so `S = −B`) this
+- Otherwise the answer is `−S / (P − S)`. The comment on line 119 is the proof that the division is
+  safe: `S < 0` and `P > 0`, so `P − S > 0`. (An older version guarded it with an
+  `if denominator <= 0` branch that could never run; see weak spot 1.)
+- For a **pure bluff** (`w = 0`, so `S = −B`) this
   simplifies to `B / (P + B)`. A half-pot bet needs `50,000 / 150,000 = 33.3%` folds. A pot-sized
   bet needs 50%.
 
@@ -172,9 +189,9 @@ a profitable bluff, but only just.
 
 ### 5. When more folds *cost* you money
 
-You might expect "the more they fold, the better". The test docstring at
-[test_ev.py:9](../backend/tests/test_ev.py#L9) even says so. It is wrong for strong hands. The
-slope of EV in `f` is `P − S`:
+You might expect "the more they fold, the better". The test file used to say exactly that in its
+docstring. It is wrong for strong hands, and the docstring now says so
+([test_ev.py:9-10](../backend/tests/test_ev.py#L9-L10)). The slope of EV in `f` is `P − S`:
 
 - **Weak hand** (`S < P`): the slope is positive, so folds help. Every fold hands you a pot you
   would probably have lost.
@@ -186,6 +203,10 @@ Q-K-A against a random hand, at the default sizes:
 | f | 0 | 0.35 | 1 |
 |---|---|------|---|
 | EV | 149,380 | 132,097 | 100,000 |
+
+`TestStrongHands.test_folds_hurt_unbeatable_hands`
+([test_ev.py:149-152](../backend/tests/test_ev.py#L149-L152)) pins the extreme case, `w = 1`:
+the EV falls from 150,000 to 125,000 to 100,000 as `f` goes 0 → 0.5 → 1.
 
 That is why "how often will they fold?" matters for every hand, not only for bluffs.
 
@@ -208,7 +229,7 @@ There are two profitable stretches: against loose callers (f ≤ 8%) the hand wi
 showdowns, and above 50% it is a pure bluff that folds alone pay for. In between it loses. No single
 threshold can say that, so the code scans:
 
-📍 [`backend/src/ev.py:162-179`](../backend/src/ev.py#L162-L179)
+📍 [`backend/src/ev.py:177-194`](../backend/src/ev.py#L177-L194)
 ```python
     if steps < 1:
         raise ValueError(f"Steps must be at least 1, got {steps}.")
@@ -234,7 +255,7 @@ threshold can say that, so the code scans:
   concept box below). `ev.py` stays independent of both opponent models.
 - With `steps = 100` it tests 101 fold rates, 0.00 to 1.00, and records each run of +EV points as
   a closed `(start, end)` pair. For K-Q-3 above: `[(0.0, 0.08), (0.51, 1.0)]`.
-- `is_profitable` is a strict `ev > 0` ([ev.py:109-111](../backend/src/ev.py#L109-L111)), so the
+- `is_profitable` is a strict `ev > 0` ([ev.py:124-126](../backend/src/ev.py#L124-L126)), so the
   exact break-even point is never "in". That is why the bluff zone starts at 0.51, not 0.50.
 
 > **Bet size changes the picture.** With the UI's default half-pot bet (`B = 50,000`), K-Q-3 is
@@ -243,46 +264,61 @@ threshold can say that, so the code scans:
 
 ### 7. How the API uses all of this
 
-📍 [`backend/app.py:88-97`](../backend/app.py#L88-L97)
+📍 [`backend/app.py:291-298`](../backend/app.py#L291-L298)
 ```python
-def _evaluate_hand(
-    canonical_id: str,
-    random_equity: float,
-    params: GameParams,
-) -> tuple[EVResult, list[tuple[float, float]]]:
-    """Return the EV result and the profitable fold-frequency zones."""
-    equity_at = _equity_function(canonical_id, random_equity, params.opponent_model)
+def _evaluate_hand(services: Services, hand: Hand, params: GameParams) -> HandResult:
+    """Evaluate one hand: EV at the given fold rate and the zones where raising is +EV."""
+    canonical = to_canonical(hand.cards)
+    stats = services.db.get(canonical.canonical_id)
+    equity_at = _equity_function(services, canonical.canonical_id, stats.equity, params.opponent_model)
     ev_res = evaluate_action(params.pot, params.bet_size, params.fold_equity, equity_at(params.fold_equity))
     zones = profitable_fold_zones(params.pot, params.bet_size, equity_at)
-    return ev_res, zones
+    return HandResult(hand, canonical, stats, ev_res, zones)
 ```
 
-`_equity_function` ([app.py:81-85](../backend/app.py#L81-L85)) returns either
-`lambda f: calling_model.equity(canonical_id, f)` (range model) or `lambda f: random_equity`
-(random model). The same `equity_at` is used once for your actual fold rate, and 101 times for
-the zones.
+`_equity_function` ([app.py:282-288](../backend/app.py#L282-L288)) returns either
+`lambda f: services.calling_model.equity(canonical_id, f)` (range model) or
+`lambda f: random_equity` (random model). The same `equity_at` is used once for your actual fold
+rate, and 101 times for the zones. Everything lands in one frozen `HandResult`
+([app.py:82-89](../backend/app.py#L82-L89)): the hand, its class, its database row, the `EVResult`
+and the zones. `services` is the app's own database and calling-range model (lesson 10).
 
-The zones then become two separate JSON fields:
+`_hand_payload` then turns a `HandResult` into the JSON that both `/api/solve` and `/api/evaluate`
+send. The zones become two separate fields:
 
-📍 [`backend/app.py:100-115`](../backend/app.py#L100-L115)
+📍 [`backend/app.py:305-327`](../backend/app.py#L305-L327)
 ```python
-def _break_even_fields(
-    ev_res: EVResult,
-    zones: list[tuple[float, float]],
-    model: OpponentModel,
-) -> dict[str, float | None]:
-    """Describe when raising pays off, with one unambiguous meaning per field.
+def _hand_payload(result: HandResult, model: OpponentModel) -> Json:
+    """The hand-evaluation fields, identical in /api/solve and /api/evaluate.
 
-    break_even_fold_equity: exact fold frequency where EV = 0 (random model only; under
-        RANGE, EV is not monotonic in fold equity, so no single break-even point exists).
+    break_even_fold_equity: exact fold frequency where EV = 0 (random model only; under RANGE,
+        EV is not monotonic in fold equity, so no single break-even point exists).
     profitable_from_fold_equity: first 1%-grid fold frequency from which raising stays +EV.
         The last zone always ends at 1.0, because EV there equals the pot.
     """
     return {
-        "break_even_fold_equity": ev_res.break_even_fold_equity if model is OpponentModel.RANDOM else None,
-        "profitable_from_fold_equity": zones[-1][0],
+        "hand": str(result.hand),
+        "score_name": str(result.hand.score),
+        "category": result.stats.category.name,
+        "category_name": result.stats.category.display_name,
+        "canonical_id": result.canonical.canonical_id,
+        "showdown_equity": result.ev.win_rate_when_called,
+        "equity_vs_random": result.stats.equity,
+        "ev": result.ev.ev,
+        "break_even_fold_equity": result.ev.break_even_fold_equity if model is OpponentModel.RANDOM else None,
+        "profitable_from_fold_equity": result.zones[-1][0],
+        "profitable_fold_zones": [[start, end] for start, end in result.zones],
+        "is_profitable": result.ev.is_profitable,
+        "decision": _decision(result.ev.is_profitable),
     }
 ```
+
+- `showdown_equity` is the `w` that went into the EV (it depends on the opponent model), while
+  `equity_vs_random` is always the database number. Under the random model they are equal.
+- `break_even_fold_equity` comes straight from `EVResult`, but only under the random model.
+- `profitable_from_fold_equity` is the start of the *last* zone.
+- `decision` is `"RAISE"` when `is_profitable`, otherwise `"CHECK/FOLD"`
+  ([app.py:301-302](../backend/app.py#L301-L302)).
 
 For the junk hand 5-3-2 under the random model, the API answers with
 `break_even_fold_equity: 0.3312` (exact) and `profitable_from_fold_equity: 0.34` (the grid point).
@@ -290,15 +326,20 @@ For K-Q-3 under the range model, `break_even_fold_equity` is `null` and the zone
 `[[0.0, 0.08], [0.51, 1.0]]`. The web UI draws those zones as the green stretches of the
 "where raising pays" bar (lesson 13).
 
-`zones[-1]` is safe only because the last zone always ends at `f = 1`: there the EV equals the pot,
-which is positive.
+`result.zones[-1]` is safe only because the last zone always ends at `f = 1`: there the EV equals
+the pot, which is positive.
+
+`ev.py` has one more caller in the API. `_solve_range` puts `final_pot()` and the pure-bluff
+break-even `calculate_break_even_fold_equity(pot, bet_size, 0.0)` into every range summary
+([app.py:339-340](../backend/app.py#L339-L340)): at the default sizes, `final_pot: 200000.0` and
+`pure_bluff_break_even_fold_equity: 0.3333`.
 
 ### 8. The other caller: the range finder
 
-[range_finder.py:80-87](../backend/src/range_finder.py#L80-L87) calls `calculate_ev` once for each of
+[range_finder.py:84-91](../backend/src/range_finder.py#L84-L91) calls `calculate_ev` once for each of
 the 455 hand classes on every request, then sorts by EV (lesson 08). On the machine this course
-was written on, one `calculate_ev` call takes about 0.6 µs, so all 455 cost well under a
-millisecond. The zone scan for one hand under the range model took about 0.26 ms, because it asks
+was written on, one `calculate_ev` call takes about 0.5 µs, so all 455 cost well under a
+millisecond. The zone scan for one hand under the range model took about 0.2 ms, because it asks
 the calling-range model for 101 equities.
 
 ---
@@ -316,11 +357,11 @@ equity_at(0.35)                       # call it like any function
 
 This keeps `ev.py` free of any knowledge about opponent models. The tests use it too:
 `lambda f: 0.0` is a perfect pure bluff, and `lambda f: 1.0` is an unbeatable hand
-([test_ev.py:121-128](../backend/tests/test_ev.py#L121-L128)).
+([test_ev.py:122-129](../backend/tests/test_ev.py#L122-L129)).
 
 ## 💡 Concept: `@dataclass(frozen=True)` for results
 
-`EVResult` ([ev.py:14-24](../backend/src/ev.py#L14-L24)) is a frozen dataclass: Python writes
+`EVResult` ([ev.py:21-31](../backend/src/ev.py#L21-L31)) is a frozen dataclass: Python writes
 `__init__`, `__repr__` and `__eq__` for you, and assigning to a field afterwards raises
 `FrozenInstanceError`. A result that cannot change after it is built can be passed around freely.
 This is the AGENTS.md rule "immutable data models" in practice.
@@ -330,14 +371,17 @@ This is the AGENTS.md rule "immutable data models" in practice.
 ## Design decisions
 
 - **Pure functions.** No I/O, no globals, no randomness. Every function is a plain mapping from
-  numbers to numbers, so the 13 tests need no fixtures and run in under a tenth of a second.
+  numbers to numbers, so the 15 tests need no fixtures and run in under a tenth of a second.
 - **Rounding to 4 decimals.** Results are stable in JSON and easy to compare in tests
   (`ev == 72000.0`). The cost is that EV is not exactly 0 at the break-even point (see weak spots).
 - **Scan instead of solve.** Under the range model `w(f)` comes from another module and is only
   piecewise smooth. Scanning 101 points is simple, and it is fast enough for every request. The
   cost is a 1% resolution, which README lists as a known limitation.
-- **The caller chooses the equity source.** `ev.py` imports nothing from the project, and the
-  opponent model is decided in `app.py`, `cli.py` and `range_finder.py`.
+- **The caller chooses the equity source.** The only project module `ev.py` imports is
+  `exceptions.py`. It knows nothing about cards or opponent models: those are decided in `app.py`,
+  `cli.py` and `range_finder.py`.
+- **One helper for the call model.** `final_pot()` is the single place that says "the opponent
+  calls exactly `B`". The defaults live next to it, so the CLI and the API cannot drift apart.
 - **One betting round, fixed call.** The opponent either folds or calls exactly `B`. There are no
   re-raises or later rounds. This keeps the maths to one line, and it is the model's biggest
   simplification.
@@ -346,26 +390,33 @@ This is the AGENTS.md rule "immutable data models" in practice.
 
 ## ⚠️ Weak spots
 
-1. **A guard that can never trigger.** [ev.py:101-103](../backend/src/ev.py#L101-L103): we only get
-   there when `S < 0`, and then `P − S > P > 0`. The `denominator <= 0` branch is dead code. *Fix:*
-   delete it, or turn it into an `assert`.
-2. **`P + 2B` written in three places.** [ev.py:60](../backend/src/ev.py#L60),
-   [:94](../backend/src/ev.py#L94) and [:123](../backend/src/ev.py#L123). It appears more often
-   across the backend (`app.py`, `cli.py`). If the call model ever changes (say a call of
-   `C_opp ≠ B`), every copy has to change together. *Fix:* one `final_pot(pot, bet)` helper.
-3. **A test docstring that states something false.**
-   [test_ev.py:9](../backend/tests/test_ev.py#L9) and [:62-63](../backend/tests/test_ev.py#L62-L63)
-   say more fold equity always increases EV. The test only checks `w = 0.5`, where it happens to be
-   true. Section 5 shows the opposite for strong hands. *Fix:* correct the docstring and add a
-   `w = 1` test (exercise 6).
+1. ✅ **Fixed: a guard that could never trigger.** `calculate_break_even_fold_equity` used to end
+   with `if denominator <= 0: return 0.0`. It was reached only when `S < 0`, and then
+   `P − S > P > 0`, so the branch was dead code. It is gone; the one-line proof is now a comment
+   ([ev.py:119-120](../backend/src/ev.py#L119-L120)). Unreachable code has no behaviour to pin, so
+   there is no new test: the break-even tests
+   ([test_ev.py:76-96](../backend/tests/test_ev.py#L76-L96)) pass unchanged, which is the point.
+2. ✅ **Fixed: `P + 2B` written in three places.** `calculate_ev`, `calculate_break_even_fold_equity`
+   and `evaluate_action` each wrote `pot + 2.0 * bet_size`, and `app.py` and `cli.py` had their own
+   copies. Now every one of them calls `final_pot()` ([ev.py:34-36](../backend/src/ev.py#L34-L36)).
+   Pinned by `test_final_pot_is_pot_plus_two_bets`
+   ([test_ev.py:154-157](../backend/tests/test_ev.py#L154-L157)), and by every boundary test that
+   depends on the final pot (exercise 4 breaks it on purpose).
+3. ✅ **Fixed: a test docstring that stated something false.** The module docstring said that more
+   fold equity always increases EV; the test only checked `w = 0.5`, where it happens to be true.
+   The docstrings now limit the claim to hands whose showdown value is below the pot
+   ([test_ev.py:9-10](../backend/tests/test_ev.py#L9-L10), [:64](../backend/tests/test_ev.py#L64)),
+   and `test_folds_hurt_unbeatable_hands`
+   ([test_ev.py:149-152](../backend/tests/test_ev.py#L149-L152)) pins the opposite case.
 4. **Rounding at the break-even point.** For 5-3-2, EV at `f = 0.3312` is +1.024 rather than 0.
    `test_break_even_fold_equity` therefore allows up to ±5 VND
-   ([test_ev.py:86](../backend/tests/test_ev.py#L86)). That is harmless, but worth knowing before
+   ([test_ev.py:87](../backend/tests/test_ev.py#L87)). That is harmless, but worth knowing before
    you write an `== 0` test.
 5. **A field that is sometimes meaningless.** `EVResult.break_even_fold_equity` is always
    computed from the current `w`. Under the range model, `w` itself depends on `f`, so the number
    does not mean "break-even". The API hides it (`None`), and so does the CLI ("n/a (range
-   model)", [cli.py:136-138](../backend/src/cli.py#L136-L138)). The dataclass still carries it.
+   model)", [cli.py:166-169](../backend/src/cli.py#L166-L169)). The dataclass still carries it
+   (exercise 6).
 6. **Modelling limits, not bugs.** One betting round, a fixed call size, and `f` is a number you
    guess. The output is exactly as good as that guess.
 
@@ -382,8 +433,8 @@ python -m pytest tests/test_ev.py -q
 Expected output (the timing varies):
 
 ```
-.............                                                            [100%]
-13 passed in 0.09s
+...............                                                          [100%]
+15 passed in 0.09s
 ```
 
 Reproduce the K-Q-3 table and its zones:
@@ -464,37 +515,72 @@ does the UI recommend, and why?
 CHECK/FOLD. A hand exactly at its pot odds is not worth raising.
 </details>
 
-**🟡 4. Delete the dead guard.** Remove [ev.py:101-103](../backend/src/ev.py#L101-L103) and run
-`python -m pytest -q`. Before you run it: will anything fail? Write down the one-line proof.
+**🟡 4. Break the helper on purpose.** Weak spot 2 was fixed by moving `P + 2B` into `final_pot()`.
+Make the classic mistake of forgetting the call: change [ev.py:36](../backend/src/ev.py#L36) to
+`return pot + bet_size`. Before you run `python -m pytest tests/test_ev.py -q`, predict which of the
+15 tests fail and which still pass.
 
 <details><summary>Solution</summary>
 
-All 93 tests still pass. Proof: we reach line 101 only when `S < 0`, so
-`P − S = P + |S| > 0` because `P > 0` was already checked at line 87.
+Six fail, nine pass:
+
+```
+FAILED tests/test_ev.py::TestEVEngine::test_boundary_zero_fold_nuts - assert ...
+FAILED tests/test_ev.py::TestEVEngine::test_bluff_profitability - assert 7150...
+FAILED tests/test_ev.py::TestEVEngine::test_evaluate_action_helper - assert 1...
+FAILED tests/test_ev.py::TestProfitableFoldZones::test_medium_hand_has_two_zones_against_calling_range
+FAILED tests/test_ev.py::TestStrongHands::test_folds_hurt_unbeatable_hands - ...
+FAILED tests/test_ev.py::TestStrongHands::test_final_pot_is_pot_plus_two_bets
+6 failed, 9 passed in 0.17s
+```
+
+The survivors are the cases where the final pot drops out of the formula: `f = 1` (no showdown),
+`w = 0` (you collect nothing, so `S = −B` whatever the pot), the validation tests, and the two
+break-even tests (the threshold moves, but EV is still about 0 there, and `w = 0.8` still profits
+at showdown). Because
+all three functions share the helper, one wrong line breaks EV, `EVResult.final_pot` and the zones
+together. Before the fix, the same typo in one copy would have broken only one of them. Undo it
+with `git checkout -- backend/src/ev.py`.
 </details>
 
-**🟡 5. Change the grid.** In [app.py:96](../backend/app.py#L96), pass `steps=1000` to
+**🟡 5. Change the grid.** In [app.py:297](../backend/app.py#L297), pass `steps=1000` to
 `profitable_fold_zones`. Which tests fail, and what do they tell you about the API contract?
 
 <details><summary>Solution</summary>
 
 K-Q-3's zones become `[(0.0, 0.08), (0.501, 1.0)]`, and 5-3-2's start moves from 0.34 to the first
 point above 0.3312. The three assertions that pin grid values fail:
-[test_api.py:120](../backend/tests/test_api.py#L120), [:155](../backend/tests/test_api.py#L155)
-and [:162](../backend/tests/test_api.py#L162). The 1% resolution is effectively part of the public
+[test_api.py:136](../backend/tests/test_api.py#L136), [:160](../backend/tests/test_api.py#L160)
+and [:205](../backend/tests/test_api.py#L205). The 1% resolution is effectively part of the public
 API: the UI and the tests both assume it. Changing it is an API change, not an internal tweak.
 </details>
 
-**🔴 6. Fix the false claim.** Correct the docstring at [test_ev.py:9](../backend/tests/test_ev.py#L9),
-and add a test that shows EV *decreasing* in `f` for an unbeatable hand.
+**🔴 6. Close weak spot 5.** `EVResult.break_even_fold_equity` is meaningless under the range
+model, and two callers have to remember to hide it. Make the dataclass say so itself: give
+`evaluate_action` a keyword argument `equity_depends_on_fold: bool = False`, store
+`break_even_fold_equity: float | None`, and set it to `None` when the flag is true. Update the
+callers in `app.py` and `cli.py`, keep every test green, and add one test of your own.
 
 <details><summary>Solution sketch</summary>
 
 ```python
-def test_folds_hurt_unbeatable_hands(self) -> None:
-    """With w = 1 the slope P − S is negative: every fold gives up a won showdown."""
-    evs = [calculate_ev(100000.0, 50000.0, f, 1.0) for f in (0.0, 0.5, 1.0)]
-    assert evs == [150000.0, 125000.0, 100000.0]
+def evaluate_action(pot, bet_size, fold_equity, win_rate_when_called, *,
+                    equity_depends_on_fold: bool = False) -> EVResult:
+    ev = calculate_ev(pot, bet_size, fold_equity, win_rate_when_called)
+    be_fe = None if equity_depends_on_fold else calculate_break_even_fold_equity(
+        pot, bet_size, win_rate_when_called)
+    ...
+```
+
+In `_evaluate_hand`, pass `equity_depends_on_fold=params.opponent_model is OpponentModel.RANGE`;
+then `_hand_payload` can send `result.ev.break_even_fold_equity` as it is, without the `if model`
+test. In `cli.py`, pass `calling_model is not None` and print "n/a (range model)" when the field is
+`None`. `mypy` will point at every place that formats the field as a number. A test:
+
+```python
+def test_no_break_even_when_equity_depends_on_fold(self) -> None:
+    res = evaluate_action(100000.0, 50000.0, 0.35, 0.3, equity_depends_on_fold=True)
+    assert res.break_even_fold_equity is None
 ```
 </details>
 
@@ -505,10 +591,12 @@ Which other modules would have to change for the UI to use it?
 
 <details><summary>Hints</summary>
 
-`final_pot = pot + bet_size + call_amount`. In the showdown part you still pay `bet_size`. To
-reach the UI it has to go through `calculate_break_even_fold_equity`, `evaluate_action`,
-`profitable_fold_zones`, `app.py` (`_parse_game_params` and the copies of `P + 2B`) and the
-frontend. This is the cost of weak spot 2.
+`final_pot(pot, bet_size, call_amount)` returns `pot + bet_size + call_amount`. In the showdown part
+you still pay `bet_size`. Because of the fix for weak spot 2, the pot side is one helper instead of
+a copy in every module. The new value still has to travel: through `calculate_break_even_fold_equity`,
+`evaluate_action` and `profitable_fold_zones`, `range_finder.py`, `app.py` (`GameParams`,
+`_parse_game_params`, `_solve_range`), `cli.py` and the frontend. One helper fixes the formula,
+but it does not shorten that path.
 </details>
 
 ---
@@ -539,7 +627,7 @@ frontend. This is the cost of weak spot 2.
 ## Recap
 
 - `EV = f·P + (1 − f)·[w·(P + 2B) − B]`, measured against giving up. The code assumes the opponent
-  calls exactly `B`.
+  calls exactly `B`, and says so in one place: `final_pot()`.
 - The boundary values `P`, `P + B` and `−B`, and the pot odds `B / (P + 2B)`, are worth knowing by
   heart. The tests pin the first three.
 - Break-even is the same formula solved for `f`. A pure bluff needs `B / (P + B)` folds.

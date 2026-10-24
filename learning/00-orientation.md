@@ -37,12 +37,12 @@ first run of everything, so that every later lesson can zoom in on one box of th
 
 | # | Location | What to look for |
 |---|----------|------------------|
-| 1 | [README.md:88-149](../README.md#L88-L149) | "How it works": the ranking table, 22,100 → 455, the two equity models, the EV formula. |
-| 2 | [AGENTS.md:29-82](../AGENTS.md#L29-L82) | The rules as a spec. Read it as the intended design, not as a description of the code. |
-| 3 | [README.md:347-381](../README.md#L347-L381) | The project layout, one line per file. |
-| 4 | [app.py:30-36](../backend/app.py#L30-L36) | The online half in seven lines: load the table, build the models, once. |
-| 5 | [cli.py:272](../backend/src/cli.py#L272) | `main`, the terminal entry point you will run below. |
-| 6 | [AGENTS.md:123-129](../AGENTS.md#L123-L129) | The performance budgets. Some are met, some are not (section 9). |
+| 1 | [README.md:89-150](../README.md#L89-L150) | "How it works": the ranking table, 22,100 → 455, the two equity models, the EV formula. |
+| 2 | [AGENTS.md:29-83](../AGENTS.md#L29-L83) | The rules as a spec. Since October 2026 it also describes what the code really does (section 9). |
+| 3 | [README.md:371-410](../README.md#L371-L410) | The project layout, one line per file. |
+| 4 | [app.py:124-128](../backend/app.py#L124-L128) | The online half in five lines: load the table, build the models, once per app. |
+| 5 | [cli.py:312](../backend/src/cli.py#L312) | `main`, the terminal entry point you will run below. |
+| 6 | [AGENTS.md:124-130](../AGENTS.md#L124-L130) | The performance budgets, now with measured numbers (section 9). |
 
 ---
 
@@ -177,38 +177,46 @@ Doing that for every one of the C(52, 3) = **22,100** starting hands means
    comparisons are needed.
 2. **Do it once, ahead of time.** `generator.py` (lesson [04](04-generator.md)) runs those 8.4
    million comparisons and saves 455 answers to `backend/data/winrates.json` (82,694 bytes). On the
-   machine this course was written on, it took 25.19 s with 4 worker processes.
+   machine this lesson was re-run on, it took 10 s with a single worker process. (The first version
+   of this course measured 25 s with 4 workers; the evaluator became about eight times faster in
+   October 2026, lesson 02.)
 
 Every request after that is a dictionary lookup plus a little arithmetic. The whole online half is
-set up in seven lines when the Flask app starts:
+set up in five lines when the Flask app is created:
 
-📍 [`backend/app.py:30-36`](../backend/app.py#L30-L36)
+📍 [`backend/app.py:124-128`](../backend/app.py#L124-L128)
 ```python
-# Initialize WinRateDB and the calling-range model at startup
-DB_PATH = Path(__file__).resolve().parent / "data" / "winrates.json"
-win_rate_db = WinRateDB()
-if DB_PATH.is_file():
-    win_rate_db.load(DB_PATH)
-calling_model = CallingRangeModel()
-range_finder = RangeFinder(win_rate_db, calling_model)
+    if db is None:
+        db = WinRateDB(DEFAULT_DB_PATH)
+    if calling_model is None:
+        calling_model = CallingRangeModel()
+    app.extensions["lieng"] = Services(db, calling_model, RangeFinder(db, calling_model))
 ```
 
 Load 455 records, build the calling-range tables, wrap both in a range finder: that is all the
-server's state (module-level globals, which `AGENTS.md` forbids; see lesson
-[10](10-flask-api.md)). One equity lookup took about 75 ns on the same machine.
+server's state. These lines live inside `create_app()`, an **app factory** (lesson
+[10](10-flask-api.md)): each app object gets its own services, stored in `app.extensions`, and a
+test can pass in its own database. Until October 2026 the same objects were module-level globals,
+which `AGENTS.md` forbids; the only module-level object left is `app = create_app()`
+([app.py:574](../backend/app.py#L574)), the entry point for `gunicorn app:app` and `python app.py`.
+One equity lookup took about 0.1 µs on the same machine.
 
 ### 6. A tour of the repository
 
 ```
 lieng-stealer/
 ├── README.md  AGENTS.md  DESIGN.md  SKILLS.md  BLOG.md  EXPERIMENT.md  LICENSE
+├── .github/workflows/ci.yml   CI: ruff, mypy, pytest, lint, build, course   lesson 15
 ├── backend/
-│   ├── app.py                 Flask JSON API: 6 routes                      lesson 10
+│   ├── app.py                 Flask JSON API: create_app(), 6 routes         lesson 10
 │   ├── Procfile               gunicorn start command                        lesson 16
-│   ├── requirements.txt       6 pinned packages                             lesson 16
+│   ├── requirements.txt       5 pinned runtime packages                     lesson 16
+│   ├── requirements-dev.txt   + pytest, rich, ruff, mypy                    lesson 16
+│   ├── pyproject.toml         ruff, strict mypy and pytest settings         lesson 15
 │   ├── data/winrates.json     455 exact equities (generated)                lesson 04
 │   ├── src/
-│   │   ├── exceptions.py      LiengError and five subclasses                lesson 01
+│   │   ├── exceptions.py      LiengError and seven subclasses               lesson 01
+│   │   ├── paths.py           the absolute path of winrates.json            lesson 05
 │   │   ├── evaluator.py       Card, Rank, Suit; HandScore, evaluate_hand    lessons 01, 02
 │   │   ├── hands.py           22,100 → 455 canonical hands                  lesson 03
 │   │   ├── generator.py       builds winrates.json (offline)                lesson 04
@@ -217,14 +225,15 @@ lieng-stealer/
 │   │   ├── ev.py              EV, break-even, profitable zones              lesson 07
 │   │   ├── range_finder.py    EV of all 455 hands, sorted                   lesson 08
 │   │   └── cli.py             terminal report                               lesson 09
-│   └── tests/                 10 test files, 93 tests                       lesson 15
+│   └── tests/                 11 test files, 159 tests                      lesson 15
 └── frontend/                  React 19 + Vite 8 page                        lessons 12–14
-    └── src/  main.jsx  App.jsx  i18n.js  format.js  *.css  *.test.js
+    └── src/  main.jsx  App.jsx  i18n.js  format.js  *.css  *.test.js(x)
 ```
 
 Imports point one way only: `exceptions ← evaluator ← hands ← {generator, db, calling_range}`,
-then `ev ← range_finder ← {cli, app}`. Nothing in `src/` imports Flask and `ev.py` imports nothing
-from the project, so each lesson can study one file knowing only the earlier ones.
+then `ev ← range_finder ← {cli, app}`, with `paths.py` (one constant) used by `db`, `generator`,
+`cli` and `app`. Nothing in `src/` imports Flask, and `ev.py` imports only `exceptions.py` from the
+project, so each lesson can study one file knowing only the earlier ones.
 
 ### 7. Your first run of every entry point
 
@@ -234,9 +243,10 @@ All commands run from `backend/` with the virtual environment active (see
 **The tests.** `python -m pytest -q` prints:
 
 ```
-........................................................................ [ 77%]
-.....................                                                    [100%]
-93 passed in 4.14s
+........................................................................ [ 45%]
+........................................................................ [ 90%]
+...............                                                          [100%]
+159 passed in 1.57s
 ```
 
 **The CLI.** The README's example, trimmed to the first and last panels:
@@ -266,8 +276,10 @@ python -m src.cli --pot 100000 --bet 50000 --fold-equity 0.35 --hand "As Kh Qd"
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
-The overview in the middle says `Profitable Classes: 455 / 455`. With a fold rate of 35%, above
-the 33.3% pure-bluff line, *every* hand is worth raising here.
+The `SOLVER OVERVIEW` panel in the middle says `Profitable Classes: 455 / 455 canonical classes`.
+With a fold rate of 35%, above the 33.3% pure-bluff line, *every* hand is worth raising here. The
+CLI checks the hand and the numbers before it prints anything: `--hand "As Xh Kd"` prints only
+`Invalid input: Invalid card 'Xh': …` and exits with code 2 (lesson 09).
 
 **The API.** If the server is running (`python app.py`), ask it directly:
 
@@ -276,27 +288,29 @@ curl -s http://127.0.0.1:5000/health
 ```
 
 ```
-{"classes_loaded":455,"database_loaded":true,"status":"healthy","version":"1.0.0"}
+{"classes_loaded":455,"database_loaded":true,"status":"healthy","version":"1.1.0"}
 ```
 
 ```bash
 curl -s -X POST http://127.0.0.1:5000/api/evaluate -H "Content-Type: application/json" \
-  -d '{"pot": 100000, "bet": 50000, "fold_equity": 0.35, "hand": "As Kh Qd"}'
+  -d '{"pot": 100000, "bet_size": 50000, "fold_equity": 0.35, "hand": "As Kh Qd"}'
 ```
 
 ```
-{"bet":50000.0,"break_even_fold_equity":0.0,"canonical_id":"Q-K-A","category":"LIENG","equity_vs_random":0.9969,"ev":132097.0,"fold_equity":0.35,"hand":"As Kh Qd","is_profitable":true,"opponent_model":"random","pot":100000.0,"profitable_from_fold_equity":0.0,"recommended_action":"RAISE","showdown_equity":0.9969}
+{"bet_size":50000.0,"break_even_fold_equity":0.0,"canonical_id":"Q-K-A","category":"LIENG","category_name":"Li\u00eang","decision":"RAISE","equity_vs_random":0.9969,"ev":132097.0,"fold_equity":0.35,"hand":"As Kh Qd","is_profitable":true,"opponent_model":"random","pot":100000.0,"profitable_fold_zones":[[0.0,1.0]],"profitable_from_fold_equity":0.0,"score_name":"Li\u00eang Q-K-A","showdown_equity":0.9969}
 ```
 
-Same hand, same spot, same +132,097 as the CLI: both front doors call the same engine.
+Same hand, same spot, same +132,097 as the CLI: both front doors call the same engine. (`\u00ea`
+is how JSON escapes the `ê` of Liêng; a JSON parser turns it back.) Every endpoint uses the same
+names, `bet_size`, `showdown_equity` and `decision`; the old request field `bet` is still accepted.
+A bad request is JSON too, with a stable code, e.g.
+`{"code": "invalid_hand", "error": "A Liêng hand cannot have duplicate cards."}` (lesson 10).
 
-**The frontend tests.** `npm test` (from `frontend/`) ends with:
+**The frontend tests.** `npm test` (from `frontend/`) runs Vitest and ends with:
 
 ```
-# tests 6
-# suites 0
-# pass 6
-# fail 0
+ Test Files  3 passed (3)
+      Tests  18 passed (18)
 ```
 
 `npm run dev` then serves the page on <http://localhost:5173>. It solves the default spot as soon
@@ -309,30 +323,36 @@ Exercise 3 shows how to run it safely.
 
 Lesson [11](11-request-trace.md) traces a click on "Run solver" through every layer. In short:
 
-1. `handleSolve` in [App.jsx:50](../frontend/src/App.jsx#L50) sends `POST /api/solve`
-   ([App.jsx:57](../frontend/src/App.jsx#L57)).
-2. `solve_api` ([app.py:153](../backend/app.py#L153)) validates the numbers with
-   `_parse_game_params` ([app.py:48](../backend/app.py#L48)).
-3. The hand text becomes cards: `Hand.from_str` ([evaluator.py:394](../backend/src/evaluator.py#L394)).
-4. The cards become a canonical id and a lookup: `get_by_cards`
-   ([db.py:123](../backend/src/db.py#L123)) → `"Q-K-A"` → equity 0.9969.
-5. `ev.py` turns the equity into EV and profitable fold zones ([app.py:179](../backend/app.py#L179)).
-6. `range_finder.solve_range` scores all 455 hands ([app.py:196](../backend/app.py#L196)).
-7. `jsonify` sends it back, and React draws the verdict, tables and the "where raising pays" bar.
+1. A click on "Run solver" calls `startSolve` ([App.jsx:187](../frontend/src/App.jsx#L187)), which
+   cancels any run still in flight and calls `fetchSolveAndAnalysis`
+   ([App.jsx:49](../frontend/src/App.jsx#L49)). That sends `POST /api/solve`
+   ([App.jsx:55](../frontend/src/App.jsx#L55)) to a relative URL, which the Vite dev server forwards
+   to Flask.
+2. `solve_api` ([app.py:404](../backend/app.py#L404)) validates the numbers with
+   `_parse_game_params` ([app.py:236](../backend/app.py#L236)).
+3. The hand text becomes cards: `Hand.from_str` ([evaluator.py:420-421](../backend/src/evaluator.py#L420-L421)).
+4. The cards become a canonical class and a lookup: `to_canonical` and `db.get`
+   ([app.py:293-294](../backend/app.py#L293-L294)) → `"Q-K-A"` → equity 0.9969.
+5. `ev.py` turns the equity into EV and profitable fold zones
+   ([app.py:296-297](../backend/app.py#L296-L297)).
+6. `range_finder.solve_range` scores all 455 hands ([app.py:332](../backend/app.py#L332)).
+7. `jsonify` sends it back, React draws the verdict, tables and the "where raising pays" bar, and
+   the same function then asks `/api/analyze` for the notes ([App.jsx:78](../frontend/src/App.jsx#L78)).
 
 ### 9. The root documents, and how far to trust each
 
-The repository has six Markdown files at the root. They were written at different times, and the
-code has moved on since some of them. Here is what each one is good for today:
+The repository has six Markdown files at the root. They were written at different times; on
+2026-10-24 (commit `8c987ea`, "bring README, AGENTS, SKILLS and DESIGN in line with the code") all
+six were updated, four of them substantially. Here is what each one is good for today:
 
 | File | What it is | Trust |
 |------|-----------|-------|
-| [README.md](../README.md) | Front page: rules, maths, CLI/API reference, test table | **High.** Updated with the code; its numbers (93 + 6 tests, ≈ 83 KB, the K-Q-3 zones) match real runs. |
-| [AGENTS.md](../AGENTS.md) | The engineering spec: rules, data model, EV, budgets | **Medium.** The game rules (§3) and the EV formula (§5) are right. Several engineering rules are not what the code does (weak spot 2). |
-| [DESIGN.md](../DESIGN.md) | Rules for the web UI (Ayu Dark colours, layout, copy) | **High** for the current UI. It is the rulebook for lesson [14](14-styling.md). |
-| [SKILLS.md](../SKILLS.md) | A command cheat-sheet | **Low.** Written before most of the code; several commands fail or do nothing (weak spot 1). Use the README instead. |
-| [BLOG.md](../BLOG.md) | The origin story, in Vietnamese | Background only. It still describes Monte Carlo simulation; the data is now exact. |
-| [EXPERIMENT.md](../EXPERIMENT.md) | A two-student project proposal, in Vietnamese | Background only. A plan, not a description: Monte Carlo, "multi-way", a different category numbering. |
+| [README.md](../README.md) | Front page: rules, maths, CLI/API reference, test table | **High.** Its numbers match real runs: 159 + 18 tests ([README.md:10](../README.md#L10)), the unified API fields and error codes, real JSON examples, every environment variable. Two small slips (weak spot 6). |
+| [AGENTS.md](../AGENTS.md) | The engineering spec: rules, data model, EV, budgets | **High.** Rewritten to describe the code: an EV engine, not an equilibrium solver ([AGENTS.md:4](../AGENTS.md#L4)); exact enumeration; strict mypy and ruff, enforced in CI; the real exception tree, `create_app()`, `Hand` equality, the house tie-breaks, the six-field `HandScore`; and measured budgets. One stale phrase (weak spot 2). |
+| [DESIGN.md](../DESIGN.md) | Rules for the web UI (Ayu Dark colours, layout, copy) | **High** for the current UI. It is the rulebook for lesson [14](14-styling.md); the UI was brought in line with it (new colour tokens, one message per error code). One rule is broken by text the backend sends (weak spot 3). |
+| [SKILLS.md](../SKILLS.md) | A command cheat-sheet | **High** (it was the least trustworthy file). Rewritten from commands that actually run: bash with PowerShell notes, no CLI subcommands, the real dependencies, the exact-by-default generator. I ran a sample: they work (weak spot 1). |
+| [BLOG.md](../BLOG.md) | The origin story, in Vietnamese | Background only. A dated note at the top ([BLOG.md:5](../BLOG.md#L5)) says the data is now exact and the "10,000 games" experiment has no code; the Liêng frequency is corrected to 3.48%. The story itself still describes Monte Carlo. |
+| [EXPERIMENT.md](../EXPERIMENT.md) | A two-student project proposal, in Vietnamese | Background only. A dated note ([EXPERIMENT.md:5](../EXPERIMENT.md#L5)) lists what the code does differently; the body is still the original plan (weak spot 5). |
 
 When a document and the code disagree, the code and its tests win. This course always quotes the
 code.
@@ -358,16 +378,17 @@ When an answer is expensive to compute but depends on only a few inputs, compute
 answer once, store it, and look it up later. Maps (routes between tiles), search engines (an index)
 and chess engines (endgame tables) all do this. Here the inputs are just the 455 rank patterns, so
 the table is tiny (82,694 bytes). The price is that the table can go **stale**: if you change a rule
-in `evaluator.py`, `winrates.json` keeps the old answers until you run the generator again
-(exercise 4 shows this happening).
+in `evaluator.py`, `winrates.json` keeps the old answers until you run the generator again.
+Exercise 4 shows this happening, and shows the safety net added in October 2026: the loader
+compares the file with the current rules and refuses a stale one.
 
 ---
 
 ## Design decisions
 
-- **Precompute instead of computing per request.** 8.4 million comparisons take about 25 s even
-  spread over 4 processes. A lookup takes nanoseconds. The cost is one generated file that must be
-  rebuilt whenever the rules change.
+- **Precompute instead of computing per request.** 8.4 million comparisons take about 10 s on one
+  core. A lookup takes about 0.1 µs. The cost is one generated file that must be rebuilt whenever
+  the rules change.
 - **Exact enumeration instead of Monte Carlo.** With only 18,424 opponents per hand, counting all
   of them is affordable, so the equities have no sampling error and the file is reproducible: a
   fresh run produced a byte-for-byte identical `winrates.json`. Monte Carlo is still available
@@ -385,59 +406,74 @@ in `evaluator.py`, `winrates.json` keeps the old answers until you run the gener
 ## ⚠️ Weak spots
 
 This lesson's weak spots are all **documentation drift**: a document says something the code no
-longer does. None of them breaks the program, but each one can waste an afternoon.
+longer does. None of them breaks the program, but each one can waste an afternoon. When the course
+was written there were five; the documentation pass of 2026-10-24 (commit `8c987ea`) fixed most of
+them, and a careful re-read turns up a few small new ones.
 
-**1. SKILLS.md commands that fail or do nothing.**
+**1. ✅ Fixed: SKILLS.md commands that failed or did nothing.** It used to document a CLI with
+subcommands (`python -m src.cli solve …`, which exits 2 with `unrecognized arguments: solve`), a
+`python -m src.db --verify` that printed nothing and exited 0 (so it looked like a passed check),
+PowerShell-only setup, packages that aren't dependencies (colorama, numpy), five test files, and
+`mypy`, which wasn't installed. It was rewritten from commands that run, for example:
 
-📍 [`SKILLS.md:91`](../SKILLS.md#L91)
+📍 [`SKILLS.md:99-101`](../SKILLS.md#L99-L101)
 ```
-python -m src.cli solve --hand "As,Kh,Qd" --pot 100000 --bet 50000 --p-fold 0.35
+# Ace of spades, King of hearts, Queen of diamonds (Liêng Q-K-A); pot 100k, bet 50k, opponent folds 35%
+python -m src.cli --hand "As Kh Qd" --pot 100000 --bet 50000 --fold-equity 0.35
+python -m src.cli --hand "As,Kh,Qd" --pot 100000 --bet 50000 --p-fold 0.35 --opponent-model range
 ```
 
-The CLI has no subcommands, so this exits 2 with `unrecognized arguments: solve`. So do `range`
-and `interactive` ([SKILLS.md:98](../SKILLS.md#L98), [:104](../SKILLS.md#L104)). Worse,
-`python -m src.db --verify` ([SKILLS.md:77](../SKILLS.md#L77)) prints nothing and exits 0: `db.py`
-has no `__main__` block, so it looks like a passed check and verifies nothing. Also stale:
-PowerShell-only setup ([SKILLS.md:10-15](../SKILLS.md#L10-L15)); "colorama, numpy"
-([SKILLS.md:22](../SKILLS.md#L22)), which [requirements.txt](../backend/requirements.txt) doesn't
-have; five test files (there are ten); a "10,000 simulations" run
-([SKILLS.md:65](../SKILLS.md#L65)) that, without `--monte-carlo`, runs the exact enumeration and
-overwrites the committed file; `mypy` ([SKILLS.md:113](../SKILLS.md#L113)), which isn't installed.
-*Fix:* rebuild SKILLS.md from the README's commands, or delete it.
+I ran both: they print the full report and exit 0 (+132,097 with the default `random` model,
++131,876 with `range`). The database check is now a real one that loads and validates the file
+([SKILLS.md:87](../SKILLS.md#L87)): it prints `455 hand types loaded and validated`. Nothing tests
+the documents automatically, though; only `verify_course.py` checks the course.
 
-**2. AGENTS.md states rules the code breaks.**
+**2. ✅ Mostly fixed: AGENTS.md stated rules the code broke.** The spec forbade global state while
+`app.py` kept the database in module-level globals; it described a four-field `HandScore`, Đĩ ties
+"based on game configuration", strict `mypy` that nobody ran, a "game-theoretic solver", Monte Carlo
+data, and budgets that weren't met. Now both sides moved: the code got an app factory, mypy and ruff
+in CI and a faster evaluator, and the spec describes what is true. Its global-state rule now says
+how the app obeys it:
 
 📍 [`AGENTS.md:24`](../AGENTS.md#L24)
 ```
-- **No Global Mutable State**: Do not use global variables to store game state or cached databases. State must be injected via constructors or parameters (Dependency Injection).
+- **No Global Mutable State**: Do not use global variables to store game state or cached databases. State must be injected via constructors or parameters (Dependency Injection). The Flask app is built by `create_app(db=..., calling_model=..., config=...)`, which keeps its services in `app.extensions`; the module-level `app` object exists only as the entry point for gunicorn and `python app.py`.
 ```
 
-Section 5 showed the cached database as a module-level global in `app.py`. More mismatches: §3.3
-specifies a four-field `HandScore` ([AGENTS.md:80](../AGENTS.md#L80)), the code has six fields
-(lesson 02); §3.2 decides Đĩ ties "based on game configuration" ([AGENTS.md:61](../AGENTS.md#L61)),
-and there is no configuration; §2.1 asks for strict `mypy` ([AGENTS.md:17](../AGENTS.md#L17)),
-which nobody runs; §1 says "game-theoretic solver" ([AGENTS.md:4](../AGENTS.md#L4)) while the
-README's Limitations ([README.md:430](../README.md#L430)) rightly say "EV, not an equilibrium";
-§1 and §4 still say Monte Carlo ([AGENTS.md:9](../AGENTS.md#L9), [:102](../AGENTS.md#L102)). Of
-the §6 budgets, the lookup is met (about 75 ns vs 5 µs) but one hand evaluation (2.6–3.8 µs vs
-1 µs) and a CLI run (about 0.2 s vs 50 ms) are not. *Fix:* change the code (lesson 17's capstones)
-or mark these lines as goals.
+*Still open:* §4.2 still says the 455 classes minimise "offline Monte Carlo overhead"
+([AGENTS.md:103](../AGENTS.md#L103)), although the data is exact. And one budget was met by
+changing the spec rather than the code: a CLI run is now budgeted at < 300 ms instead of 50 ms
+([AGENTS.md:129](../AGENTS.md#L129)), with no test. That is a legitimate choice (a fresh Python
+process can't start in 50 ms with these imports), but it is worth knowing which kind of "met" it is.
 
-**3. "GTO" and "Monte Carlo" in the UI.** The subtitle says "GTO solver for Liêng"
-([i18n.js:8](../frontend/src/i18n.js#L8)), so does the browser tab
-([index.html:6](../frontend/index.html#L6)), and the specs footnote says "Monte Carlo, canonical
-classes" ([i18n.js:30](../frontend/src/i18n.js#L30)). Neither is true. *Fix:* two strings in each
-language (lesson 13).
+**3. ✅ Mostly fixed: "GTO" and "Monte Carlo" in the UI.** The subtitle said "GTO solver for Liêng",
+so did the browser tab, and the specs footnote said "Monte Carlo". Now the subtitle is
+"Expected-value solver for Liêng" ([i18n.js:8](../frontend/src/i18n.js#L8)), the tab
+"Liêng Scope – EV solver" ([index.html:6](../frontend/index.html#L6)), and the footnote
+"Exact enumeration, 455 canonical classes" ([i18n.js:38](../frontend/src/i18n.js#L38)). *Still
+open:* the text the **backend** writes into the notes panel. The rule-based notes, which are what you
+see without an API key, end with `3. **GTO Insight:**` ([app.py:568](../backend/app.py#L568)), and
+the LLM prompt asks for "[Lời khuyên GTO]" ([app.py:539](../backend/app.py#L539)). DESIGN.md says
+"no 'GTO'" ([DESIGN.md:88](../DESIGN.md#L88)), and no test checks it (exercise 5).
 
-**4. BLOG.md numbers that don't come from the code.** The Liêng frequency is given as ≈ 3.26%
-([BLOG.md:20](../BLOG.md#L20)); it is 768 / 22,100 = 3.48% (lesson 03). A "10,000 simulated
-games" experiment ([BLOG.md:27](../BLOG.md#L27)) has no code in the repo. Read it as a story.
+**4. ✅ Fixed: BLOG.md numbers that didn't come from the code.** The Liêng frequency now reads
+3.48% (768 / 22,100, [BLOG.md:22](../BLOG.md#L22)), and the dated note says the "10,000 simulated
+games" experiment ([BLOG.md:29](../BLOG.md#L29)) has no code in the repo. Read the rest as a story:
+it still says the team "ran the Monte Carlo code" ([BLOG.md:68](../BLOG.md#L68)).
 
-**5. EXPERIMENT.md is a plan, not a record.** It numbers categories 1 = Sáp
-([EXPERIMENT.md:43](../EXPERIMENT.md#L43)), the reverse of the code; it plans a two-element score
-tuple ([EXPERIMENT.md:67](../EXPERIMENT.md#L67)), multi-way games
-([EXPERIMENT.md:73](../EXPERIMENT.md#L73)) and Monte Carlo convergence runs
-([EXPERIMENT.md:100](../EXPERIMENT.md#L100)). The code is heads-up only and exact.
+**5. Mitigated: EXPERIMENT.md is a plan, not a record.** The dated note at the top now says so and
+lists the differences (exact data, heads-up only, a five-element score tuple). The body is
+unchanged: it numbers categories 1 = Sáp ([EXPERIMENT.md:45](../EXPERIMENT.md#L45)), the reverse of
+the code; it plans a two-element score tuple ([EXPERIMENT.md:69](../EXPERIMENT.md#L69)), multi-way
+games ([EXPERIMENT.md:75](../EXPERIMENT.md#L75)) and Monte Carlo convergence runs
+([EXPERIMENT.md:102](../EXPERIMENT.md#L102)). Fine for a historical document, as long as nobody
+reads it as a spec.
+
+**6. New: two small slips in the README.** "What it does" says the slow work takes "≈ 30 s"
+([README.md:43](../README.md#L43)), while "Regenerating the data" says "≈ 10 s on one core"
+([README.md:359](../README.md#L359)); 10 s is what I measured. And the configuration section starts
+with an orphaned table header just above the sentence that introduces the real table
+([README.md:451-453](../README.md#L451-L453)), which renders as an empty table.
 
 ---
 
@@ -522,75 +558,94 @@ Range: `0.0108 × 200,000 − 50,000 = −47,840`; EV = `35,000 − 0.65 × 47,8
 folds pay for it.
 </details>
 
-**🟢 3. Predict the cost of skipping canonical hands.** The generator took about 25 s for 455
-hands. Roughly how long would it take if it evaluated all 22,100 hands one by one? Then run the
-real generator, safely, into a scratch file and compare it with the committed one:
-`python -m src.generator --output /tmp/winrates.json && cmp data/winrates.json /tmp/winrates.json && echo IDENTICAL`.
+**🟢 3. Predict the cost of skipping canonical hands.** The generator took about 10 s for 455
+hands on one core. Roughly how long would it take if it evaluated all 22,100 hands one by one? Then
+run the real generator, safely, into a scratch file and compare it with the committed one:
+`python -m src.generator --workers 1 --output /tmp/winrates.json && cmp data/winrates.json /tmp/winrates.json && echo IDENTICAL`.
 
 <details><summary>Solution</summary>
 
-22,100 / 455 ≈ 48.6 times the work, so about 25 s × 48.6 ≈ 20 minutes. The generator prints
-`Starting equity generation in Exact Combinatorial Enumeration across 4 workers...` and then
+22,100 / 455 ≈ 48.6 times the work, so about 10 s × 48.6 ≈ 8 minutes. The generator prints
+`Starting equity generation in Exact Combinatorial Enumeration across 1 workers...` and then
 `Successfully generated database for 455 canonical hands -> /tmp/winrates.json`, and `cmp` finds
-no difference: exact enumeration is deterministic. Never run it without `--output` from a
-different folder; lesson 04 explains why.
+no difference: exact enumeration is deterministic. Without `--output` it would overwrite the
+committed `backend/data/winrates.json` (from any folder: the default path is absolute since
+October 2026); lesson 04 explains the details.
 </details>
 
 **🟡 4. Break a rule and watch the tests (and the data) object.** Make K-A-2 a Liêng: in
-[evaluator.py:196](../backend/src/evaluator.py#L196) add the line `(2, 13, 14): 1,  # K-A-2` just
-below the A-2-3 entry. Before running `python -m pytest -q`, predict which kinds of test will fail.
+[evaluator.py:203](../backend/src/evaluator.py#L203) add the line `(2, 13, 14): 1,  # K-A-2` just
+below the A-2-3 entry. Before running anything, predict what `python -m pytest -q` and
+`python -m src.cli --hand "Ks Ah 2d"` will do.
 
 <details><summary>Solution</summary>
 
-`4 failed, 89 passed`:
+Only two *rule* tests notice the rule itself: `python -m pytest tests/test_evaluator.py tests/test_hands.py -q`
+gives `2 failed, 33 passed` (`test_ka2_wraparound_rejection`: K-A-2 must be Điểm;
+`test_category_distribution`: there must be 12 Liêng classes). The whole suite doesn't even get
+going: `Interrupted: 2 errors during collection`, because `test_api.py` and
+`test_dynamic_scenarios.py` load the database when they are imported, and the loader now refuses
+it. The CLI says why, and exits 1:
 
 ```
-FAILED tests/test_calling_range.py::TestCallingRangeModel::test_zero_fold_matches_exact_enumeration
-FAILED tests/test_calling_range.py::TestCallingRangeModel::test_medium_hands_regression
-FAILED tests/test_evaluator.py::TestLiengHierarchy::test_ka2_wraparound_rejection
-FAILED tests/test_hands.py::TestCanonicalHandEngine::test_category_distribution
+Cannot load the win-rate database: '…/backend/data/winrates.json': A-K-2 is recorded as DIEM x64, expected LIENG x64.
 ```
 
-Two failures are rule tests (K-A-2 must be Điểm; there must be 12 Liêng classes). The two
-calling-range failures are the interesting ones: the model now ranks hands with the new rule, but
-`winrates.json` was computed with the old one. That is the stale-table cost of precomputation.
-Undo with `git checkout -- backend/src/evaluator.py`.
+That is the stale-table cost of precomputation, caught at the door: `winrates.json` was computed
+with the old rule, and since October 2026 `WinRateDB` compares every record with the classes the
+current code generates (lesson 05). Before that check existed, the same change failed 4 of 93
+tests and the app served the stale numbers. Undo with `git checkout -- backend/src/evaluator.py`.
 </details>
 
-**🟡 5. Fix a stale command.** Rewrite [SKILLS.md:91](../SKILLS.md#L91) so that it works, and run
-it. Which option name did SKILLS.md get right?
+**🟡 5. Remove the last "GTO" (weak spot 3).** First write a test that the rule-based notes make no
+"GTO" claim, and watch it fail. Then change the text at [app.py:568](../backend/app.py#L568) and run
+`python -m pytest -q`.
 
 <details><summary>Solution</summary>
 
-`python -m src.cli --hand "As,Kh,Qd" --pot 100000 --bet 50000 --p-fold 0.35`. Only the `solve`
-word was wrong: `--p-fold` is a real alias of `--fold-equity`, and commas are accepted between
-cards. It prints the same report as section 7, ending in `ACTION: RAISE / ALL-IN RECOMMENDED`.
-Undo with `git checkout -- SKILLS.md`.
+In `tests/test_api.py`, which already has a `client` fixture without an API key:
+
+```python
+def test_fallback_advice_makes_no_gto_claim(client):
+    res = client.post("/api/analyze", json={"hand": "As Kh Qd"})
+    assert res.status_code == 200
+    assert "GTO" not in res.get_json()["advice"]
+```
+
+Before the change: `1 failed, 40 passed` in `test_api.py`,
+`AssertionError: assert 'GTO' not in '**[Phân Tíc...a lợi nhuận.'`. Change `**GTO Insight:**` to,
+say, `**Nhận định EV:**` (the notes are in Vietnamese): `160 passed`. The LLM prompt at
+[app.py:539](../backend/app.py#L539) asks the model for "[Lời khuyên GTO]", so a real model would
+still write the word; change the prompt in the same commit. Undo with
+`git checkout -- backend/app.py backend/tests/test_api.py`.
 </details>
 
-**🔴 6. Make `python -m src.db --verify` real.** Add a `__main__` block to
-[db.py](../backend/src/db.py) that loads the file given on the command line and prints the number
-of classes and the multiplicity total, exiting 1 with a message if loading fails. Check:
-`python -m src.db data/winrates.json` and `python -m src.db nope.json; echo $?`. The 93 tests must
-still pass.
+**🔴 6. A real `python -m src.db` check.** The old SKILLS.md promised `python -m src.db --verify`,
+which did nothing. Add a `__main__` block to [db.py](../backend/src/db.py) that loads the file given
+on the command line (default: `DEFAULT_DB_PATH`), prints the number of classes and the multiplicity
+total, and exits 1 with a message if loading fails. Check:
+`python -m src.db data/winrates.json; echo $?` and `python -m src.db nope.json; echo $?`. The 159
+tests, `ruff check .` and `mypy` must still pass.
 
 <details><summary>Solution sketch</summary>
 
 ```python
 if __name__ == "__main__":
     import sys
+
     try:
-        db = WinRateDB(sys.argv[1] if len(sys.argv) > 1 else "data/winrates.json")
+        db = WinRateDB(sys.argv[1] if len(sys.argv) > 1 else DEFAULT_DB_PATH)
     except DatabaseError as err:
         print(f"FAILED: {err}", file=sys.stderr)
         sys.exit(1)
     total = sum(s.multiplicity for s in db.all_items().values())
-    print(f"{len(db)} classes, {total} combinations")
+    print(f"OK: {len(db)} classes, {total} combinations")
 ```
 
-On the real file it prints `455 classes, 22100 combinations`. A real verifier would also check
-those two numbers and fail if they differ (lesson 05, weak spots). Undo with
-`git checkout -- backend/src/db.py`.
+On the real file it prints `OK: 455 classes, 22100 combinations` and exits 0; on `nope.json`,
+`FAILED: Database file 'nope.json' does not exist.` and exits 1. The block is short because
+`WinRateDB` already validates everything (lesson 05): a verifier only has to report what `load`
+decided. Undo with `git checkout -- backend/src/db.py`.
 </details>
 
 ---
@@ -618,8 +673,9 @@ those two numbers and fail if they differ (lesson 05, weak spots). Undo with
    their weakest 35%, which are exactly the hands K-Q-3 beats, so the hands that call are mostly
    stronger.
 5. Comparing every hand with every opponent is 8.4 million comparisons even after the 22,100 → 455
-   reduction, about 25 s. A lookup is nanoseconds. The price is that the file must be regenerated
-   whenever the rules change, or it silently disagrees with the code.
+   reduction, about 10 s on one core. A lookup is about 0.1 µs. The price is that the file must be
+   regenerated whenever the rules change. Since October 2026 a stale file no longer disagrees
+   *silently*: the loader refuses it if a class's category or multiplicity has changed.
 </details>
 
 ---
@@ -632,9 +688,11 @@ those two numbers and fail if they differ (lesson 05, weak spots). Undo with
   opponent's fold rate `f` and your showdown equity `w`? `EV = f·P + (1 − f)·[w·(P + 2B) − B]`.
 - Raising is about more than hand strength: 5-3-2 is a +2,812 raise at 35% folds.
 - `random` vs `range` opponent models can change a medium hand's equity from 36% to about 1%.
-- The slow part (8,382,920 comparisons, about 25 s) runs once and is stored in `winrates.json`;
-  requests only look up and do arithmetic.
-- Trust the code and README first, DESIGN.md for the UI, AGENTS.md for intent, and SKILLS.md,
-  BLOG.md and EXPERIMENT.md only as history.
+- The slow part (8,382,920 comparisons, about 10 s on one core) runs once and is stored in
+  `winrates.json`; requests only look up and do arithmetic. `create_app()` builds the online state
+  once per app.
+- Trust the code and its tests first. README, AGENTS.md, SKILLS.md and DESIGN.md were brought in
+  line with the code on 2026-10-24 and are now reliable; BLOG.md and EXPERIMENT.md are history with
+  a dated note on top.
 
 **Next:** [01 — Errors and cards](01-errors-and-cards.md)

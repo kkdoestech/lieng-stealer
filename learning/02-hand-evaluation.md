@@ -2,9 +2,10 @@
 
 > **Goal:** understand how `evaluate_hand` turns any three cards into one comparable `HandScore`,
 > why a single `>` settles any showdown, exactly where each edge case (A-2-3, Q-K-A, K-A-2, J-Q-K,
-> A-J-J) is decided, and what is fragile about the `Hand` class.
-> **Files:** [`backend/src/evaluator.py:174-449`](../backend/src/evaluator.py#L174-L449),
-> [`backend/tests/test_evaluator.py:86-248`](../backend/tests/test_evaluator.py#L86-L248).
+> A-J-J) is decided, why the rules now run only 455 times, and how the `Hand` class's broken
+> hash was fixed.
+> **Files:** [`backend/src/evaluator.py:179-485`](../backend/src/evaluator.py#L179-L485),
+> [`backend/tests/test_evaluator.py:89-302`](../backend/tests/test_evaluator.py#L89-L302).
 > **Time:** ~75 min. **Before this:** [01 — Errors and cards](01-errors-and-cards.md).
 
 ---
@@ -30,7 +31,7 @@
 
 This is where the rules of Liêng live. Everything above it trusts that `a > b` on two scores means
 "a wins the showdown". If this file is wrong, every equity in `winrates.json`, every EV and every
-recommendation is wrong with it, which is why it has the most tests of any domain module (18).
+recommendation is wrong with it, which is why it has the most tests of any domain module (27).
 
 ---
 
@@ -38,12 +39,14 @@ recommendation is wrong with it, which is why it has the most tests of any domai
 
 | # | Location | What to look for |
 |---|----------|------------------|
-| 1 | [evaluator.py:174-190](../backend/src/evaluator.py#L174-L190) | `HandCategory`: Điểm 1 … Sáp 4. |
-| 2 | [evaluator.py:193-223](../backend/src/evaluator.py#L193-L223) | The 12 Liêng sequences and their names. Which key is A-2-3? |
-| 3 | [evaluator.py:226-282](../backend/src/evaluator.py#L226-L282) | `HandScore`, `score_tuple`, five comparison methods. |
-| 4 | [evaluator.py:290-374](../backend/src/evaluator.py#L290-L374) | `evaluate_hand`: validate, sort, then four checks in order. |
-| 5 | [evaluator.py:377-449](../backend/src/evaluator.py#L377-L449) | `Hand`: parsing, `score`, comparisons, and the `__eq__` at the end. |
-| 6 | [test_evaluator.py:86-248](../backend/tests/test_evaluator.py#L86-L248) | The rule tests: Sáp order, 12 Liêng, K-A-2, Đĩ, mod 10. |
+| 1 | [evaluator.py:179-197](../backend/src/evaluator.py#L179-L197) | `HandCategory`: Điểm 1 … Sáp 4. |
+| 2 | [evaluator.py:200-230](../backend/src/evaluator.py#L200-L230) | The 12 Liêng sequences and their names. Which key is A-2-3? |
+| 3 | [evaluator.py:233-293](../backend/src/evaluator.py#L233-L293) | `HandScore`, `score_tuple`, five comparison methods and a `__hash__`. |
+| 4 | [evaluator.py:301-340](../backend/src/evaluator.py#L301-L340) | `evaluate_hand`: validate, sort, then one table lookup. |
+| 5 | [evaluator.py:343-401](../backend/src/evaluator.py#L343-L401) | `_score_for_sorted_ranks`: the four checks in order, and the 455-entry table built from it. |
+| 6 | [evaluator.py:404-485](../backend/src/evaluator.py#L404-L485) | `Hand`: parsing, the cached `score`, comparisons, and `__eq__`/`__hash__` at the end. |
+| 7 | [test_evaluator.py:89-251](../backend/tests/test_evaluator.py#L89-L251) | The rule tests: Sáp order, 12 Liêng, K-A-2, Đĩ, mod 10. |
+| 8 | [test_evaluator.py:253-302](../backend/tests/test_evaluator.py#L253-L302) | House rules, hashing, caching, errors and the 1 µs budget. |
 
 ---
 
@@ -54,7 +57,7 @@ recommendation is wrong with it, which is why it has the most tests of any domai
 Instead of writing "if both are Sáp, compare ranks; if one is Liêng and the other Đĩ, …" for every
 pair of categories, the evaluator turns each hand into a tuple and lets Python compare tuples:
 
-📍 [`backend/src/evaluator.py:245-254`](../backend/src/evaluator.py#L245-L254)
+📍 [`backend/src/evaluator.py:252-261`](../backend/src/evaluator.py#L252-L261)
 ```python
     @property
     def score_tuple(self) -> tuple[int, int, int, int, tuple[int, ...]]:
@@ -103,13 +106,14 @@ it.
 
 ### 2. `HandCategory` and the Liêng table
 
-`HandCategory` ([evaluator.py:174-190](../backend/src/evaluator.py#L174-L190)) is an `IntEnum`:
-`DIEM = 1`, `DI = 2`, `LIENG = 3`, `SAP = 4`, plus a `display_name` with the Vietnamese spelling.
+`HandCategory` ([evaluator.py:179-197](../backend/src/evaluator.py#L179-L197)) is an `IntEnum`:
+`DIEM = 1`, `DI = 2`, `LIENG = 3`, `SAP = 4`, plus a `display_name` with the Vietnamese spelling,
+read from the module-level `_CATEGORY_NAMES`.
 Higher number, stronger category. (EXPERIMENT.md numbers them the other way round; lesson 00.)
 
 Straights are not computed, they are **looked up**:
 
-📍 [`backend/src/evaluator.py:195-208`](../backend/src/evaluator.py#L195-L208)
+📍 [`backend/src/evaluator.py:202-215`](../backend/src/evaluator.py#L202-L215)
 ```python
 _LIENG_SEQUENCES: Final[dict[tuple[int, int, int], int]] = {
     (2, 3, 14): 1,   # A-2-3 (Lowest Liêng)
@@ -136,38 +140,83 @@ with the Ace at either end but not in the middle".
 The strength (1–12) becomes `primary_rank`, so Liêng compare by sequence, not by their top card:
 A-2-3 has the highest card of all (an Ace) and is still the weakest straight.
 
-### 3. `evaluate_hand`, step 1: validate and sort
+### 3. `evaluate_hand`: validate, sort, look up
 
-📍 [`backend/src/evaluator.py:310-325`](../backend/src/evaluator.py#L310-L325)
+📍 [`backend/src/evaluator.py:325-340`](../backend/src/evaluator.py#L325-L340)
 ```python
     if len(cards) != 3:
         raise InvalidHandSizeError(f"A Liêng hand must contain exactly 3 cards, got {len(cards)}.")
 
     c1, c2, c3 = cards[0], cards[1], cards[2]
-    if c1 == c2 or c2 == c3 or c1 == c3:
-        raise InvalidHandSizeError("A Liêng hand cannot contain duplicate cards.")
+    r1, r2, r3 = c1.rank, c2.rank, c3.rank
+    # Two cards are equal only if both rank and suit match; suits are enum singletons.
+    if (r1 == r2 and c1.suit is c2.suit) or (r2 == r3 and c2.suit is c3.suit) or (r1 == r3 and c1.suit is c3.suit):
+        raise DuplicateCardError("A Liêng hand cannot contain duplicate cards.")
 
-    r1, r2, r3 = c1.rank.value, c2.rank.value, c3.rank.value
     if r1 > r2:
         r1, r2 = r2, r1
     if r2 > r3:
         r2, r3 = r3, r2
     if r1 > r2:
         r1, r2 = r2, r1
+    return _SCORE_BY_RANKS[(r1, r2, r3)]
+```
 
+That is the whole function. It does three things:
+
+- **Validate.** Wrong count is an `InvalidHandSizeError`; the same card twice is a
+  `DuplicateCardError` (lesson 01). The duplicate test compares the rank and the suit directly
+  instead of writing `c1 == c2`: the dataclass `__eq__` would build two `(rank, suit)` tuples per
+  comparison. Each `Suit` member exists exactly once, so `is` is a correct and cheap equality test.
+- **Sort.** The three `if`s are a **sorting network**: three fixed compare-and-swap steps that sort
+  any three numbers. The first two steps push the largest value into `r3`; the third orders the
+  remaining two. Every permutation of `(14, 3, 9)` comes out as `(3, 9, 14)`. It avoids building a
+  list and calling `sorted()`, which matters in a function the generator calls 8.4 million times.
+- **Look up.** After the sort, `r1 <= r2 <= r3`, and the score is read from a table keyed by that
+  ascending triple. The ranks are `Rank` members, and the table's keys are plain `int`s; that works
+  because an `IntEnum` member hashes and compares exactly like its integer.
+
+### 4. Where the table comes from
+
+The rules themselves live in `_score_for_sorted_ranks(r1, r2, r3)`, which expects the ranks in
+ascending order. It is called once per rank pattern, at import:
+
+📍 [`backend/src/evaluator.py:397-401`](../backend/src/evaluator.py#L397-L401)
+```python
+# Every rank multiset (C(15, 3) = 455 of them), scored once. Keys are ascending rank values.
+_SCORE_BY_RANKS: Final[dict[tuple[int, int, int], HandScore]] = {
+    (r1, r2, r3): _score_for_sorted_ranks(r1, r2, r3)
+    for r1, r2, r3 in itertools.combinations_with_replacement(range(Rank.TWO, Rank.ACE + 1), 3)
+}
+```
+
+`combinations_with_replacement(range(2, 15), 3)` yields every multiset of three ranks, each as an
+ascending tuple: `(2, 2, 2)`, `(2, 2, 3)`, … `(14, 14, 14)`, 455 of them. That is exactly the shape
+the sorting network produces, so every possible hand finds its key. Suits never change a score, so
+the ranks are the only key needed.
+
+This is the fix for the old weak spot "the 1 µs budget is not met". Until October 2026,
+`evaluate_hand` ran the four checks below on every call and took about 2.6 µs (4.3 µs on the
+machine this lesson was re-run on); now it is a validation, a sort and one dict lookup, about
+0.32 µs. The commit that made the change checked that the table gives identical scores on all
+132,600 *ordered* hands (22,100 × 3! orders), and `test_evaluation_within_latency_budget`
+([test_evaluator.py:298-302](../backend/tests/test_evaluator.py#L298-L302)) now pins the budget.
+
+One side effect: every hand with the same ranks gets the **same** `HandScore` object back, not just
+an equal one. That is safe because `HandScore` is frozen, and it matters for one test (weak spot 2).
+
+The rules function starts by building the descending tuple used as the final tie-breaker:
+
+📍 [`backend/src/evaluator.py:343-345`](../backend/src/evaluator.py#L343-L345)
+```python
+def _score_for_sorted_ranks(r1: int, r2: int, r3: int) -> HandScore:
+    """Score three rank values given in ascending order (the rules of evaluate_hand)."""
     descending_ranks = (r3, r2, r1)
 ```
 
-Lines 318-323 are a **sorting network**: three fixed compare-and-swap steps that sort any three
-numbers. The first two steps push the largest value into `r3`; the third orders the remaining two.
-Every permutation of `(14, 3, 9)` comes out as `(3, 9, 14)`. It avoids building a list and calling
-`sorted()`, which matters a little in a function the generator calls 8.4 million times.
+### 5. The checks, part 1: Sáp, then Liêng
 
-After this block, `r1 <= r2 <= r3`, and every check below relies on that.
-
-### 4. Steps 2 and 3: Sáp, then Liêng
-
-📍 [`backend/src/evaluator.py:327-349`](../backend/src/evaluator.py#L327-L349)
+📍 [`backend/src/evaluator.py:347-369`](../backend/src/evaluator.py#L347-L369)
 ```python
     # 1. Check Sáp (Three of a Kind)
     if r1 == r3:
@@ -198,9 +247,9 @@ Because the ranks are sorted, "all three equal" is just `r1 == r3`. Each check *
 order of the checks is the order of the categories: a hand that is a Sáp never reaches the Liêng
 test, and one that is a Liêng never reaches the Đĩ test.
 
-### 5. Step 4: Đĩ
+### 6. The checks, part 2: Đĩ
 
-📍 [`backend/src/evaluator.py:351-362`](../backend/src/evaluator.py#L351-L362)
+📍 [`backend/src/evaluator.py:371-382`](../backend/src/evaluator.py#L371-L382)
 ```python
     # 3. Check Đĩ (Three Face Cards - J, Q, K)
     # Ranks are sorted: all three cards are face cards iff 11 <= r1 <= r2 <= r3 <= 13.
@@ -225,12 +274,12 @@ largest at most K (13). The order of the checks does the rest of the work for fr
 
 That leaves exactly the 6 Đĩ shapes AGENTS.md lists: J-J-Q, J-J-K, J-Q-Q, J-K-K, Q-Q-K, Q-K-K.
 
-### 6. Step 5: Điểm, everything else
+### 7. The checks, part 3: Điểm, everything else
 
-📍 [`backend/src/evaluator.py:364-374`](../backend/src/evaluator.py#L364-L374)
+📍 [`backend/src/evaluator.py:384-394`](../backend/src/evaluator.py#L384-L394)
 ```python
     # 4. Fall through to Điểm (Points modulo 10)
-    point_score = (c1.point_value + c2.point_value + c3.point_value) % 10
+    point_score = (Rank(r1).point_value + Rank(r2).point_value + Rank(r3).point_value) % 10
     name = f"{point_score} điểm" if point_score > 0 else "0 điểm (Bù)"
     return HandScore(
         category=HandCategory.DIEM,
@@ -242,29 +291,32 @@ That leaves exactly the 6 Đĩ shapes AGENTS.md lists: J-J-Q, J-J-K, J-Q-Q, J-K-
     )
 ```
 
-Points use `Card.point_value` (Ace 1, 10–K 0, lesson 01). The tie-break uses the **rank**
-`r3`, where the Ace is 14. So the Ace counts 1 for points and 14 for "highest card".
+The rules function only has rank numbers, so `Rank(r1)` turns each back into a `Rank` to read its
+`point_value` (Ace 1, 10–K 0, lesson 01). The tie-break uses the **rank** `r3`, where the Ace is 14.
+So the Ace counts 1 for points and 14 for "highest card".
 
-### 7. Where each edge case is decided
+### 8. Where each edge case is decided
 
 | Case | Result | Decided at |
 |------|--------|------------|
-| A-2-3 is the weakest Liêng | strength 1 | the key `(2, 3, 14)` at [evaluator.py:196](../backend/src/evaluator.py#L196) |
-| Q-K-A is the strongest Liêng | strength 12 | [evaluator.py:207](../backend/src/evaluator.py#L207) |
-| K-A-2 is not a Liêng | 3 points | `(2, 13, 14)` is missing from the table, so it falls to [evaluator.py:365](../backend/src/evaluator.py#L365) |
-| J-Q-K is Liêng, not Đĩ | strength 11 | [evaluator.py:206](../backend/src/evaluator.py#L206), checked before Đĩ |
-| J-J-J is Sáp, not Đĩ | Sáp J | [evaluator.py:328](../backend/src/evaluator.py#L328), checked first |
-| A-J-J is not Đĩ | 1 point | `r3 <= 13` at [evaluator.py:354](../backend/src/evaluator.py#L354) |
+| A-2-3 is the weakest Liêng | strength 1 | the key `(2, 3, 14)` at [evaluator.py:203](../backend/src/evaluator.py#L203) |
+| Q-K-A is the strongest Liêng | strength 12 | [evaluator.py:214](../backend/src/evaluator.py#L214) |
+| K-A-2 is not a Liêng | 3 points | `(2, 13, 14)` is missing from the table, so it falls to [evaluator.py:385](../backend/src/evaluator.py#L385) |
+| J-Q-K is Liêng, not Đĩ | strength 11 | [evaluator.py:213](../backend/src/evaluator.py#L213), checked before Đĩ |
+| J-J-J is Sáp, not Đĩ | Sáp J | [evaluator.py:348](../backend/src/evaluator.py#L348), checked first |
+| A-J-J is not Đĩ | 1 point | `r3 <= 13` at [evaluator.py:374](../backend/src/evaluator.py#L374) |
 | Đĩ beats 9 points | category 2 > 1 | the first slot of `score_tuple` |
-| 19 points is 9 points | 9 | `% 10` at [evaluator.py:365](../backend/src/evaluator.py#L365) |
+| 19 points is 9 points | 9 | `% 10` at [evaluator.py:385](../backend/src/evaluator.py#L385) |
 
-Each row has a test: [test_evaluator.py:112](../backend/tests/test_evaluator.py#L112) (all 12
-Liêng in order), [:141](../backend/tests/test_evaluator.py#L141) (K-A-2),
-[:167](../backend/tests/test_evaluator.py#L167) (J-J-J and J-Q-K),
-[:177](../backend/tests/test_evaluator.py#L177) (A-J-J), [:187](../backend/tests/test_evaluator.py#L187)
-(Đĩ beats 9 points) and [:219](../backend/tests/test_evaluator.py#L219) (mod 10).
+Each row has a test: [test_evaluator.py:115](../backend/tests/test_evaluator.py#L115) (all 12
+Liêng in order), [:144](../backend/tests/test_evaluator.py#L144) (K-A-2),
+[:170](../backend/tests/test_evaluator.py#L170) (J-J-J and J-Q-K),
+[:180](../backend/tests/test_evaluator.py#L180) (A-J-J), [:190](../backend/tests/test_evaluator.py#L190)
+(Đĩ beats 9 points) and [:222](../backend/tests/test_evaluator.py#L222) (mod 10). They test
+`evaluate_hand`, so they now exercise the table: a wrong entry would fail them just as a wrong `if`
+did before.
 
-### 8. House rules for ties
+### 9. House rules for ties
 
 Real Liêng tables disagree on how to break ties *inside* a category. This code picks one set of
 rules, encoded in the `secondary_rank` and `tie_breaker` slots. Real comparisons:
@@ -278,26 +330,40 @@ rules, encoded in the `secondary_rank` and `tie_breaker` slots. Real comparisons
 | 9s 8h 2d (9 điểm) | Kc 10s 9h (9 điểm) | B wins | K beats 9, even though 9-8-2 "has more" |
 | Js Qh Kd | Jc Qd Kh | tie | same ranks; suits never count |
 
-AGENTS.md says Đĩ hands are "considered equal (Tie) or compared by highest face card … based on
-game configuration" ([AGENTS.md:61](../AGENTS.md#L61)). The code always compares them, there is no
-configuration, and **no test pins any row of this table** except the last kind (weak spot 4).
+AGENTS.md used to say Đĩ hands are "considered equal (Tie) or compared by highest face card …
+based on game configuration", while the code always compared them and nothing tested it. Since
+October 2026 the spec states the rule the code implements, "house rule, as implemented; there is no
+configuration switch" ([AGENTS.md:61](../AGENTS.md#L61), and [:72](../AGENTS.md#L72) for Điểm), and
+`TestTieBreakHouseRules` ([test_evaluator.py:253-266](../backend/tests/test_evaluator.py#L253-L266))
+pins the six Đĩ hands in order, A-K-8 over K-Q-9, and a same-rank tie.
 
-### 9. `HandScore`'s comparison methods
+### 10. `HandScore`'s comparison methods and hash
 
 `HandScore` is declared `@dataclass(frozen=True, order=False)`
-([evaluator.py:226](../backend/src/evaluator.py#L226)) and then defines `__lt__`, `__le__`,
-`__gt__`, `__ge__` and `__eq__` by hand ([evaluator.py:256-279](../backend/src/evaluator.py#L256-L279)),
+([evaluator.py:233](../backend/src/evaluator.py#L233)) and then defines `__lt__`, `__le__`,
+`__gt__`, `__ge__` and `__eq__` by hand ([evaluator.py:263-286](../backend/src/evaluator.py#L263-L286)),
 each the same three lines: return `NotImplemented` for a non-`HandScore`, otherwise compare
 `score_tuple`s. Writing them out makes the comparison key explicit and keeps the `name` field out
-of it. (`HandScore`'s own hash, generated from all six fields, happens to be consistent with this
-`__eq__`: every field is a function of the three ranks.)
+of it. The hash is written out too, from the same key:
 
-`calculate_points` ([evaluator.py:285-287](../backend/src/evaluator.py#L285-L287)) is a public
+📍 [`backend/src/evaluator.py:288-290`](../backend/src/evaluator.py#L288-L290)
+```python
+    def __hash__(self) -> int:
+        # Must agree with __eq__: equal scores hash equally, whatever their display name.
+        return hash(self.score_tuple)
+```
+
+(The hash the dataclass generated from all six fields happened to agree with `__eq__`, because every
+field is a function of the three ranks. The explicit one keeps it true even if a field that isn't
+part of the key, such as `name`, ever changes. A dataclass never overwrites a `__hash__` the class
+defines itself.)
+
+`calculate_points` ([evaluator.py:296-298](../backend/src/evaluator.py#L296-L298)) is a public
 helper that computes the same `% 10` sum; only a test calls it.
 
-### 10. `Hand`: three validated cards
+### 11. `Hand`: three validated cards
 
-📍 [`backend/src/evaluator.py:377-386`](../backend/src/evaluator.py#L377-L386)
+📍 [`backend/src/evaluator.py:404-413`](../backend/src/evaluator.py#L404-L413)
 ```python
 @dataclass(frozen=True)
 class Hand:
@@ -308,40 +374,65 @@ class Hand:
         if len(self.cards) != 3:
             raise InvalidHandSizeError(f"A Liêng hand must have 3 cards, got {len(self.cards)}.")
         if len(set(self.cards)) != 3:
-            raise InvalidHandSizeError("A Liêng hand cannot have duplicate cards.")
+            raise DuplicateCardError("A Liêng hand cannot have duplicate cards.")
 ```
 
 `__post_init__` runs right after the generated `__init__`, so an invalid `Hand` can never exist.
-`Hand.from_str` ([evaluator.py:394-413](../backend/src/evaluator.py#L394-L413)) splits on spaces,
-commas or hyphens with `re.split(r"[\s,\-]+", …)` ([evaluator.py:407](../backend/src/evaluator.py#L407)):
+`Hand.from_str` ([evaluator.py:420-440](../backend/src/evaluator.py#L420-L440)) splits on spaces,
+commas or hyphens with `re.split(r"[\s,\-]+", …)` ([evaluator.py:434](../backend/src/evaluator.py#L434)):
 `"As,Kh,Qd"`, `"As-Kh-Qd"` and `"  As   Kh  Qd "` all parse to `As Kh Qd`; `"AsKhQd"` is one token
-and fails with `found 1`. This is the entry point for the CLI ([cli.py:130](../backend/src/cli.py#L130))
-and the API ([app.py:173](../backend/app.py#L173)).
+and fails with `found 1`. This is the entry point for the CLI ([cli.py:253](../backend/src/cli.py#L253))
+and the API ([app.py:276](../backend/app.py#L276)).
 
-The strength is a property that evaluates the cards **on every access**:
+The strength is evaluated **once per hand** and then remembered:
 
-📍 [`backend/src/evaluator.py:415-418`](../backend/src/evaluator.py#L415-L418)
+📍 [`backend/src/evaluator.py:442-449`](../backend/src/evaluator.py#L442-L449)
 ```python
-    @property
+    @cached_property
     def score(self) -> HandScore:
-        """Evaluate and return the HandScore."""
+        """Evaluate the hand once and return its HandScore.
+
+        ``cached_property`` writes straight into the instance ``__dict__``, so it works on this
+        frozen dataclass (which has no ``__slots__``).
+        """
         return evaluate_hand(self.cards)
 ```
 
-All five comparison operators delegate to it, so `hand_a > hand_b` reads exactly like a rule:
-`Hand.from_str("2s 2h 2d") > Hand.from_str("Qs Kh Ad")` is "Sáp beats Liêng". The last of them is
-the problem of this lesson:
+The first read of `hand.score` calls `evaluate_hand` and stores the result in `hand.__dict__`;
+every later read finds it there without calling the function. A frozen dataclass blocks
+`hand.score = …` (its `__setattr__` raises), but `cached_property` writes to `__dict__` directly,
+which is allowed. Until October 2026 this was a plain `@property` that re-evaluated on every
+access, so `a > b` on two hands evaluated both of them each time.
 
-📍 [`backend/src/evaluator.py:440-443`](../backend/src/evaluator.py#L440-L443)
+All five comparison operators delegate to `score`, so `hand_a > hand_b` reads exactly like a rule:
+`Hand.from_str("2s 2h 2d") > Hand.from_str("Qs Kh Ad")` is "Sáp beats Liêng". The last two methods
+are the ones this lesson used to be about:
+
+📍 [`backend/src/evaluator.py:471-479`](../backend/src/evaluator.py#L471-L479)
 ```python
     def __eq__(self, other: object) -> bool:
+        """Two hands are equal when they are equally strong (they would tie at showdown)."""
         if not isinstance(other, Hand):
             return NotImplemented
         return self.score == other.score
+
+    def __hash__(self) -> int:
+        # Must agree with __eq__: hands that tie hash equally, so they collapse in sets and dicts.
+        return hash(self.score.score_tuple)
 ```
 
-Two hands are "equal" when they are equally *strong*. But the class is a frozen dataclass, which
-generates `__hash__` from the *field*, the `cards` tuple. Equal hands get different hashes:
+Two hands are "equal" when they are equally *strong*. **How it was broken:** until October 2026
+there was no `__hash__` here, so the frozen dataclass generated one from the *field*, the `cards`
+tuple. Two hands that were `==` got different hashes. `As Kh Qd` and the same three cards dealt as
+`Kh As Qd` counted as two members of a set, and a dict keyed by one could not find the other, while
+a list (which only uses `==`) could. Nothing in production hashed a `Hand`, so the bug was latent,
+but AGENTS.md promised hands usable as dict keys ([AGENTS.md:25](../AGENTS.md#L25)).
+
+**How it was fixed:** the owner had two options. "Same cards" (compare and hash
+`frozenset(self.cards)`) would change what `==` means. "Same strength" keeps `__eq__` and adds a
+`__hash__` from the same key, `score.score_tuple`. The fix chose the second, and AGENTS.md now says
+so: "`Hand` equality means equal strength (the hands would tie), and its hash agrees with it." Run
+the old demonstration against the current code:
 
 ```bash
 python -c '
@@ -360,15 +451,18 @@ print("b in seen:", b in seen, "| c in seen:", c in seen, "| c in [a]:", c in [a
 Real output:
 
 ```
-a == b: True | hash equal: False
-a == c: True | hash equal: False
-len({a, b, c}): 3
-b in seen: False | c in seen: False | c in [a]: True
+a == b: True | hash equal: True
+a == c: True | hash equal: True
+len({a, b, c}): 1
+b in seen: True | c in seen: True | c in [a]: True
 ```
 
-A set of three "equal" hands has three members. A dict keyed by `a` can't find `c`, which is the
-same three cards, while a *list* finds it (lists use `==`, dicts use the hash first). Weak spot 1
-has the fix.
+Before the fix the same snippet printed `hash equal: False` twice, `len({a, b, c}): 3` and
+`b in seen: False | c in seen: False`. Now all three hands are one set member, because all three
+would tie. Note what that means: a set of `Hand`s keeps one hand per *strength*, not one per set of
+cards. If you need "these exact cards", use `frozenset(hand.cards)` as the key.
+`test_equal_hands_hash_equally_and_collapse_in_a_set`
+([test_evaluator.py:272-276](../backend/tests/test_evaluator.py#L272-L276)) pins the fix.
 
 ---
 
@@ -403,10 +497,15 @@ type". Python then tries the other operand's method and, if that fails too, rais
   a glance, instead of hiding them in arithmetic.
 - **Sort once, then check in category order with early returns.** The order of the `if`s *is* the
   priority of the categories, so J-Q-K and J-J-J can't be misclassified as Đĩ.
+- **Rules as a readable function, speed from a table.** `_score_for_sorted_ranks` keeps the rules
+  in the clearest form; `_SCORE_BY_RANKS` runs it 455 times at import, so the hot path is one dict
+  lookup. The cost is about 455 objects in memory and a few milliseconds at import.
 - **Ranks in the tie-breaker.** Including all three ranks makes the order total over rank patterns
   (455 distinct values), which later modules rely on. The cost is a house rule for every tie.
-- **`Hand` stores cards, not a score.** It stays a tiny value object; the score is derived. The
-  cost is re-evaluation on every access (weak spot 2).
+- **`Hand` stores cards, not a score.** It stays a tiny value object; the score is derived on first
+  use and cached in the instance (`cached_property`).
+- **"Equal" means "would tie".** `Hand.__eq__` and `__hash__` both use the score, so hands work as
+  dict keys and set members, at the price that a set keeps one hand per strength, not per cards.
 - **`HandScore` carries a display name.** The CLI and API print `str(hand.score)` ("Liêng Q-K-A")
   without a second lookup.
 
@@ -414,42 +513,52 @@ type". Python then tries the other operand's method and, if that fails too, rais
 
 ## ⚠️ Weak spots
 
-1. **`Hand.__eq__` and `__hash__` disagree.** [evaluator.py:440-443](../backend/src/evaluator.py#L440-L443)
-   compares strength; the dataclass hash ([evaluator.py:377](../backend/src/evaluator.py#L377)) uses
-   the ordered `cards` tuple. Section 10 shows equal hands with different hashes, and the same three
-   cards in another order counted twice in a set. It also contradicts AGENTS.md, which wants hands
-   usable as dict keys ([AGENTS.md:25](../AGENTS.md#L25)). No production code hashes a `Hand` today,
-   so the bug is latent. *Fix:* decide what "equal" means. **Same cards:** `__eq__` compares
-   `frozenset(self.cards)` and `__hash__` returns `hash(frozenset(self.cards))`; compare strength
-   with `a.score == b.score`. **Same strength:** keep `__eq__` and add
-   `__hash__` returning `hash(self.score.score_tuple)`. Both keep the 93 tests green (exercise 4).
-2. **`score` is not cached.** [evaluator.py:415-418](../backend/src/evaluator.py#L415-L418)
-   re-runs `evaluate_hand` on each access, and every comparison reads it twice: `a > b` on two
-   `Hand`s took 6.74 µs, comparing their `HandScore`s 475 ns. *Fix:* `functools.cached_property`
-   works on a frozen dataclass and brought `a > b` to 595 ns (exercise 5).
+Six weak spots were listed here when the course was written. Commit `bba5e63` ("fix(core)", October
+2026) fixed four of them; two are still open, and the fixes left one new gap in a test.
+
+1. ✅ **Fixed: `Hand.__eq__` and `__hash__` disagreed.** `__eq__` compared strength while the
+   dataclass-generated hash used the ordered `cards` tuple, so equal hands had different hashes and
+   the same three cards counted twice in a set. Now `Hand.__hash__` hashes `score.score_tuple`
+   ([evaluator.py:477-479](../backend/src/evaluator.py#L477-L479)) and `HandScore` has an explicit
+   hash from the same key ([evaluator.py:288-290](../backend/src/evaluator.py#L288-L290)); AGENTS.md
+   documents the choice ([AGENTS.md:25](../AGENTS.md#L25)). Pinned by `TestHashing`
+   ([test_evaluator.py:272-280](../backend/tests/test_evaluator.py#L272-L280)). Exercise 4 undoes it.
+2. ✅ **Fixed, but the test can't fail: `score` was not cached.** It re-ran `evaluate_hand` on every
+   access. Now it is a `cached_property`
+   ([evaluator.py:442-449](../backend/src/evaluator.py#L442-L449)); `a > b` on two hands takes about
+   0.71 µs, against 1.34 µs with a plain `@property` over the new table and 8.3 µs with the old
+   code. *Still open:* the test meant to pin it, `test_score_is_computed_once`
+   ([test_evaluator.py:282-284](../backend/tests/test_evaluator.py#L282-L284)), asserts
+   `hand.score is hand.score`. Since the table returns the same `HandScore` object for every hand
+   with those ranks, that is true even without caching: put `@property` back and all 159 tests
+   pass. *Fix:* assert `"score" in hand.__dict__` after the first read (exercise 5).
 3. **A redundant `score` field.** For Điểm it always equals `primary_rank`; for the other
-   categories it is always 0 ([evaluator.py:241](../backend/src/evaluator.py#L241),
-   [:252](../backend/src/evaluator.py#L252)). Removing it from `score_tuple` leaves 455 distinct
-   tuples in exactly the same order, so it never decides anything. It also makes AGENTS.md's
-   four-field `HandScore` ([AGENTS.md:80](../AGENTS.md#L80)) and the code's six fields harder to
-   reconcile. *Fix:* drop it, or document it as display data.
-4. **Tie-break house rules: untested and undocumented in the spec.** Đĩ by highest then middle card
-   ([evaluator.py:357-358](../backend/src/evaluator.py#L357-L358)), Điểm by highest card with the
-   Ace high ([evaluator.py:370](../backend/src/evaluator.py#L370)), then all ranks. No test compares
-   two Đĩ hands or two Điểm hands with equal points. Making every Đĩ tie (AGENTS.md's other option)
-   fails only one test, and only indirectly, through the calling-range cross-check (exercise 6).
-   And the calling-range model needs 455 *distinct* strengths
-   ([calling_range.py:8](../backend/src/calling_range.py#L8)), so real ties would break it. *Fix:*
-   pin the table in section 8 with tests, and treat any change as a data change.
-5. **The 1 µs budget is not met.** AGENTS.md §6 asks for under 1 µs per evaluation
-   ([AGENTS.md:124](../AGENTS.md#L124)); `evaluate_hand` took 2.57–3.82 µs here, and all 22,100
-   hands took 0.084 s. It doesn't matter in practice (the heavy use is offline), but nobody
-   measures it. *Fix:* precompute the 455 `HandScore`s in a dict keyed by the sorted rank triple
-   (exercise 7: 990 ns).
-6. **Small duplications.** `calculate_points` ([evaluator.py:285-287](../backend/src/evaluator.py#L285-L287))
-   and the inline sum at [:365](../backend/src/evaluator.py#L365) compute the same thing; only a
-   test uses the function. `Hand(cards=[…])` with a list passes validation but makes the hand
-   unhashable (`TypeError: unhashable type: 'list'`), because the type hint isn't enforced.
+   categories it is always 0 ([evaluator.py:248](../backend/src/evaluator.py#L248),
+   [:259](../backend/src/evaluator.py#L259)). Removing it from `score_tuple` leaves 455 distinct
+   tuples in exactly the same order, so it never decides anything. AGENTS.md now documents the real
+   six-field `HandScore` and five-element tuple ([AGENTS.md:80-83](../AGENTS.md#L80-L83)), so the
+   spec and the code agree; the slot is just dead weight. *Fix:* drop it from `score_tuple`, or
+   document it as display data (exercise 7).
+4. ✅ **Fixed: tie-break house rules were untested and undocumented.** Making every Đĩ tie, which the
+   spec then allowed, failed only one test, indirectly. Now AGENTS.md states the rules as
+   implemented ([AGENTS.md:61](../AGENTS.md#L61), [:72](../AGENTS.md#L72)), `TestTieBreakHouseRules`
+   ([test_evaluator.py:253-266](../backend/tests/test_evaluator.py#L253-L266)) pins them, and the
+   calling-range model refuses to start if two classes are equally strong
+   ([calling_range.py:67-68](../backend/src/calling_range.py#L67-L68), lesson 06). Exercise 6 shows
+   what a rule change does now.
+5. ✅ **Fixed: the 1 µs budget was not met.** `evaluate_hand` took 2.6–3.8 µs per hand (all 22,100
+   hands: 0.084 s), and nothing measured it. With the 455-entry table it takes about 0.32 µs (all
+   22,100: 0.007 s); `test_evaluation_within_latency_budget`
+   ([test_evaluator.py:298-302](../backend/tests/test_evaluator.py#L298-L302)) checks it, scaled by
+   `PERF_BUDGET_FACTOR` on slow CI machines ([tests/perf.py](../backend/tests/perf.py)), and
+   AGENTS.md records the measurement ([AGENTS.md:126](../AGENTS.md#L126)).
+6. **Small duplications, and a list that isn't copied.** `calculate_points`
+   ([evaluator.py:296-298](../backend/src/evaluator.py#L296-L298)) and the inline sum at
+   [:385](../backend/src/evaluator.py#L385) compute the same thing; only a test uses the function.
+   `Hand(cards=[…])` with a list passes validation, because the type hint isn't enforced, and the
+   hand keeps that very list: append a fourth card to it afterwards and `len(hand.cards)` is 4, while
+   a score cached earlier still describes the first three. *Fix:* in `__post_init__`, store
+   `tuple(self.cards)` with `object.__setattr__(self, "cards", tuple(self.cards))`.
 
 ---
 
@@ -464,11 +573,11 @@ python -m pytest tests/test_evaluator.py -q
 Expected output (the timing varies):
 
 ```
-..................                                                       [100%]
-18 passed in 0.02s
+...........................                                              [100%]
+27 passed in 0.07s
 ```
 
-Evaluate all 22,100 hands and check the claims of sections 1 and weak spot 3:
+Evaluate all 22,100 hands and check the claims of section 1 and weak spot 3:
 
 ```bash
 python -c '
@@ -489,7 +598,7 @@ print("weakest:", min(tuples), "strongest:", max(tuples))
 Expected output (the time varies):
 
 ```
-22100 hands in 0.084 s
+22100 hands in 0.007 s
 Counter({'DIEM': 21136, 'LIENG': 768, 'DI': 144, 'SAP': 52})
 distinct score tuples: 455
 same order without score field: True
@@ -497,7 +606,19 @@ weakest: (1, 0, 4, 0, (4, 3, 3)) strongest: (4, 14, 0, 0, (14, 14, 14))
 ```
 
 The weakest hand in the game is 4-3-3: 0 points, and the lowest possible top card among 0-point
-hands. Run the snippet in section 10 to see the hash bug yourself.
+hands. The same loop took 0.084 s before the score table (section 4). Time one evaluation:
+
+```bash
+python -m timeit -s "from src.evaluator import Hand, evaluate_hand; cards = Hand.from_str('9s 8h 2d').cards" "evaluate_hand(cards)"
+```
+
+Expected output (the time varies; the budget is 1 µs):
+
+```
+1000000 loops, best of 5: 323 nsec per loop
+```
+
+Run the snippet in section 11 to see the fixed hash yourself.
 
 ---
 
@@ -537,70 +658,83 @@ with the `Counter` in 🧪 Try it.
 <details><summary>Solution</summary>
 
 768. Each of the 12 sequences has three different ranks, and each card can be any of 4 suits:
-4 × 4 × 4 = 64 combinations. Lesson 03 calls 64 the *multiplicity*. (BLOG.md's "≈ 3.26%" is wrong:
-768 / 22,100 = 3.48%.)
+4 × 4 × 4 = 64 combinations. Lesson 03 calls 64 the *multiplicity*. 768 / 22,100 = 3.48%, the
+figure BLOG.md now gives (it said 3.26% until October 2026).
 </details>
 
-**🟡 4. Fix the hash bug.** Replace `Hand.__eq__` with a card-identity version and add a matching
-`__hash__` (weak spot 1, "same cards"). Add a test that `len({a, b, c}) == 2` for the three hands
-of section 10. Check with `python -m pytest -q`.
+**🟡 4. Undo the hash fix.** Delete `Hand.__hash__`
+([evaluator.py:477-479](../backend/src/evaluator.py#L477-L479)). Predict what the snippet in
+section 11 prints and which test fails, then run both and `python -m pytest -q`.
 
 <details><summary>Solution</summary>
+
+The snippet prints the old, broken output again: `hash equal: False` twice, `len({a, b, c}): 3`,
+and `b in seen: False | c in seen: False`. No error is raised anywhere: without an explicit
+`__hash__`, the frozen dataclass quietly generates one from the `cards` field. `1 failed, 158
+passed`: only `test_equal_hands_hash_equally_and_collapse_in_a_set`
+([test_evaluator.py:272-276](../backend/tests/test_evaluator.py#L272-L276)) notices, which is why
+that test exists. Undo with `git checkout -- backend/src/evaluator.py`.
+</details>
+
+**🟡 5. Undo the cache, and find the test that doesn't notice.** Change `@cached_property` on
+`Hand.score` ([evaluator.py:442](../backend/src/evaluator.py#L442)) to `@property`. Predict whether
+`test_score_is_computed_once` fails, then run `python -m pytest -q` and time a comparison before and
+after:
+`python -m timeit -s "from src.evaluator import Hand; a = Hand.from_str('As Kh Qd'); b = Hand.from_str('9s 8h 2d')" "a > b"`.
+Then write a test that does fail.
+
+<details><summary>Solution</summary>
+
+`159 passed`: the test still passes. It asserts `hand.score is hand.score`, and with a plain
+`@property` each read calls `evaluate_hand`, which returns the shared table entry, the *same*
+object every time. The timing shows the cost the test misses: about 0.71 µs with the cache,
+1.34 µs without. A test that checks the cache itself:
 
 ```python
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, Hand):
-            return NotImplemented
-        return frozenset(self.cards) == frozenset(other.cards)
-
-    def __hash__(self) -> int:
-        return hash(frozenset(self.cards))
+    def test_score_is_stored_on_the_instance(self) -> None:
+        hand = Hand.from_str("As Kh Qd")
+        _ = hand.score
+        assert "score" in hand.__dict__
 ```
 
-`frozenset` ignores order, so `a == c` (same cards) stays `True` with equal hashes, and `a == b`
-becomes `False`; `a.score == b.score` is still `True`. All 93 existing tests pass, because none uses
-`==` between hands. A dataclass does not overwrite a `__hash__` you define yourself. Undo with
-`git checkout -- backend/src/evaluator.py`.
+It passes with `cached_property` (the value lands in `__dict__`) and fails with `@property`. Undo
+with `git checkout -- backend/src/evaluator.py` (and the test file, if you don't keep the test).
 </details>
 
-**🟡 5. Cache the score.** Change `@property` on `Hand.score` to `@functools.cached_property`
-(add `import functools`). Measure before and after:
-`python -m timeit -s "from src.evaluator import Hand; a = Hand.from_str('As Kh Qd'); b = Hand.from_str('9s 8h 2d')" "a > b"`.
+**🟡 6. Change a house rule.** Make every Đĩ tie, the option AGENTS.md used to allow: in the Đĩ
+branch ([evaluator.py:375-382](../backend/src/evaluator.py#L375-L382)) set `primary_rank=0`,
+`secondary_rank=0` and `tie_breaker=()`. Predict what happens, then run
+`python -m pytest tests/test_evaluator.py -q` and `python -m pytest -q`.
 
 <details><summary>Solution</summary>
 
-About 6.74 µs before and 595 ns after on the machine this was written on; 93 tests pass.
-`cached_property` stores the result in the instance's `__dict__` directly, which a frozen dataclass
-allows (it only blocks normal attribute assignment). Undo with
+The evaluator tests give `1 failed, 26 passed`: `test_di_order_highest_face_card_then_middle_then_rest`
+now pins the rule. The whole suite stops early: `Interrupted: 2 errors during collection`.
+`test_api.py` and `test_dynamic_scenarios.py` build the app when they are imported, the app builds a
+`CallingRangeModel`, and the model refuses to start: `LiengError: The calling-range model needs
+every canonical class to have a distinct strength.` (With `--continue-on-collection-errors`:
+`5 failed, 96 passed, 14 errors`.) Before the fixes, the same change failed one test, and the
+calling-range numbers were silently wrong. Now a rule change is loud, as it should be: it is a data
+change too, because `winrates.json` was computed with the old rule. Undo with
 `git checkout -- backend/src/evaluator.py`.
 </details>
 
-**🟡 6. Change a house rule.** Make every Đĩ tie, as AGENTS.md allows: in the Đĩ branch set
-`primary_rank=0`, `secondary_rank=0` and `tie_breaker=()`. Predict how many tests fail, then run
-`python -m pytest -q`.
+**🔴 7. Drop the redundant slot (weak spot 3).** Remove `self.score` from `score_tuple`
+([evaluator.py:252-261](../backend/src/evaluator.py#L252-L261)) and fix its return type. Before
+running anything, explain why `winrates.json` and the calling-range order stay valid. Then prove it:
+rerun the 22,100-hand snippet from 🧪 Try it, then `python -m pytest -q` and `python -m mypy`.
 
 <details><summary>Solution</summary>
 
-`1 failed, 92 passed`. None of the 18 evaluator tests notices. The one failure is
-`test_zero_fold_matches_exact_enumeration` in `test_calling_range.py`, first at `Q-J-J`: the
-calling-range model now sees six classes with the same strength, and `winrates.json` was computed
-with the old rule. A rule change is a data change too. Undo with
+The return type becomes `tuple[int, int, int, tuple[int, ...]]`. The slot never decided a
+comparison (weak spot 3: the order is the same without it), so every `>` and `==` gives the same
+answer, the 455 classes keep their order, and nothing computed from them changes. The snippet
+still prints 455 distinct tuples, now with four elements (`weakest: (1, 0, 4, (4, 3, 3))`; ignore its
+`same order` line, which assumes five slots);
+`159 passed`; mypy reports `Success: no issues found in 12 source files`. What does change is
+documentation: AGENTS.md §3.3 and the note at the top of EXPERIMENT.md describe a five-element
+tuple, so a real change would update them in the same commit. Undo with
 `git checkout -- backend/src/evaluator.py`.
-</details>
-
-**🔴 7. Meet the 1 µs budget.** Add a module-level `_SCORE_TABLE` built once by evaluating one
-representative per sorted rank triple (`itertools.combinations_with_replacement(sorted(Rank), 3)`,
-suits ♠ ♥ ♦), and an `evaluate_hand_fast` that validates, runs the sorting network and returns
-`_SCORE_TABLE[(r1, r2, r3)]`. Prove it agrees with `evaluate_hand` on all 22,100 hands, then time
-both.
-
-<details><summary>Solution sketch</summary>
-
-The table has 455 entries, and both functions return equal scores with equal names on every hand.
-Timed with `timeit` on `9s 8h 2d`: 990 ns for the table version, 3.54 µs for `evaluate_hand`.
-Returning a shared, frozen `HandScore` is safe because nobody can modify it. To switch for real,
-make `evaluate_hand` itself use the table, keeping the original logic as the function that fills
-it. Undo with `git checkout -- backend/src/evaluator.py`.
 </details>
 
 ---
@@ -612,7 +746,8 @@ it. Undo with `git checkout -- backend/src/evaluator.py`.
 2. How does the code make A-2-3 the *weakest* straight while the Ace is 14 everywhere?
 3. Why does the Đĩ check not need to exclude J-Q-K and J-J-J itself?
 4. Two different hands of the same category compare as equal. What must be true of their ranks?
-5. Why can `{a, b}` have two elements when `a == b` is `True` for two `Hand`s?
+5. `a == b` is `True` for two `Hand`s. Why must `hash(a) == hash(b)` also hold, and what in the
+   code makes it hold today?
 
 <details><summary>Answers</summary>
 
@@ -624,24 +759,29 @@ it. Undo with `git checkout -- backend/src/evaluator.py`.
    before the Đĩ test runs.
 4. They must have the same three ranks, because `tie_breaker` contains all three. Only suits may
    differ.
-5. `Hand.__eq__` compares strength, but the dataclass-generated `__hash__` hashes the `cards`
-   tuple. The set puts the two hands in different buckets and never calls `==`.
+5. Sets and dicts first pick a bucket by hash and only then compare with `==`; equal objects with
+   different hashes land in different buckets and are never compared, so a set would keep both
+   (that was the bug until October 2026). Today `Hand.__hash__` hashes `score.score_tuple`, the
+   same key `__eq__` compares.
 </details>
 
 ---
 
 ## Recap
 
-- `evaluate_hand` validates, sorts three ranks with a three-step sorting network, then checks Sáp,
-  Liêng, Đĩ and Điểm in that order, returning at the first match.
+- `evaluate_hand` validates, sorts three ranks with a three-step sorting network, then reads the
+  score from a 455-entry table (about 0.3 µs). The table is built at import by
+  `_score_for_sorted_ranks`, which checks Sáp, Liêng, Đĩ and Điểm in that order, returning at the
+  first match.
 - The result is a `HandScore` whose `score_tuple` is `(category, primary, secondary, score,
   tie_breaker)`; Python's tuple comparison turns all the rules into one `>`.
 - Straights come from a 12-entry table: A-2-3 is the key `(2, 3, 14)` with strength 1; K-A-2 isn't
   a key, so it is 3 points.
 - Đĩ is `r1 >= 11 and r3 <= 13` after Sáp and Liêng are gone: 6 shapes, Ace excluded.
 - The 22,100 hands produce exactly 455 distinct score tuples; ties need identical ranks.
-- Weak spots: `Hand`'s `__eq__`/`__hash__` contract is broken, `score` is recomputed on every
-  access, one tuple slot is redundant, the tie-break house rules are untested, and evaluation is
-  slower than the spec's 1 µs.
+- `Hand` means "equal strength" for both `==` and `hash`, and caches its score.
+- Fixed: the hash contract, the uncached score, untested house rules, the missed 1 µs budget.
+  Still open: the cache test can't fail, a redundant tuple slot, a duplicated points helper and an
+  uncopied `cards` list.
 
 **Next:** [03 — Canonical hands: 22,100 → 455](03-canonical-hands.md)

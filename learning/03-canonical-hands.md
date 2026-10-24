@@ -2,7 +2,7 @@
 
 > **Goal:** understand why suits can be thrown away, how `hands.py` names each of the 455 rank
 > patterns, how many real hands each name stands for, and why those names are a little
-> inconsistent.
+> inconsistent (and how the duplicated code behind them was cleaned up).
 > **Files:** [`backend/src/hands.py`](../backend/src/hands.py),
 > [`backend/tests/test_hands.py`](../backend/tests/test_hands.py).
 > **Time:** ~60 min. **Before this:** [02 — Hand evaluation](02-hand-evaluation.md).
@@ -39,13 +39,14 @@ keyed by these names, so their exact spelling matters more than you'd expect.
 | # | Location | What to look for |
 |---|----------|------------------|
 | 1 | [hands.py:1-9](../backend/src/hands.py#L1-L9) | The whole idea and the arithmetic, in the module docstring. |
-| 2 | [hands.py:69-101](../backend/src/hands.py#L69-L101) | `get_canonical_id`: sort, two special cases, join. |
-| 3 | [hands.py:104-116](../backend/src/hands.py#L104-L116) | `_compute_multiplicity`: 4, 24 or 64. |
-| 4 | [hands.py:119-141](../backend/src/hands.py#L119-L141) | `get_representative_cards`: from a name back to three cards. |
-| 5 | [hands.py:144-176](../backend/src/hands.py#L144-L176) | `to_canonical`: id + score + ranks + multiplicity. Spot the repeated special case. |
-| 6 | [hands.py:179-202](../backend/src/hands.py#L179-L202) | `generate_all_canonical_hands`: the 455, via `combinations_with_replacement`. |
-| 7 | [hands.py:30-66](../backend/src/hands.py#L30-L66) | `CanonicalHand`: which comparisons exist, and which don't. |
-| 8 | [test_hands.py](../backend/tests/test_hands.py) | Five tests: 455, 22,100, category counts, suit invariance, round trip. |
+| 2 | [hands.py:31-34](../backend/src/hands.py#L31-L34) | `TOTAL_COMBINATIONS` and `OPPONENT_COMBINATIONS`: 22,100 and 18,424, computed once. |
+| 3 | [hands.py:81-118](../backend/src/hands.py#L81-L118) | `_canonical_ranks` and `get_canonical_id`: validate, order, two special cases, join. |
+| 4 | [hands.py:121-133](../backend/src/hands.py#L121-L133) | `_compute_multiplicity`: 4, 24 or 64. |
+| 5 | [hands.py:136-158](../backend/src/hands.py#L136-L158) | `get_representative_cards`: from a name back to three cards. |
+| 6 | [hands.py:161-184](../backend/src/hands.py#L161-L184) | `to_canonical`: id + score + ranks + multiplicity, from one ordering helper. |
+| 7 | [hands.py:187-210](../backend/src/hands.py#L187-L210) | `generate_all_canonical_hands`: the 455, via `combinations_with_replacement`. |
+| 8 | [hands.py:37-78](../backend/src/hands.py#L37-L78) | `CanonicalHand`: `@total_ordering`, strength-based `==` and a matching hash. |
+| 9 | [test_hands.py](../backend/tests/test_hands.py) | Eight tests: 455, 22,100, category counts, suit invariance, round trip, and three safety tests. |
 
 ---
 
@@ -73,25 +74,50 @@ So **13·4 + 156·24 + 286·64 = 52 + 3,744 + 18,304 = 22,100 = C(52, 3)**. Ever
 exactly once. The module docstring ([hands.py:1-9](../backend/src/hands.py#L1-L9)) states the same
 sum, and [test_hands.py:40-50](../backend/tests/test_hands.py#L40-L50) checks it.
 
+The two sizes every later module needs are defined here, once:
+
+📍 [`backend/src/hands.py:31-34`](../backend/src/hands.py#L31-L34)
+```python
+# Size of the state space: every 3-card hand from 52 cards, and the opponent hands left once
+# yours is dealt. Computed rather than typed, so no module carries its own copy of 22100 / 18424.
+TOTAL_COMBINATIONS: Final[int] = math.comb(52, 3)
+OPPONENT_COMBINATIONS: Final[int] = math.comb(52 - 3, 3)
+```
+
+Until October 2026 the numbers 22,100 and 18,424 were typed out in the generator, the range finder
+and the calling-range model (lesson 04, weak spot 2). Now the generator, `calling_range.py`,
+`range_finder.py`, the CLI and the API import them from here, and
+[test_hands.py:127-131](../backend/tests/test_hands.py#L127-L131) checks both against `math.comb`.
+
 ### 2. `get_canonical_id`: a name for a rank pattern
 
-📍 [`backend/src/hands.py:87-101`](../backend/src/hands.py#L87-L101)
+The ordering rule lives in one small helper:
+
+📍 [`backend/src/hands.py:81-92`](../backend/src/hands.py#L81-L92)
+```python
+def _canonical_ranks(cards: Sequence[Card]) -> tuple[Rank, Rank, Rank]:
+    """Return the three ranks in canonical-ID order.
+
+    Ranks are listed in descending order, except the two straights that contain an Ace, which
+    are written the way players say them: A-2-3 (lowest Liêng) and Q-K-A (highest Liêng).
+    """
+    low, mid, high = sorted(c.rank for c in cards)
+    if (low, mid, high) == (Rank.TWO, Rank.THREE, Rank.ACE):
+        return (Rank.ACE, Rank.TWO, Rank.THREE)
+    if (low, mid, high) == (Rank.QUEEN, Rank.KING, Rank.ACE):
+        return (Rank.QUEEN, Rank.KING, Rank.ACE)
+    return (high, mid, low)
+```
+
+and `get_canonical_id` validates, then joins the helper's ranks:
+
+📍 [`backend/src/hands.py:114-118`](../backend/src/hands.py#L114-L118)
 ```python
     if len(cards) != 3:
         raise InvalidHandSizeError(f"Expected 3 cards to determine canonical ID, got {len(cards)}.")
-
-    rank_values = sorted([c.rank.value for c in cards])
-    sorted_triple = (rank_values[0], rank_values[1], rank_values[2])
-
-    # Special handling for sequence ordering in Liêng
-    if sorted_triple == (2, 3, 14):
-        return "A-2-3"
-    if sorted_triple == (12, 13, 14):
-        return "Q-K-A"
-
-    # For all other hands (including 9-8-7, A-A-A, K-K-Q, etc.), sort descending
-    sorted_ranks = sorted([c.rank for c in cards], reverse=True)
-    return f"{sorted_ranks[0].short_name}-{sorted_ranks[1].short_name}-{sorted_ranks[2].short_name}"
+    if len(set(cards)) != 3:
+        raise DuplicateCardError("A Liêng hand cannot contain duplicate cards.")
+    return "-".join(rank.short_name for rank in _canonical_ranks(cards))
 ```
 
 Sorting makes the name independent of suits and of the order the cards were dealt. The rule is
@@ -122,14 +148,15 @@ order: `A-2-3` and `Q-K-A`. A lookup must use the exact stored spelling:
 | `A-2-3` | yes |
 | `3-2-A`, `A-3-2` | no |
 
-You can see the two spellings side by side in one API response. The web page has a preset labelled
-"Liêng J-Q-K" ([App.jsx:353](../frontend/src/App.jsx#L353)); for that hand, `/api/solve` returns
+You can see the two spellings side by side in one API response. The web page has a preset for
+`Js Qh Kd` ([App.jsx:20](../frontend/src/App.jsx#L20)) labelled "Liêng J-Q-K"
+([i18n.js:25](../frontend/src/i18n.js#L25)); for that hand, `/api/solve` returns
 `"score_name": "Liêng J-Q-K"` (from `evaluator.py`'s names) and `"canonical_id": "K-Q-J"` (from
 here).
 
 ### 3. `_compute_multiplicity`: 4, 24 or 64
 
-📍 [`backend/src/hands.py:104-116`](../backend/src/hands.py#L104-L116)
+📍 [`backend/src/hands.py:121-133`](../backend/src/hands.py#L121-L133)
 ```python
 def _compute_multiplicity(ranks: tuple[Rank, Rank, Rank]) -> int:
     """Calculate the number of 3-card combinations mapping to these 3 ranks.
@@ -169,7 +196,7 @@ Per category (real counts from `generate_all_canonical_hands()`):
 
 ### 4. `get_representative_cards`: from a name back to cards
 
-📍 [`backend/src/hands.py:134-141`](../backend/src/hands.py#L134-L141)
+📍 [`backend/src/hands.py:151-158`](../backend/src/hands.py#L151-L158)
 ```python
     tokens = [t for t in re.split(r"[\s,\-]+", canonical_id.strip()) if t]
     if len(tokens) != 3:
@@ -183,7 +210,7 @@ Per category (real counts from `generate_all_canonical_hands()`):
 
 Giving the three cards three *different* suits (♠ ♥ ♦) guarantees a valid hand even for A-A-A. The
 generator uses this to get a concrete hero hand for each class
-([generator.py:48](../backend/src/generator.py#L48)). It is deliberately lenient: it splits like
+([generator.py:57](../backend/src/generator.py#L57)). It is deliberately lenient: it splits like
 `Hand.from_str` and accepts ranks in any order and case, so it works as a **normaliser**:
 
 ```
@@ -198,35 +225,38 @@ turns any spelling into the stored one. Nothing in the code uses it that way yet
 
 ### 5. `to_canonical`: everything about one hand
 
-📍 [`backend/src/hands.py:156-169`](../backend/src/hands.py#L156-L169)
+📍 [`backend/src/hands.py:170-184`](../backend/src/hands.py#L170-L184)
 ```python
+    if len(cards) != 3:
+        raise InvalidHandSizeError(f"Expected 3 cards, got {len(cards)}.")
+
     cid = get_canonical_id(cards)
     score = evaluate_hand(cards)
-
-    # Determine canonical rank tuple with sequence handling if applicable
-    rank_values = sorted([c.rank.value for c in cards])
-    if (rank_values[0], rank_values[1], rank_values[2]) == (2, 3, 14):
-        ranks_tuple = (Rank.ACE, Rank.TWO, Rank.THREE)
-    elif (rank_values[0], rank_values[1], rank_values[2]) == (12, 13, 14):
-        ranks_tuple = (Rank.QUEEN, Rank.KING, Rank.ACE)
-    else:
-        desc = sorted([c.rank for c in cards], reverse=True)
-        ranks_tuple = (desc[0], desc[1], desc[2])
+    ranks_tuple = _canonical_ranks(cards)
 
     mult = _compute_multiplicity((cards[0].rank, cards[1].rank, cards[2].rank))
+    return CanonicalHand(
+        canonical_id=cid,
+        ranks=ranks_tuple,
+        multiplicity=mult,
+        category=score.category,
+        score=score,
+    )
 ```
 
 It bundles the id, the full `HandScore` (lesson 02), the ranks in the same order as the id, and the
-multiplicity into one frozen `CanonicalHand`. Lines 160-164 repeat the A-2-3/Q-K-A decision from
-lines 94-97, so the "ranks" tuple matches the "id" string: `A-2-3` has ranks
-`(ACE, TWO, THREE)`, while `K-Q-J` has `(KING, QUEEN, JACK)`. The API and CLI call this on the
-player's hand ([app.py:175](../backend/app.py#L175), [cli.py:132](../backend/src/cli.py#L132)),
-right after `db.get_by_cards` has already computed the same id once
-([app.py:174](../backend/app.py#L174)).
+multiplicity into one frozen `CanonicalHand`. Both the id and the `ranks` tuple come from
+`_canonical_ranks`, so they can't disagree: `A-2-3` has ranks `(ACE, TWO, THREE)`, while `K-Q-J`
+has `(KING, QUEEN, JACK)`. Until October 2026 the A-2-3/Q-K-A decision was written out twice, once
+in each function (weak spot 2). The API and CLI call this on the player's hand
+([app.py:293](../backend/app.py#L293), [cli.py:162](../backend/src/cli.py#L162)), and the API then
+looks the stats up by the id it returns ([app.py:294](../backend/app.py#L294)), so the id is
+computed once per request. (Before the API refactor it was computed twice: once by
+`db.get_by_cards`, once here.)
 
 ### 6. `generate_all_canonical_hands`: the 455
 
-📍 [`backend/src/hands.py:188-202`](../backend/src/hands.py#L188-L202)
+📍 [`backend/src/hands.py:196-210`](../backend/src/hands.py#L196-L210)
 ```python
     canonical_hands: list[CanonicalHand] = []
     all_ranks = list(Rank)
@@ -246,43 +276,61 @@ right after `db.get_by_cards` has already computed the same id once
 ```
 
 `itertools.combinations_with_replacement(ranks, 3)` yields each multiset exactly once, as an
-ascending triple: `(2, 2, 2)`, `(2, 2, 3)`, …, `(A, A, A)`. It took 4.74 ms to build all 455. The
+ascending triple: `(2, 2, 2)`, `(2, 2, 3)`, …, `(A, A, A)`. It took 2.88 ms to build all 455. The
 list comes out in that **multiset order**, not strength order: it starts
 `2-2-2, 3-2-2, 4-2-2, 5-2-2, 6-2-2, 7-2-2` and ends `A-A-Q, K-K-K, A-K-K, A-A-K, A-A-A`. Note that
 5-2-2 (9 points) is followed by 6-2-2 (0 points). That is also the key order of `winrates.json`.
 Modules that need strength order sort by `score_tuple` themselves (lesson 06).
 
 The generator, the calling-range model and the range finder all call this function at start-up
-([generator.py:124](../backend/src/generator.py#L124),
-[calling_range.py:54](../backend/src/calling_range.py#L54),
-[range_finder.py:47](../backend/src/range_finder.py#L47)).
+([generator.py:133](../backend/src/generator.py#L133),
+[calling_range.py:61](../backend/src/calling_range.py#L61),
+[range_finder.py:51](../backend/src/range_finder.py#L51)).
 
 ### 7. `CanonicalHand` and its comparisons
 
-`CanonicalHand` ([hands.py:30-45](../backend/src/hands.py#L30-L45)) is a frozen dataclass with five
-fields. It defines `__lt__`, `__gt__` and `__eq__`, all comparing `score`
-([hands.py:47-60](../backend/src/hands.py#L47-L60)), and a short `__repr__` such as
-`CanonicalHand('A-2-3', cat=LIENG, mult=64)`. So `max(hands)` is A-A-A and `min(hands)` is 4-3-3.
-But `<=` and `>=` were never written:
+`CanonicalHand` ([hands.py:37-53](../backend/src/hands.py#L37-L53)) is a frozen dataclass with five
+fields, decorated with `@total_ordering`. It defines `__lt__`, `__gt__` and `__eq__`, all comparing
+`score`, a `__hash__` that agrees with them ([hands.py:55-72](../backend/src/hands.py#L55-L72)), and a
+short `__repr__` such as `CanonicalHand('A-2-3', cat=LIENG, mult=64)`. So `max(hands)` is A-A-A and
+`min(hands)` is 4-3-3, and `<=`/`>=` work too:
 
-```
-TypeError: '<=' not supported between instances of 'CanonicalHand' and 'CanonicalHand'
+📍 [`backend/src/hands.py:65-72`](../backend/src/hands.py#L65-L72)
+```python
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, CanonicalHand):
+            return NotImplemented
+        return self.score == other.score
+
+    def __hash__(self) -> int:
+        # Must agree with __eq__, which compares strength.
+        return hash(self.score)
 ```
 
-`__eq__` follows the same pattern as `Hand` in lesson 02 (strength, while the generated hash uses
-all fields). Here it is harmless: each class has a unique score, so equal score means the same
-class and identical fields. The safety rests on that hidden fact.
+`@total_ordering` (concept box below) supplies the missing `__le__` and `__ge__` from `__lt__` and
+`__eq__`. Until October 2026 it wasn't there, and
+`hands["Q-K-A"] <= hands["A-A-A"]` raised
+`TypeError: '<=' not supported between instances of 'CanonicalHand' and 'CanonicalHand'`.
+
+`__eq__` follows the same rule as `Hand` in lesson 02: equal means equally strong, and the hash is
+built from the same thing (`hash(self.score)`, which is `HandScore`'s hash of its `score_tuple`).
+Since each of the 455 classes has a unique score, "equally strong" and "the same class" coincide
+here, and the calling-range model checks that fact at start-up (lesson 06).
 
 ### 8. What the tests pin
 
-[test_hands.py](../backend/tests/test_hands.py) has five tests: exactly 455 unique ids
-([:31](../backend/tests/test_hands.py#L31)); multiplicities summing to 22,100 with counts 13/156/286
-([:40](../backend/tests/test_hands.py#L40)); category counts 13/12/6/424 and the six Đĩ shapes
-([:52](../backend/tests/test_hands.py#L52)); suit invariance, including the spellings `9-8-7`,
-`Q-K-A` and `A-2-3` ([:80](../backend/tests/test_hands.py#L80)); and the round trip
-id → representative cards → id for all 455 ([:102](../backend/tests/test_hands.py#L102)). Elsewhere,
-[test_calling_range.py:35](../backend/tests/test_calling_range.py#L35) pins that `"3-K-Q"` is *not*
-a valid id. No test checks the duplicate-card case or the missing comparisons.
+[test_hands.py](../backend/tests/test_hands.py) has eight tests. Five check the combinatorics:
+exactly 455 unique ids ([:31](../backend/tests/test_hands.py#L31)); multiplicities summing to
+22,100 with counts 13/156/286 ([:40](../backend/tests/test_hands.py#L40)); category counts
+13/12/6/424 and the six Đĩ shapes ([:52](../backend/tests/test_hands.py#L52)); suit invariance,
+including the spellings `9-8-7`, `Q-K-A` and `A-2-3` ([:80](../backend/tests/test_hands.py#L80));
+and the round trip id → representative cards → id for all 455
+([:102](../backend/tests/test_hands.py#L102)). Three in `TestCanonicalHandSafety` pin the fixes:
+duplicates are rejected ([:115](../backend/tests/test_hands.py#L115)), all four comparisons work
+([:121](../backend/tests/test_hands.py#L121)), and the two constants equal `math.comb`
+([:127](../backend/tests/test_hands.py#L127)). Elsewhere,
+[test_calling_range.py:37](../backend/tests/test_calling_range.py#L37) pins that `"3-K-Q"` is *not*
+a valid id.
 
 ---
 
@@ -299,8 +347,10 @@ C(13 + 3 − 1, 3) = 455. `math.comb(15, 3)` confirms it.
 
 Python doesn't derive `<=` from `<` and `==` on its own. Decorate a class that defines `__eq__` and
 one of `__lt__`, `__le__`, `__gt__`, `__ge__` with `@functools.total_ordering` and it fills in the
-other three. `CanonicalHand` defines `__lt__`, `__gt__` and `__eq__` but not `__le__`/`__ge__`, so
-`a <= b` fails. Adding the decorator above `@dataclass` fixes it (exercise 5).
+other three. `CanonicalHand` defines `__lt__`, `__gt__` and `__eq__` itself, and the decorator,
+placed above `@dataclass`, adds `__le__` and `__ge__` (exercise 5 removes it). It only fills in
+methods the class doesn't already define, and the derived ones are a little slower than hand-written
+ones, which doesn't matter for 455 objects.
 
 ---
 
@@ -323,34 +373,43 @@ other three. `CanonicalHand` defines `__lt__`, `__gt__` and `__eq__` but not `__
 
 ## ⚠️ Weak spots
 
+Six weak spots were listed here when the course was written. Commit `bba5e63` ("fix(core)", October
+2026) fixed four; the id format itself and a little repeated work remain.
+
 1. **An inconsistent id format.** Descending everywhere except `A-2-3` and `Q-K-A`
-   ([hands.py:94-97](../backend/src/hands.py#L94-L97)). `J-Q-K` and `A-K-Q` are not keys, while the
+   ([hands.py:88-91](../backend/src/hands.py#L88-L91)). `J-Q-K` and `A-K-Q` are not keys, while the
    same hands are *named* "Liêng J-Q-K" and "Liêng Q-K-A" by the evaluator. Anyone calling
-   `db.get("J-Q-K")` gets a `KeyError` (lesson 01, weak spot 2). Changing the format is not a local
-   fix: removing the special case fails 29 tests with the committed data, and still 6 after
-   regenerating `winrates.json`, because tests spell `"Q-K-A"` and `"A-2-3"` out (exercise 7).
-   *Fix:* keep the stored format and normalise lookups instead, with
+   `db.get("J-Q-K")` gets an `UnknownHandError` (lesson 01). Changing the format is not a local
+   fix, and the database validation added in October 2026 makes that louder: removing the special
+   case makes the committed `winrates.json` fail to load ("2 missing (e.g. ['A-3-2', 'A-K-Q']), 2
+   unknown"), and after regenerating it 10 tests still fail, because tests spell `"Q-K-A"` and
+   `"A-2-3"` out (exercise 7). *Fix:* keep the stored format and normalise lookups instead, with
    `get_canonical_id(get_representative_cards(text))`.
-2. **The special case is written twice.** [hands.py:94-97](../backend/src/hands.py#L94-L97) for the id
-   and [:161-164](../backend/src/hands.py#L161-L164) for the rank tuple. If one changes alone, a
-   class's `id` and `ranks` disagree. *Fix:* one helper that returns the ordered ranks, used by both
-   (the id is just those ranks joined).
-3. **No duplicate check in `get_canonical_id`.** It checks only the count
-   ([hands.py:87-88](../backend/src/hands.py#L87-L88)). `[As, As, Kd]` gets the id `A-A-K`, and
-   `db.get_by_cards([As, As, Kd])` quietly returns A-A-K's stats (equity 0.2806). `to_canonical` does
-   reject it, but only because it calls `evaluate_hand`. Today every caller passes a validated
-   `Hand`, so the hole is latent. *Fix:* `len(set(cards)) != 3` → `InvalidHandSizeError`
-   (exercise 4).
-4. **`CanonicalHand` has no `<=` or `>=`.** [hands.py:47-60](../backend/src/hands.py#L47-L60) defines
-   only `<`, `>` and `==`. *Fix:* `functools.total_ordering` (exercise 5). Its strength-based
-   `__eq__` is safe only because the 455 scores are distinct.
-5. **Unused imports.** `Final` ([hands.py:16](../backend/src/hands.py#L16)), `Hand`
-   ([:20](../backend/src/hands.py#L20)) and `InvalidCardError` ([:27](../backend/src/hands.py#L27))
-   are imported and never used. A linter (lesson 17 suggests ruff) would flag them.
-6. **Repeated work per request.** `to_canonical` sorts the same three ranks four times (in
-   `get_canonical_id`, `evaluate_hand`, and twice in its own body), and the API computes the id
-   twice ([app.py:174-175](../backend/app.py#L174-L175)). It costs microseconds, but it is the kind
-   of duplication that lets weak spot 2 happen.
+2. ✅ **Fixed: the special case was written twice.** `get_canonical_id` built the id string and
+   `to_canonical` rebuilt the rank tuple, each with its own A-2-3/Q-K-A test, so a change to one
+   alone would have made a class's `id` and `ranks` disagree. Now both use `_canonical_ranks`
+   ([hands.py:81-92](../backend/src/hands.py#L81-L92); used at [:118](../backend/src/hands.py#L118)
+   and [:175](../backend/src/hands.py#L175)). The suit-invariance and round-trip tests
+   ([test_hands.py:80](../backend/tests/test_hands.py#L80),
+   [:102](../backend/tests/test_hands.py#L102)) pin that the ids didn't change.
+3. ✅ **Fixed: no duplicate check in `get_canonical_id`.** It checked only the count, so
+   `db.get_by_cards([As, As, Kd])` quietly returned A-A-K's stats (equity 0.2806). Now it raises
+   `DuplicateCardError` ([hands.py:116-117](../backend/src/hands.py#L116-L117)), pinned by
+   `test_duplicate_cards_are_rejected` ([test_hands.py:115-119](../backend/tests/test_hands.py#L115-L119)).
+   Exercise 4 reopens the hole.
+4. ✅ **Fixed: `CanonicalHand` had no `<=` or `>=`.** Now it is decorated with `@total_ordering`
+   ([hands.py:37](../backend/src/hands.py#L37)) and has an explicit `__hash__` that agrees with its
+   strength-based `__eq__` ([hands.py:70-72](../backend/src/hands.py#L70-L72)). Pinned by
+   `test_canonical_hands_support_all_comparisons`
+   ([test_hands.py:121-125](../backend/tests/test_hands.py#L121-L125)).
+5. ✅ **Fixed: unused imports.** `Final`, `Hand` and `InvalidCardError` were imported and never used.
+   `ruff` now runs with the `F` (pyflakes) rules in CI ([pyproject.toml](../backend/pyproject.toml)),
+   which reports any unused import as `F401`; `Final` is now used by the two constants.
+6. **A little repeated work per request.** `to_canonical` checks the count twice (itself and in
+   `get_canonical_id`) and sorts the same three ranks three times: twice through `_canonical_ranks`
+   (once via `get_canonical_id`) and once in `evaluate_hand`'s sorting network. It costs about
+   1.5 µs per call (4.9 µs against 3.5 µs when the id is joined from the rank tuple it already has,
+   exercise 6), so it is tidiness, not speed.
 
 ---
 
@@ -365,8 +424,8 @@ python -m pytest tests/test_hands.py -q
 Expected output (the timing varies):
 
 ```
-.....                                                                    [100%]
-5 passed in 0.04s
+........                                                                 [100%]
+8 passed in 0.04s
 ```
 
 Check the arithmetic by brute force: group all 22,100 hands by id and compare with the
@@ -394,7 +453,7 @@ Counter({64: 286, 24: 156, 4: 13})
 455 True
 ```
 
-See the inconsistent format and the missing duplicate check:
+See the inconsistent format, and the duplicate check that now stops a bad lookup:
 
 ```bash
 python -c '
@@ -405,7 +464,10 @@ db = WinRateDB("data/winrates.json")
 print(get_canonical_id(Hand.from_str("Js Qh Kd").cards), get_canonical_id(Hand.from_str("Qs Kh Ad").cards))
 print([(k, k in db) for k in ("K-Q-J", "J-Q-K", "Q-K-A", "A-K-Q")])
 dup = [Card.from_str("As"), Card.from_str("As"), Card.from_str("Kd")]
-print(get_canonical_id(dup), db.get_by_cards(dup).equity)
+try:
+    db.get_by_cards(dup)
+except Exception as err:
+    print(type(err).__name__, err)
 '
 ```
 
@@ -414,8 +476,11 @@ Expected output:
 ```
 K-Q-J Q-K-A
 [('K-Q-J', True), ('J-Q-K', False), ('Q-K-A', True), ('A-K-Q', False)]
-A-A-K 0.2806
+DuplicateCardError A Liêng hand cannot contain duplicate cards.
 ```
+
+Before the October 2026 fixes the last line was `A-A-K 0.2806`: the duplicate hand got A-A-K's
+equity.
 
 ---
 
@@ -446,76 +511,87 @@ of ranks. Check with `[h.multiplicity for h in generate_all_canonical_hands() if
 == "9-7-7"]`.
 </details>
 
-**🟢 3. Predict the leak.** Why does `db.get_by_cards([As, As, Kd])` return a result instead of
-raising, and why doesn't the API ever hit this?
+**🟢 3. Predict the error.** What does `db.get_by_cards([As, As, Kd])` do now, which line raises,
+and what would the API answer if such a hand ever reached it?
 
 <details><summary>Solution</summary>
 
-`get_by_cards` is `get_canonical_id` plus a dict lookup ([db.py:136-137](../backend/src/db.py#L136-L137)),
-and `get_canonical_id` only checks the count. It returns A-A-K's stats (equity 0.2806). The API and
-CLI always build a `Hand` first, whose `__post_init__` rejects duplicates (lesson 02).
+It raises `DuplicateCardError: A Liêng hand cannot contain duplicate cards.` from
+`get_canonical_id` ([hands.py:116-117](../backend/src/hands.py#L116-L117)), which `get_by_cards`
+calls before the dict lookup ([db.py:147-148](../backend/src/db.py#L147-L148)). `DuplicateCardError`
+is an `InvalidHandSizeError`, so the API's handler would answer 400 with `"code": "invalid_hand"`
+(lesson 01). In practice the API and CLI build a `Hand` first, whose `__post_init__` already rejects
+duplicates (lesson 02); the check in `hands.py` protects every other caller.
 </details>
 
-**🟡 4. Close the duplicate hole.** In `get_canonical_id`, after the length check, raise
-`InvalidHandSizeError("A Liêng hand cannot contain duplicate cards.")` when
-`len(set(cards)) != 3`. Run `python -m pytest -q` and the probe from 🧪 Try it.
+**🟡 4. Reopen the duplicate hole.** Delete the duplicate check
+([hands.py:116-117](../backend/src/hands.py#L116-L117)). Predict which test fails and what the probe
+from 🧪 Try it prints, then run both and `python -m pytest -q`.
 
 <details><summary>Solution</summary>
 
-93 tests pass, and the probe now stops with
-`InvalidHandSizeError: A Liêng hand cannot contain duplicate cards.` Add a test with `pytest.raises`
-so it stays fixed. Undo with `git checkout -- backend/src/hands.py`.
+`1 failed, 158 passed`: only `test_duplicate_cards_are_rejected`
+([test_hands.py:115-119](../backend/tests/test_hands.py#L115-L119)). The probe's last line goes back
+to `0.2806` (it prints the equity without raising), A-A-K's stats for an impossible hand. The other
+158 tests pass because every other path builds a `Hand` first: the hole is latent, which is exactly
+why it needs its own test. Undo with `git checkout -- backend/src/hands.py`.
 </details>
 
-**🟡 5. Complete the ordering.** Add `import functools` and decorate `CanonicalHand` with
-`@functools.total_ordering` (above `@dataclass(frozen=True)`). Check that
-`hands["Q-K-A"] <= hands["A-A-A"]` works, where `hands` maps ids to classes, and that the tests
-pass. While you're in the file, remove the three unused imports.
+**🟡 5. Remove `@total_ordering`.** Delete the decorator ([hands.py:37](../backend/src/hands.py#L37)).
+Predict which comparisons still work on two `CanonicalHand`s and which test fails, then run
+`python -m pytest -q`.
 
 <details><summary>Solution</summary>
 
-`hands = {h.canonical_id: h for h in generate_all_canonical_hands()}`; `hands["Q-K-A"] <=
-hands["A-A-A"]` and `hands["A-A-A"] >= hands["Q-K-A"]` both print `True`. 93 tests pass. Undo with
+`<`, `>`, `==`, `min()`, `max()` and `sorted()` still work: they only need the methods the class
+writes itself. `<=` and `>=` raise
+`TypeError: '<=' not supported between instances of 'CanonicalHand' and 'CanonicalHand'`.
+`1 failed, 158 passed`: `test_canonical_hands_support_all_comparisons`
+([test_hands.py:121-125](../backend/tests/test_hands.py#L121-L125)). Undo with
 `git checkout -- backend/src/hands.py`.
 </details>
 
-**🟡 6. One place for the special case.** Write `_ordered_ranks(cards) -> tuple[Rank, Rank, Rank]`
-that returns `(ACE, TWO, THREE)`, `(QUEEN, KING, ACE)` or the descending ranks, and use it in both
-`get_canonical_id` (join the `short_name`s) and `to_canonical`. Check with `python -m pytest -q`:
-all ids must stay exactly the same.
+**🟡 6. Sort once less (weak spot 6).** In `to_canonical`, replace `cid = get_canonical_id(cards)`
+with an id joined from `ranks_tuple`, so the ranks are ordered only once. Which check does
+`get_canonical_id` do that you must not lose? Time it before and after with
+`python -m timeit -s "from src.hands import to_canonical; from src.evaluator import Hand; c = Hand.from_str('Js Qh Kd').cards" "to_canonical(c)"`,
+then run `python -m pytest -q`.
 
 <details><summary>Solution sketch</summary>
 
 ```python
-def _ordered_ranks(cards: Sequence[Card]) -> tuple[Rank, Rank, Rank]:
-    low, mid, high = sorted(c.rank for c in cards)
-    if (low, mid, high) == (Rank.TWO, Rank.THREE, Rank.ACE):
-        return (Rank.ACE, Rank.TWO, Rank.THREE)
-    if (low, mid, high) == (Rank.QUEEN, Rank.KING, Rank.ACE):
-        return (Rank.QUEEN, Rank.KING, Rank.ACE)
-    return (high, mid, low)
+    score = evaluate_hand(cards)  # also rejects duplicate cards
+    ranks_tuple = _canonical_ranks(cards)
+    cid = "-".join(rank.short_name for rank in ranks_tuple)
 ```
 
-`get_canonical_id` becomes `"-".join(r.short_name for r in _ordered_ranks(cards))` after the
-checks. `test_suit_invariance` and `test_representative_cards_validity` prove the ids didn't
-change; the 93 tests pass. Undo with `git checkout -- backend/src/hands.py`.
+`get_canonical_id` rejects duplicates; `evaluate_hand` does too (`DuplicateCardError`, lesson 02), so
+calling it first keeps `to_canonical([As, As, Kd])` an error. About 4.9 µs before, 3.5 µs after;
+`159 passed`, and the suit-invariance and round-trip tests prove the ids didn't change. The cost is
+that `to_canonical` now repeats the join instead of calling the one function that defines an id;
+a helper `_join(ranks)` used by both would remove that too. Undo with
+`git checkout -- backend/src/hands.py`.
 </details>
 
-**🔴 7. Measure the cost of one id format.** First, delete the special case at
-[hands.py:93-97](../backend/src/hands.py#L93-L97) and run `python -m pytest -q`. Then regenerate the
-data *into the repo copy you're experimenting on* (`python -m src.generator`) and run the tests
-again. Finally, undo everything and implement the cheaper alternative: a
+**🔴 7. Measure the cost of one id format.** Work on a **copy** of `backend/` (the generator writes
+next to `src/`, so a copy keeps your real data safe):
+`cp -r backend /tmp/lieng-copy && cd /tmp/lieng-copy`, then activate the same virtual environment.
+First, delete the two special cases at [hands.py:88-91](../backend/src/hands.py#L88-L91) and run
+`python -m pytest -q`. Then regenerate the data with `python -m src.generator --workers 1` (about
+10 s) and run the tests again. Finally, back in the real repo, implement the cheaper alternative: a
 `normalise_canonical_id(text)` in `hands.py` that `WinRateDB.get` tries when a key is missing.
 
 <details><summary>Solution</summary>
 
-Without the special case: `29 failed, 64 passed`, mostly `KeyError: 'A-2-3'` because
-`winrates.json` still uses the old keys. After regenerating: `6 failed, 87 passed`, the tests that
-spell `"Q-K-A"` or `"A-2-3"` out (in `test_api.py`, `test_db.py`, `test_generator.py` and
-`test_hands.py`). An id format is a public contract: it is in the data file, the API and the
-tests.
+Without the special case, pytest stops at collection (`Interrupted: 2 errors during collection`):
+`WinRateDB` now validates the file and refuses it, `'data/winrates.json' must contain exactly the
+455 canonical hands: 2 missing (e.g. ['A-3-2', 'A-K-Q']), 2 unknown (e.g. ['A-2-3', 'Q-K-A'])`.
+(With `--continue-on-collection-errors`: `15 failed, 86 passed, 14 errors`.) After regenerating:
+`10 failed, 149 passed`, the tests that spell `"Q-K-A"` or `"A-2-3"` out (in `test_api.py`,
+`test_db.py`, `test_generator.py` and `test_hands.py`). An id format is a public contract: it is in
+the data file, the API and the tests.
 
-The alternative keeps all 93 tests green:
+The alternative:
 
 ```python
 def normalise_canonical_id(text: str) -> str:
@@ -527,8 +603,12 @@ def normalise_canonical_id(text: str) -> str:
 ```
 
 With `db.get` retrying through it, `db.get("J-Q-K")` returns 0.995, `"A-K-Q"` and `"q k a"` return
-0.9969, `"3-2-A"` returns 0.962, and `"INVALID_KEY"` still raises `KeyError`. Undo with
-`git checkout -- backend/src/hands.py backend/src/db.py backend/data/winrates.json`.
+0.9969, `"3-2-A"` returns 0.962, and `"INVALID_KEY"` still raises `UnknownHandError`. One test fails,
+`1 failed, 158 passed`: `test_unknown_id_is_a_project_error_and_a_key_error`
+([test_db.py:146-151](../backend/tests/test_db.py#L146-L151)) uses `"J-Q-K"` as its example of an
+unknown id, which is now found. That is a decision, not a bug: change its example to a truly invalid
+id such as `"Z-Z-Z"`. Undo with `git checkout -- backend/src/hands.py backend/src/db.py`, and
+delete the copy.
 </details>
 
 ---
@@ -551,7 +631,8 @@ With `db.get` retrying through it, `db.get("J-Q-K")` returns 0.995, `"A-K-Q"` an
    each, 4³ = 64.
 3. Classes stand for different numbers of real hands (4 to 64). Coverage is a share of the 22,100
    hands, so each class must be weighted by its multiplicity.
-4. `A-2-3` and `Q-K-A`. `J-Q-K` is stored as `K-Q-J`, so `db.get("J-Q-K")` raises `KeyError`.
+4. `A-2-3` and `Q-K-A`. `J-Q-K` is stored as `K-Q-J`, so `db.get("J-Q-K")` raises
+   `UnknownHandError` (which is also a `KeyError`).
 5. In multiset order from `combinations_with_replacement` (`2-2-2`, `3-2-2`, … `A-A-A`), which is
    not strength order (5-2-2 with 9 points is followed by 6-2-2 with 0). The calling-range model
    needs strongest-first, so it sorts by `score_tuple` itself.
@@ -571,7 +652,10 @@ With `db.get` retrying through it, `db.get("J-Q-K")` returns 0.995, `"A-K-Q"` an
   normaliser for other spellings.
 - `generate_all_canonical_hands` returns the 455 in multiset order, which is also the key order of
   `winrates.json`.
-- Weak spots: the inconsistent id format (a public contract now), the special case written twice,
-  no duplicate check, missing `<=`/`>=`, and three unused imports.
+- `TOTAL_COMBINATIONS` (22,100) and `OPPONENT_COMBINATIONS` (18,424) are computed here, once, and
+  imported everywhere else.
+- Fixed: one ordering helper instead of two copies of the special case, a duplicate check,
+  `@total_ordering`, no unused imports. Still open: the inconsistent id format (a public contract
+  now) and a little repeated sorting in `to_canonical`.
 
 **Next:** [04 — The generator and `winrates.json`](04-generator.md)

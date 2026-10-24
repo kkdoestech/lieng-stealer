@@ -1,10 +1,11 @@
 # Lesson 15 — Tests and performance
 
-> **Goal:** know what the 93 backend tests and 6 frontend tests check, how their fixtures and
-> imports work, which performance budgets from AGENTS.md §6 the code meets, and where the gaps are
-> so you can add the next test yourself.
-> **Files:** [`backend/tests/`](../backend/tests), [`frontend/src/format.test.js`](../frontend/src/format.test.js),
-> [`frontend/src/i18n.test.js`](../frontend/src/i18n.test.js), [`AGENTS.md`](../AGENTS.md#L123-L128).
+> **Goal:** know what the 159 backend tests and 18 frontend tests check, how their fixtures and
+> imports work, what ruff, mypy and CI add, which performance budgets from AGENTS.md §6 the code
+> meets, and where the gaps are so you can add the next test yourself.
+> **Files:** [`backend/tests/`](../backend/tests), [`backend/pyproject.toml`](../backend/pyproject.toml),
+> [`frontend/src/*.test.js(x)`](../frontend/src/App.test.jsx), [`.github/workflows/ci.yml`](../.github/workflows/ci.yml),
+> [`AGENTS.md`](../AGENTS.md#L124-L130).
 > **Time:** ~60 min. **Before this:** [14 — Styling and DESIGN.md](14-styling.md) (the backend half only needs [11](11-request-trace.md))
 > (lessons 12–14 help with the frontend tests).
 
@@ -13,14 +14,16 @@
 ## Where this fits
 
 ```
-                       python -m pytest (backend/)              npm test (frontend/)
+                       python -m pytest (backend/)              npm test (frontend/, Vitest)
                                 │                                        │
- unit tests ─────────── test_evaluator, test_hands, test_generator,  format.test.js
- (one module each)      test_db, test_calling_range, test_ev,        i18n.test.js
-                        test_range_finder
- front-door tests ───── test_cli (main(argv)), test_api (test client)
+ unit tests ─────────── test_evaluator, test_exceptions, test_hands,  format.test.js
+ (one module each)      test_generator, test_db, test_calling_range,  i18n.test.js
+                        test_ev, test_range_finder
+ front-door tests ───── test_cli (main(argv)), test_api (create_app)  App.test.jsx (fetch mocked)
  story tests ────────── test_dynamic_scenarios (6 player stories, both models)
- timing tests ───────── test_db.py:45, test_calling_range.py:74   ← AGENTS.md §6
+ timing tests ───────── test_evaluator.py:298, test_db.py:50, test_calling_range.py:76  ← AGENTS.md §6
+ static checks ──────── ruff check . · mypy (strict)                  npm run lint (oxlint)
+                                └──────────── .github/workflows/ci.yml runs all of it ───┘
 ```
 
 Each earlier lesson ran its module's tests. This lesson looks at the suite as a whole: how it is
@@ -32,14 +35,14 @@ organised, what keeps it fast and offline, what it measures, and what it does no
 
 | # | Location | What to look for |
 |---|----------|------------------|
-| 1 | [tests/__init__.py](../backend/tests/__init__.py) | One docstring line that decides how imports work. |
-| 2 | [test_api.py:7-11](../backend/tests/test_api.py#L7-L11) | A function-scoped fixture around Flask's test client. |
-| 3 | [test_dynamic_scenarios.py:28-41](../backend/tests/test_dynamic_scenarios.py#L28-L41) | Module-scoped fixtures and an absolute data path. |
-| 4 | [test_cli.py:35-38](../backend/tests/test_cli.py#L35-L38) and [test_api.py:72-74](../backend/tests/test_api.py#L72-L74) | `monkeypatch`: a fake keyboard and a removed API key. |
-| 5 | [test_db.py:45-57](../backend/tests/test_db.py#L45-L57), [test_calling_range.py:74-78](../backend/tests/test_calling_range.py#L74-L78) | The two timing tests. |
-| 6 | [AGENTS.md:123-128](../AGENTS.md#L123-L128) | The five performance budgets. |
-| 7 | [test_generator.py:67-72](../backend/tests/test_generator.py#L67-L72) | A loop that silently skips a key. |
-| 8 | [format.test.js](../frontend/src/format.test.js), [i18n.test.js](../frontend/src/i18n.test.js) | `node --test`, no framework. |
+| 1 | [tests/__init__.py](../backend/tests/__init__.py) and [pyproject.toml:21-22](../backend/pyproject.toml#L21-L22) | One docstring line that decides how imports work, and the only pytest setting. |
+| 2 | [test_api.py:18-33](../backend/tests/test_api.py#L18-L33) | Module-scoped services, an app built by `create_app`, a function-scoped client. |
+| 3 | [test_dynamic_scenarios.py:29-41](../backend/tests/test_dynamic_scenarios.py#L29-L41) | Module-scoped fixtures and an absolute data path. |
+| 4 | [test_cli.py:39-42](../backend/tests/test_cli.py#L39-L42) and [test_api.py:324-335](../backend/tests/test_api.py#L324-L335) | `monkeypatch`: a fake keyboard and a fake OpenRouter. |
+| 5 | [tests/perf.py](../backend/tests/perf.py), [test_evaluator.py:298-302](../backend/tests/test_evaluator.py#L298-L302), [test_db.py:50-62](../backend/tests/test_db.py#L50-L62), [test_calling_range.py:76-80](../backend/tests/test_calling_range.py#L76-L80) | The three timing tests and the factor that scales them. |
+| 6 | [AGENTS.md:124-130](../AGENTS.md#L124-L130) | The five performance budgets, with measurements. |
+| 7 | [pyproject.toml:1-19](../backend/pyproject.toml#L1-L19) and [ci.yml](../.github/workflows/ci.yml) | ruff, strict mypy, and the three CI jobs. |
+| 8 | [App.test.jsx](../frontend/src/App.test.jsx), [format.test.js](../frontend/src/format.test.js), [i18n.test.js](../frontend/src/i18n.test.js) | Vitest, jsdom and a fake `fetch`. |
 
 ---
 
@@ -47,32 +50,35 @@ organised, what keeps it fast and offline, what it measures, and what it does no
 
 ### 1. The test map
 
-Counted with `python -m pytest --collect-only -q`. Two tests are parametrised with two cases
-each ([test_api.py:176](../backend/tests/test_api.py#L176), [test_cli.py:27](../backend/tests/test_cli.py#L27)),
-so 91 test functions make 93 tests.
+Counted with `python -m pytest --collect-only -q`. Five test functions are parametrised (three in
+`test_api.py`, for example [test_api.py:216-220](../backend/tests/test_api.py#L216-L220), one in
+[test_cli.py:31](../backend/tests/test_cli.py#L31) and one in
+[test_exceptions.py:22](../backend/tests/test_exceptions.py#L22)), so 143 test functions make 159 tests.
 
 | File | Tests | Fixtures (scope) | What it pins | Lesson |
 |------|------:|------------------|--------------|--------|
-| [test_evaluator.py](../backend/tests/test_evaluator.py) | 18 | none | card parsing, category order, A-2-3 / Q-K-A / K-A-2, Đĩ rules, points mod 10 | 01, 02 |
-| [test_hands.py](../backend/tests/test_hands.py) | 5 | none | 455 classes, multiplicities summing to 22,100, suit invariance | 03 |
-| [test_generator.py](../backend/tests/test_generator.py) | 7 | `canonical_map` (module) | exact equities, rate invariants, Monte Carlo within 1.5%, JSON schema | 04 |
-| [test_db.py](../backend/tests/test_db.py) | 6 | `loaded_db` (function) | loading, **lookup latency**, errors before load and for a missing file | 05 |
-| [test_calling_range.py](../backend/tests/test_calling_range.py) | 9 | `model`, `db` (module) | rows ending at 18,424, f = 0 equals `winrates.json`, monotonicity, **table latency** | 06 |
-| [test_ev.py](../backend/tests/test_ev.py) | 13 | none | EV boundaries, bluff arithmetic, break-even, profit zones | 07 |
-| [test_range_finder.py](../backend/tests/test_range_finder.py) | 6 | `loaded_finder`, `finder_with_model` (module) | 455 sorted records, coverage, 387 vs 250 classes, tie order | 08 |
-| [test_cli.py](../backend/tests/test_cli.py) | 6 | `capsys`, `monkeypatch` (built-in) | decisions per model, exit code 2, interactive mode | 09 |
-| [test_api.py](../backend/tests/test_api.py) | 17 | `client` (function), `monkeypatch` | every route, both models, 400s, offline analysis | 10 |
+| [test_evaluator.py](../backend/tests/test_evaluator.py) | 27 | none | card parsing, category order, A-2-3 / Q-K-A / K-A-2, Đĩ rules, points mod 10, tie-break house rules, hashing, cached score, **evaluation latency** | 01, 02 |
+| [test_exceptions.py](../backend/tests/test_exceptions.py) | 8 | none | every class's parents in the exception hierarchy | 01 |
+| [test_hands.py](../backend/tests/test_hands.py) | 8 | none | 455 classes, multiplicities summing to 22,100, suit invariance, duplicate cards, `<=` / `>=` | 03 |
+| [test_generator.py](../backend/tests/test_generator.py) | 12 | `canonical_map` (module), `tmp_path` | exact equities, rate invariants, Monte Carlo within 1.5%, JSON schema, flags, local RNG, atomic write | 04 |
+| [test_db.py](../backend/tests/test_db.py) | 13 | `loaded_db` (function), `real_records` (module), `tmp_path`, `monkeypatch` | loading, **lookup latency**, errors, malformed and implausible files, a failed reload, any working directory | 05 |
+| [test_calling_range.py](../backend/tests/test_calling_range.py) | 12 | `model`, `db` (module) | rows ending at 18,424, f = 0 equals `winrates.json`, monotonicity, **table latency**, refuses partial or tied hand lists | 06 |
+| [test_ev.py](../backend/tests/test_ev.py) | 15 | none | EV boundaries, bluff arithmetic, break-even, profit zones, folds that hurt the nuts | 07 |
+| [test_range_finder.py](../backend/tests/test_range_finder.py) | 8 | `loaded_finder`, `finder_with_model` (module) | 455 sorted records, coverage, 387 vs 250 classes, tie order, category totals | 08 |
+| [test_cli.py](../backend/tests/test_cli.py) | 10 | `capsys`, `monkeypatch`, `tmp_path` (built-in) | decisions per model, exit codes 1 and 2, no output before an error, interactive mode | 09 |
+| [test_api.py](../backend/tests/test_api.py) | 40 | `shared_services`, `app` (module), `client`, `keyed_client` (function), `monkeypatch` | every route, one vocabulary, JSON errors, NaN and odd bodies, analysis recomputed and OpenRouter faked, rate limit, CORS, injection | 10 |
 | [test_dynamic_scenarios.py](../backend/tests/test_dynamic_scenarios.py) | 6 | `client`, `solver` (module) | six player stories end to end | 11 |
+| [App.test.jsx](../frontend/src/App.test.jsx) | 12 | `mockFetch` helper | verdict, error messages, language, stepper, model label, cancelled runs, StrictMode | 13 |
 | [format.test.js](../frontend/src/format.test.js) | 4 | — | money per locale, rounding, zones text | 13 |
 | [i18n.test.js](../frontend/src/i18n.test.js) | 2 | — | EN and VI have the same keys and kinds of values | 13 |
 
 The whole backend suite runs in about 2 seconds. The slowest tests are in `test_generator.py`,
-which enumerates real opponents: `test_rate_invariants` and
-`test_equity_hierarchy_monotonicity` took 0.36–0.66 s each on the course machine
-(`--durations=5` shows them).
+which enumerates real opponents: `test_rate_invariants` and `test_equity_hierarchy_monotonicity`
+took 0.12–0.13 s each on the course machine (`--durations=5` shows them).
 
-Only the unit tests for pure modules (`test_evaluator`, `test_hands`, `test_ev`) need no fixtures.
-That is the payoff of AGENTS.md's "pure functions" rule: a test is just a call and an `assert`.
+Only the unit tests for pure modules (`test_evaluator`, `test_exceptions`, `test_hands`, `test_ev`)
+need no fixtures. That is the payoff of AGENTS.md's "pure functions" rule: a test is just a call and
+an `assert`.
 
 ### 2. How `from src.… import …` works in a test
 
@@ -83,46 +89,57 @@ That is the payoff of AGENTS.md's "pure functions" rule: a test is just a call a
 
 This file has no code, but its existence matters. pytest imports each test file as a module. If
 the test folder is a **package** (it has `__init__.py`), pytest walks up to the first folder that
-is *not* a package, here `backend/`, and puts that folder on `sys.path`. From there, `import src`
-and `from app import app` work. Without `__init__.py`, pytest would put `backend/tests/` itself on
-the path, and `src` would not be found.
+is *not* a package, here `backend/`, and puts that folder on `sys.path`. From there, `import src`,
+`from app import create_app` and `from tests.perf import budget` work. Without `__init__.py`,
+pytest would put `backend/tests/` itself on the path, and `src` would not be found.
 
 Tested in a scratch copy with the file deleted:
 
 | How you run it | With `__init__.py` | Without |
 |----------------|--------------------|---------|
-| `python -m pytest` from `backend/` | 93 passed | 93 passed (`-m` also adds the current folder to `sys.path`) |
-| `pytest` from `backend/` | 93 passed | 10 collection errors: `ModuleNotFoundError: No module named 'src'` |
-| `python -m pytest backend/tests` from the repo root | 93 passed | 10 collection errors |
+| `python -m pytest` from `backend/` | 159 collected | 159 collected (`-m` also adds the current folder to `sys.path`) |
+| `pytest` from `backend/` | 159 collected | 11 collection errors: 9 × `No module named 'src'`, 2 × `No module named 'app'` |
+| `python -m pytest backend/tests` from the repo root | 159 passed | 11 collection errors |
 
-There is no `conftest.py`, `pytest.ini` or `pyproject.toml`: this one empty file is the whole
-configuration. The relative path `"data/winrates.json"` used in several fixtures still works from
-the repo root thanks to the fallback in [db.py:72-79](../backend/src/db.py#L72-L79), while
-`test_dynamic_scenarios.py` builds an absolute path instead.
+There is no `conftest.py` or `pytest.ini`. `pyproject.toml` has a two-line pytest section,
+`testpaths = ["tests"]` ([pyproject.toml:21-22](../backend/pyproject.toml#L21-L22)), which only says
+where to look when you give no path. The relative path `"data/winrates.json"` that several fixtures
+still use works from the repo root thanks to the fallback in [db.py:83-89](../backend/src/db.py#L83-L89),
+while the newer tests use the absolute `DEFAULT_DB_PATH` from `src/paths.py`.
 
 ### 3. Fixtures and their scopes
 
 A fixture is a function whose return value pytest passes to any test that names it as a
 parameter. The scope decides how often it runs.
 
-📍 [`backend/tests/test_api.py:7-11`](../backend/tests/test_api.py#L7-L11)
+📍 [`backend/tests/test_api.py:18-33`](../backend/tests/test_api.py#L18-L33)
 ```python
+@pytest.fixture(scope="module")
+def shared_services():
+    """Load the database and build the calling-range model once for the whole module."""
+    return WinRateDB(DEFAULT_DB_PATH), CallingRangeModel()
+
+
+@pytest.fixture(scope="module")
+def app(shared_services):
+    db, model = shared_services
+    return create_app(db=db, calling_model=model, config={"TESTING": True, "OPENROUTER_API_KEY": ""})
+
+
 @pytest.fixture
-def client():
-    app.config["TESTING"] = True
+def client(app):
     with app.test_client() as client:
         yield client
 ```
 
-📍 [`backend/tests/test_dynamic_scenarios.py:28-41`](../backend/tests/test_dynamic_scenarios.py#L28-L41)
+📍 [`backend/tests/test_dynamic_scenarios.py:29-41`](../backend/tests/test_dynamic_scenarios.py#L29-L41)
 ```python
 DB_PATH = Path(__file__).resolve().parent.parent / "data" / "winrates.json"
 
 
 @pytest.fixture(scope="module")
 def client():
-    app.config["TESTING"] = True
-    with app.test_client() as c:
+    with create_app(config={"TESTING": True}).test_client() as c:
         yield c
 
 
@@ -132,33 +149,43 @@ def solver():
     return RangeFinder(db)
 ```
 
-- **Function scope** (the default): a fresh `client` for each of the 17 API tests. A test client
-  is cheap, so this costs nothing and keeps tests independent.
-- **Module scope**: built once per file. `CallingRangeModel()` takes tens of milliseconds, so
-  `test_calling_range.py` and `test_range_finder.py` share one per file.
+- **Fixtures can use fixtures.** `client` asks for `app`, which asks for `shared_services`. pytest
+  builds the chain once per scope.
+- **Module scope**: built once per file. `CallingRangeModel()` takes about 60 ms, so
+  `test_api.py`, `test_calling_range.py` and `test_range_finder.py` share one per file.
+- **Function scope** (the default): a fresh `client` for each API test. A test client is cheap, so
+  this costs nothing and keeps tests independent.
 - **`yield` instead of `return`**: code after `yield` runs when the fixture is torn down. Here
   the `with` block closes the test client.
-
-Notice what the fixtures cannot do: give the app a different database. `from app import app`
-imports the module-level globals of lesson 10, so every API test uses the real
-`winrates.json` and the real calling-range model, and `app.config["TESTING"] = True` changes
-that shared app for the rest of the run. An app factory (lesson 10, exercise 6) would fix both.
+- **The app factory makes the app a value.** `create_app(db=…, calling_model=…, config=…)`
+  (lesson 10) builds a new app with exactly the services and settings a test wants. Tests that need
+  something different build their own app: one with a key (`keyed_client`,
+  [test_api.py:315-321](../backend/tests/test_api.py#L315-L321)), one with the rate limiter on, one
+  with a broken range finder. `TESTING: True` also switches the rate limiter off, and
+  `"OPENROUTER_API_KEY": ""` overrides whatever key your shell exports, so the analysis takes the
+  offline branch.
 
 ### 4. `monkeypatch` and `capsys`: controlling the outside world
 
-Two built-in fixtures do all the faking in this suite:
+Two built-in fixtures do most of the faking in this suite:
 
-- **`monkeypatch.setattr("builtins.input", …)`** ([test_cli.py:35-38](../backend/tests/test_cli.py#L35-L38))
+- **`monkeypatch.setattr("builtins.input", …)`** ([test_cli.py:39-42](../backend/tests/test_cli.py#L39-L42))
   replaces the keyboard with a list of answers (lesson 09).
-- **`monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)`**
-  ([test_api.py:72-74](../backend/tests/test_api.py#L72-L74)) removes the API key for one test,
-  so `/api/analyze` takes the offline branch even on a machine where the key is set. Without this
-  line, running the tests could send a request to OpenRouter.
-- **`capsys.readouterr()`** ([test_cli.py:17-19](../backend/tests/test_cli.py#L17-L19)) returns
+- **`monkeypatch.setattr(requests, "post", fake_post)`** ([test_api.py:324-335](../backend/tests/test_api.py#L324-L335))
+  replaces OpenRouter. The fake records the prompt and returns a canned answer, so the test can
+  check that the server sent "As Kh Qd" and not the client's fake `hand_evaluation`. A parametrised
+  test feeds four kinds of failure through the same seam: a 500, an odd JSON shape, a body that
+  isn't JSON, and a `ConnectionError` ([test_api.py:338-357](../backend/tests/test_api.py#L338-L357)).
+- **`monkeypatch.setattr(app.extensions["lieng"].range_finder, "solve_range", boom)`**
+  ([test_api.py:247-257](../backend/tests/test_api.py#L247-L257)) makes one service crash, to check
+  that the 500 says "Internal server error." and nothing more.
+- **`monkeypatch.chdir(tmp_path)`** ([test_db.py:140-141](../backend/tests/test_db.py#L140-L141))
+  runs a test from another folder, to prove the default database path doesn't depend on it.
+- **`capsys.readouterr()`** ([test_cli.py:21-23](../backend/tests/test_cli.py#L21-L23)) returns
   what was printed, as `.out` and `.err`.
 
-Every change `monkeypatch` makes is undone after the test. No test touches the network, the clock
-or the file system beyond reading `winrates.json`.
+Every change `monkeypatch` makes is undone after the test. Files are written only under `tmp_path`,
+a fresh temporary folder per test. The network is never used, with one exception (weak spot 1).
 
 ### 5. The stories: run them with `-s`
 
@@ -194,7 +221,38 @@ them is pinned by an `assert` (for example `abs(ev - (-42044.0)) < 100.0` at
 
 ### 6. Timing tests against the budgets
 
-📍 [`backend/tests/test_db.py:45-57`](../backend/tests/test_db.py#L45-L57)
+All three timing tests divide their limit through one helper:
+
+📍 [`backend/tests/perf.py:1-12`](../backend/tests/perf.py#L1-L12)
+```python
+"""Shared helper for timing tests.
+
+AGENTS.md section 6 sets the performance budgets. Shared CI machines are slower and noisier than a
+developer laptop, so CI sets PERF_BUDGET_FACTOR (e.g. 3) to scale every budget; locally it is 1.
+"""
+
+import os
+
+
+def budget(limit: float) -> float:
+    """Return ``limit`` scaled by the PERF_BUDGET_FACTOR environment variable (default 1)."""
+    return limit * float(os.environ.get("PERF_BUDGET_FACTOR", "1"))
+```
+
+On your machine `budget(5.0)` is 5.0. The CI workflow sets `PERF_BUDGET_FACTOR: "3"`
+([ci.yml:24-26](../.github/workflows/ci.yml#L24-L26)), so a shared runner gets three times the room
+without anyone editing a test. The tests themselves:
+
+📍 [`backend/tests/test_evaluator.py:298-302`](../backend/tests/test_evaluator.py#L298-L302)
+```python
+    def test_evaluation_within_latency_budget(self) -> None:
+        """AGENTS.md section 6: one hand evaluation in under 1 microsecond."""
+        cards = Hand.from_str("As Kh Qd").cards
+        best = min(timeit.repeat(lambda: evaluate_hand(cards), number=20000, repeat=5)) / 20000
+        assert best * 1e6 < budget(1.0), f"evaluate_hand took {best * 1e6:.3f} us"
+```
+
+📍 [`backend/tests/test_db.py:50-62`](../backend/tests/test_db.py#L50-L62)
 ```python
     def test_lookup_latency_budget(self, loaded_db: WinRateDB) -> None:
         """Verify O(1) hash table query latency is strictly < 5.0 microseconds per lookup."""
@@ -208,146 +266,192 @@ them is pinned by an `assert` (for example `abs(ev - (-42044.0)) < 100.0` at
 
         avg_latency_us = (elapsed / n_queries) * 1e6
         # Assert well within the 5 microsecond budget
-        assert avg_latency_us < 5.0, f"Lookup latency too high: {avg_latency_us:.3f} us"
+        assert avg_latency_us < budget(5.0), f"Lookup latency too high: {avg_latency_us:.3f} us"
 ```
 
-📍 [`backend/tests/test_calling_range.py:74-78`](../backend/tests/test_calling_range.py#L74-L78)
+📍 [`backend/tests/test_calling_range.py:76-80`](../backend/tests/test_calling_range.py#L76-L80)
 ```python
     def test_full_table_within_latency_budget(self, model: CallingRangeModel) -> None:
         start = time.perf_counter()
         model.equity_table(0.35)
         elapsed_ms = (time.perf_counter() - start) * 1000
-        assert elapsed_ms < 25.0
+        assert elapsed_ms < budget(25.0)
 ```
 
-`time.perf_counter()` is a high-resolution clock meant for measuring intervals. The first test
-averages 50,000 lookups, so one slow lookup cannot fail it. The second times a single call, which
-is noisier, but the margin is huge. Here are all five budgets from AGENTS.md §6, measured on the
-machine this course was written on (your numbers will differ):
+`time.perf_counter()` is a high-resolution clock meant for measuring intervals. The three tests
+show three ways to time code, from most to least robust: `timeit.repeat` takes the **best** of five
+runs (noise only ever makes code slower, so the minimum is the cleanest number); the lookup test
+averages 50,000 calls, so one slow call cannot fail it; the table test times a single call, which
+is the noisiest, but the margin is huge. Here are all five budgets from AGENTS.md §6, measured on
+the machine this course was written on (your numbers will differ):
 
 | Budget (AGENTS.md §6) | Limit | Measured | Tested? | Met? |
 |-----------------------|-------|----------|---------|------|
-| Single hand evaluation | < 1.0 µs | `evaluate_hand`: 2.5 µs for Q-K-A (best of 5 × 100,000); 5.3 µs on average over all 22,100 hands | no | **no** |
-| Hash-table lookup | < 5.0 µs | `db.get`: about 0.1 µs; `get_by_cards` (with canonicalisation): 0.9 µs | [test_db.py:45](../backend/tests/test_db.py#L45) | yes |
-| Full range EV (455 hands) | < 25 ms | `equity_table`: 0.5 ms; `solve_range`: 1.0–2.3 ms random, 1.4–3.7 ms range | [test_calling_range.py:74](../backend/tests/test_calling_range.py#L74) (the table only) | yes |
-| CLI command | < 50 ms | 0.11–0.12 s random, 0.17–0.22 s range (whole process) | no | **no** |
-| Lookup DB memory | < 10 MB | `WinRateDB`: ~151 KiB retained; `CallingRangeModel`: ~1.1 MiB; whole Python process: 22 MiB peak RSS | no | yes |
+| Single hand evaluation | < 1.0 µs | `evaluate_hand`: 0.34 µs for Q-K-A (best of 5 × 100,000); 0.30 µs on average over all 22,100 hands | [test_evaluator.py:298-302](../backend/tests/test_evaluator.py#L298-L302) | yes |
+| Hash-table lookup | < 5.0 µs | `db.get`: about 0.09 µs; `get_by_cards` (canonicalisation and a duplicate-card check): 2.5 µs | [test_db.py:50-62](../backend/tests/test_db.py#L50-L62) (`get` only) | yes |
+| Full range EV (455 hands) | < 25 ms | `equity_table`: 0.35 ms; `solve_range`: 0.99–1.18 ms random, 1.40–1.62 ms range | [test_calling_range.py:76-80](../backend/tests/test_calling_range.py#L76-L80) (the table only) | yes |
+| CLI command | < 300 ms (cold start) | 0.12–0.13 s random, 0.17–0.18 s range (whole process) | no | yes |
+| Lookup DB memory | < 10 MB | `WinRateDB`: ~179 KiB retained; `CallingRangeModel`: ~1.04 MiB; whole Python process: 18.5 MiB peak RSS | no | yes |
 
-Why the two misses:
+Two of these used to be misses:
 
-- **Hand evaluation.** One Python function call that sorts three ranks and builds a dataclass
-  costs a few microseconds. 1 µs is not reachable this way in CPython. A table of all 22,100
-  precomputed scores, keyed by the sorted cards, would make it a dictionary lookup. Nothing on the
-  request path evaluates more than one hand, so the miss costs nothing in practice.
-- **The CLI.** Most of the time is start-up, not solving. Measured inside one process: importing
-  `rich` about 50 ms, the rest of the imports 17–33 ms, `CallingRangeModel()` 54–67 ms (range
-  model only), loading the DB 2–4 ms, and `solve_range` 1–2 ms. Lazy-importing `rich` and caching
-  the calling-range tables would get close; meeting 50 ms with a fresh Python process is hard.
+- **Hand evaluation** took 2.5–5.3 µs. The fix uses the fact that suits never matter: there are
+  only 455 rank multisets, so `evaluate_hand` now looks the score up in a 455-entry table built once
+  (lesson 02). It was checked against the old code on all 132,600 ordered hands.
+- **The CLI** budget was 50 ms, which a fresh Python process with these imports cannot meet: bare
+  start-up is 12–21 ms, importing `rich`'s console about 60 ms, and building the calling-range
+  tables 60–80 ms (range model only). AGENTS.md now states 300 ms with the measurement and the
+  reason ([AGENTS.md:129](../AGENTS.md#L129)). Changing a budget is honest when it comes with a
+  number and an explanation; it is still not tested.
 
-### 7. What the tests do not check
+### 7. Static checks and CI
+
+Two more tools run over the backend, configured in `pyproject.toml`:
+
+📍 [`backend/pyproject.toml:1-19`](../backend/pyproject.toml#L1-L19)
+```toml
+# Tool configuration for the backend. Dependencies live in requirements*.txt.
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["src", "app.py"]
+
+[[tool.mypy.overrides]]
+# flask-cors ships no type information.
+module = ["flask_cors"]
+ignore_missing_imports = true
+```
+
+- **ruff** is a linter: `E`/`F` are pycodestyle errors and pyflakes (unused imports, undefined
+  names), `I` sorts imports, `B` is bugbear (likely bugs such as mutable default arguments), `UP`
+  modernises syntax for Python 3.11. It checks the tests too.
+- **mypy `strict = true`** type-checks `src/` and `app.py`: every function needs annotations, no
+  implicit `Any`, no untyped calls. The tests are not in `files`, so they may stay loosely typed.
+- Both are dev dependencies in [requirements-dev.txt](../backend/requirements-dev.txt), together
+  with pytest and `rich`; production installs only `requirements.txt` (lesson 16).
+
+[.github/workflows/ci.yml](../.github/workflows/ci.yml) runs three jobs on every push and pull
+request: **backend** (`ruff check .`, `mypy`, `python -m pytest -q` with `PERF_BUDGET_FACTOR=3`),
+**frontend** (`npm ci`, `npm run lint`, `npm test`, `npm run build`), and **course**
+(`python3 learning/verify_course.py`, so a commit that moves quoted code without updating the
+lessons fails).
+
+### 8. What the tests do not check
+
+Most of the gaps this lesson used to list are closed: `Hand` hashing and the tie-break house rules
+([test_evaluator.py:253-285](../backend/tests/test_evaluator.py#L253-L285)), malformed and
+implausible database files ([test_db.py:106-150](../backend/tests/test_db.py#L106-L150)), the
+OpenRouter branch, HTTP errors and odd bodies ([test_api.py:216-257](../backend/tests/test_api.py#L216-L257)),
+and the React component. What is left:
 
 | Gap | Where | Why it matters |
 |-----|-------|----------------|
-| `Hand` hashing | none | `Hand("As Kh Qd") == Hand("Kh Qd As")` is `True`, but their hashes differ, so a set holds both (lesson 02). A test would have caught it. |
-| Điểm and Đĩ tie-breaks | [test_evaluator.py:240-247](../backend/tests/test_evaluator.py#L240-L247) compares different point totals only | The house rules (highest card next) can change without any test failing. |
-| A malformed `winrates.json` | [test_db.py:6](../backend/tests/test_db.py#L6) promises "malformed data" | Only a *missing* file is tested; the JSON-error and schema-error branches of `load` never run. |
-| One rate-invariant case | [test_generator.py:69-72](../backend/tests/test_generator.py#L69-L72) | `"10-J-K"` is not a canonical ID (it is `"K-J-10"`), so `continue` skips it silently: 5 of 6 keys are checked. |
-| The OpenRouter branch | [app.py:400-440](../backend/app.py#L400-L440) | No test fakes `requests.post`, so the 200, non-200 and network-error paths are untested. |
-| HTTP errors and odd bodies | [app.py:164](../backend/app.py#L164) | No test for 404/405, a list body (500), or `"nan"` (lesson 10). |
-| The CLI without `rich` | [cli.py:214-220](../backend/src/cli.py#L214-L220) | The plain fallback never runs in tests. |
-| `App.jsx` | — | No component test; only the pure helpers in `format.js` and `i18n.js` are tested. |
-| A misleading docstring | [test_ev.py:9](../backend/tests/test_ev.py#L9) | Says more folds always raise EV; false for strong hands (lesson 07). |
+| The CLI's plain-text fallback | [cli.py:54-61](../backend/src/cli.py#L54-L61) and every `else:` branch after `if HAS_RICH:` | `rich` is a dev dependency, so on a production install the CLI prints this branch, which no test runs. Section 10 adds the test. |
+| The CLI and memory budgets | [AGENTS.md:129-130](../AGENTS.md#L129-L130) | Measured, not asserted. A slow import or a bigger table would go unnoticed. |
+| One test reads your environment | [test_api.py:363-373](../backend/tests/test_api.py#L363-L373) | It builds its app without `"OPENROUTER_API_KEY": ""`, so a key exported in your shell sends real requests (weak spot 1). |
+| Rounded rates | `data/winrates.json` | 151 of the 455 records have win + tie + loss = 1.0001 (lesson 04). The database accepts this within a tolerance; nothing records it as a known issue. |
+| Line coverage | — | Neither `pytest-cov` nor a Vitest coverage provider is installed, so there is no coverage number. The list above comes from reading the tests against the code. |
+| Frontend blind spots | lessons 12 and 14 | The App tests can't tell a relative URL from an absolute one, and nothing checks CSS against DESIGN.md. |
 
-`pytest-cov` is not installed, so the project has no line-coverage number. The list above comes
-from reading the tests against the code.
+### 9. The frontend tests
 
-📍 [`backend/tests/test_generator.py:67-72`](../backend/tests/test_generator.py#L67-L72)
-```python
-    def test_rate_invariants(self, canonical_map: dict) -> None:
-        """Check mathematical consistency across multiple sample hands."""
-        test_keys = ["A-A-A", "Q-K-A", "A-2-3", "9-8-7", "K-K-Q", "10-J-K"]
-        for key in test_keys:
-            if key not in canonical_map:
-                continue
-```
+The frontend runs [Vitest](https://vitest.dev) (`"test": "vitest run"` in
+[package.json](../frontend/package.json#L11)) with jsdom as a fake browser (lesson 12). Three files,
+18 tests:
 
-A `continue` like this turns a typo into a silent pass. Prefer `assert key in canonical_map` or
-`pytest.mark.parametrize` over the keys, which reports each key as its own test.
+- [App.test.jsx](../frontend/src/App.test.jsx) (12 tests) renders the real `App` with `fetch`
+  replaced by `mockFetch` and drives it like a user: it clicks "Run solver", reads the alert, toggles
+  the language, presses the stepper. It pins the error message for each API code, that a failed
+  solve clears the old verdict, that the analysis request carries only the five inputs, that a
+  second click cancels a slow first analysis, and that StrictMode's duplicate request is aborted.
+  Eight of the 12 fail on the `App.jsx` from before these fixes.
+- [format.test.js](../frontend/src/format.test.js) (4 tests: `131876` becomes `"131,876"` in
+  `en-US` and `"131.876"` in `vi-VN`, zones become `"0%–8% · 51%–100%"`).
+- [i18n.test.js](../frontend/src/i18n.test.js) (2 tests: Vietnamese defines exactly the English keys
+  with the same kinds of values, and every message function includes its parameter).
 
-### 8. The frontend tests
+The two small files still use Node's `assert` module; only `test` comes from Vitest. Lesson 13 reads
+all three.
 
-The frontend uses Node's built-in runner (`"test": "node --test"` in
-[package.json](../frontend/package.json#L11)), which finds `*.test.js` files by itself. No Jest,
-no Vitest, no browser. The tests cover the two pure helper files only:
-[format.test.js](../frontend/src/format.test.js) (4 tests: `131876` becomes `"131,876"` in
-`en-US` and `"131.876"` in `vi-VN`, zones become `"0%–8% · 51%–100%"`) and
-[i18n.test.js](../frontend/src/i18n.test.js) (2 tests: Vietnamese defines exactly the English keys
-with the same kinds of values, and every message function includes its parameter). Lesson 13
-explains why those two checks catch the most common translation bugs.
+### 10. Adding a test: a worked example
 
-### 9. Adding a test: a worked example
+Say you want to pin the CLI's plain-text fallback, and record the rounding problem of lesson 04
+without fixing it yet.
 
-Say you want to pin the Điểm tie-break, and record the `Hand` hash bug without fixing it yet.
-
-**Step 1. Find out what the code does today.** Ask Python, not your memory:
+**Step 1. Find out what the code does today.** Ask Python, not your memory. `HAS_RICH` is a module
+global, so you can switch it off for one run:
 
 ```bash
 python -c '
-from src.evaluator import Hand
-a, b = Hand.from_str("As 3h 5d"), Hand.from_str("9s 10h Kd")
-print(a.score.score, b.score.score, a > b, a.score.score_tuple, b.score.score_tuple)
-'
+import src.cli as cli
+cli.HAS_RICH = False
+cli.main(["--pot", "100000", "--bet", "100000", "--fold-equity", "0.35", "--hand", "Ks Qh 3d"])
+' | sed -n 12,18p
 ```
 
 ```
-9 9 True (1, 9, 14, 9, (14, 5, 3)) (1, 9, 13, 9, (13, 10, 9))
+--- SOLVER OVERVIEW ---
+ Profitable Classes:   387 / 455
+ Combos in Range:      18,708 / 22,100 combinations
+ Range Coverage:       84.65%
+ Highest EV Hand:      A-A-A (EV: +165,000)
+ Threshold Hand:       K-8-3 (EV: +361.50)
+-----------------------
 ```
 
-Both have 9 points; A-3-5 wins because the next field is the highest card (14 against 13).
-
-**Step 2. Write the tests** at the end of `tests/test_evaluator.py`, next to the code they protect:
+**Step 2. Write the tests** next to the code they protect: the fallback at the end of
+`tests/test_cli.py` (it reuses that file's `MEDIUM_HAND`), the known issue at the end of
+`tests/test_db.py`:
 
 ```python
-class TestTieBreaks:
-    """House rules for equal categories (AGENTS.md §3.2 leaves them to configuration)."""
+def test_plain_text_fallback_shows_the_same_totals(monkeypatch, capsys):
+    """Without rich the CLI prints plain text with the same numbers (the HAS_RICH branches)."""
+    monkeypatch.setattr("src.cli.HAS_RICH", False)
+    main(MEDIUM_HAND)
+    out = capsys.readouterr().out
+    assert "--- SOLVER OVERVIEW ---" in out
+    assert "Combos in Range:      18,708 / 22,100 combinations" in out
+    assert ">>> ACTION: RAISE / ALL-IN RECOMMENDED <<<" in out
+```
 
-    def test_equal_points_compare_highest_card(self) -> None:
-        """Two 9-point hands: the one with the higher top card wins (A > K)."""
-        a35 = Hand.from_str("As 3h 5d")
-        k109 = Hand.from_str("9s 10h Kd")
-        assert a35.score.score == k109.score.score == 9
-        assert a35 > k109
-
-    def test_di_compares_highest_then_second_card(self) -> None:
-        assert Hand.from_str("Js Qh Qd") > Hand.from_str("Jc Jh Qs")   # Q-Q-J beats Q-J-J
-        assert Hand.from_str("Qs Kh Kd") > Hand.from_str("Js Qh Qc")   # K beats Q on top
-
-    @pytest.mark.xfail(strict=True, reason="Hand.__eq__ compares scores but __hash__ hashes cards (lesson 02)")
-    def test_equal_hands_have_equal_hashes(self) -> None:
-        a, b = Hand.from_str("As Kh Qd"), Hand.from_str("Kh Qd As")
-        assert a == b
-        assert hash(a) == hash(b)
+```python
+@pytest.mark.xfail(strict=True, reason="rates are rounded one by one, so some sums are 1.0001 (lesson 04)")
+def test_stored_rates_sum_to_exactly_one() -> None:
+    db = WinRateDB(DEFAULT_DB_PATH)
+    off = [cid for cid, s in db.all_items().items() if round(s.win_rate + s.tie_rate + s.loss_rate, 10) != 1.0]
+    assert off == []
 ```
 
 **Step 3. Run only the new tests**, then everything:
 
 ```bash
-python -m pytest tests/test_evaluator.py -q -k TieBreaks -rx
+python -m pytest tests/test_cli.py tests/test_db.py -q -k "fallback or exactly_one" -rx
 python -m pytest -q
 ```
 
 ```
-..x                                                                      [100%]
-XFAIL tests/test_evaluator.py::TestTieBreaks::test_equal_hands_have_equal_hashes - Hand.__eq__ compares scores but __hash__ hashes cards (lesson 02)
-2 passed, 18 deselected, 1 xfailed in 0.06s
+.x                                                                       [100%]
+=========================== short test summary info ============================
+XFAIL tests/test_db.py::test_stored_rates_sum_to_exactly_one - rates are rounded one by one, so some sums are 1.0001 (lesson 04)
+1 passed, 23 deselected, 1 xfailed in 0.10s
 ...
-95 passed, 1 xfailed in 1.85s
+160 passed, 1 xfailed in 1.65s
 ```
 
-`xfail(strict=True)` means "this is expected to fail". The day someone fixes `Hand.__hash__`, the
-test passes, `strict` turns that into a failure, and they remove the marker. A known bug stays
-visible without turning the suite red. (Test this in a scratch branch, or undo it with
-`git checkout -- tests/test_evaluator.py`.)
+`monkeypatch.setattr("src.cli.HAS_RICH", False)` swaps the flag for this test only, without
+uninstalling anything. `xfail(strict=True)` means "this is expected to fail". The day someone
+regenerates the data with consistent rounding, the test passes, `strict` turns that into a failure,
+and they remove the marker. A known bug stays visible without turning the suite red. (Do this in a
+scratch branch, or undo it with `git checkout -- tests/test_cli.py tests/test_db.py`.)
 
 ---
 
@@ -375,36 +479,62 @@ the results in. Scopes: `function` (default), `class`, `module`, `package`, `ses
 - **Real data, no mocks for the engine.** Tests load the real `winrates.json` and build the real
   calling-range model. That catches data drift (the schema test, f = 0 equals the file) at the
   cost of slower setup, kept down by module-scoped fixtures.
-- **Fakes only at the edges.** The keyboard and the API key are the only things replaced. The
-  network is never used.
-- **Budgets as tests, with wide margins.** Two of the five AGENTS.md budgets are asserted, with
-  thresholds far above today's numbers, so they catch an accidental O(n²) without flaking on a
-  slow machine. The other three are not asserted, and two of them are missed.
-- **No test configuration.** One empty `__init__.py` instead of `conftest.py` or `pytest.ini`.
-  Simple, but it means no shared fixtures across files and no registered markers.
+- **Fakes only at the edges.** The keyboard, `requests.post`, one deliberately broken service and
+  the working directory are the only things replaced. Settings go in through `create_app(config=…)`
+  rather than by editing the environment.
+- **Budgets as tests, scaled for slow machines.** Three of the five AGENTS.md budgets are asserted,
+  with thresholds far above today's numbers and one factor (`PERF_BUDGET_FACTOR`) for CI, so they
+  catch an accidental O(n²) without flaking on a slow runner.
+- **Almost no test configuration.** One empty `__init__.py` and `testpaths`; no `conftest.py`.
+  Simple, but it means no fixtures shared across files: `test_api.py`, `test_calling_range.py`
+  and `test_range_finder.py` each build their own calling-range model.
+- **Static checks as part of "the tests pass".** ruff and strict mypy run in CI next to pytest, so
+  an unused import or a type error fails the build like a wrong number would.
 
 ---
 
 ## ⚠️ Weak spots
 
-1. **Two AGENTS.md budgets are missed and untested.** Hand evaluation (2.5–5.3 µs vs 1 µs) and the
-   CLI (0.11–0.22 s vs 50 ms), see [AGENTS.md:124-127](../AGENTS.md#L124-L127). *Fix:* either
-   change the budgets to what Python can do, or add a score table and lazy imports, then test them.
-2. **Memory is unmeasured.** The 10 MB budget is met (about 1.3 MiB for both tables) but nothing
-   checks it. *Fix:* a `tracemalloc` test.
-3. **Coverage gaps.** `Hand` hashing, Điểm/Đĩ tie-breaks, a malformed DB file, the OpenRouter
-   branch, HTTP errors, the CLI fallback and `App.jsx` (section 7).
-4. **A loop that skips silently.** [test_generator.py:71-72](../backend/tests/test_generator.py#L71-L72)
-   never checks `"10-J-K"`. *Fix:* parametrise, or assert membership.
-5. **Shared global app.** Every API test uses the module-level app of `app.py`
-   ([test_api.py:9](../backend/tests/test_api.py#L9) mutates its config), so tests cannot inject a
-   small database. *Fix:* an app factory and a fixture that builds the app.
-6. **Single-shot timing.** [test_calling_range.py:74-78](../backend/tests/test_calling_range.py#L74-L78)
-   times one call. On a busy CI machine a single pause could fail it. *Fix:* take the best of
-   several runs, as `timeit.repeat` does.
-7. **Decorative "-> PASS".** The scenario narratives print PASS before the test has finished
+Fixed since the first version of this course:
+
+- ✅ **Fixed: two AGENTS.md budgets missed and untested.** Hand evaluation is now 0.3 µs and tested
+  ([test_evaluator.py:298-302](../backend/tests/test_evaluator.py#L298-L302)); the CLI budget was
+  restated as < 300 ms with a measurement ([AGENTS.md:129](../AGENTS.md#L129)). The CLI budget is
+  still untested (open item 2).
+- ✅ **Fixed: the coverage gaps.** `Hand` hashing, Điểm/Đĩ tie-breaks, a malformed DB file, the
+  OpenRouter branch, HTTP errors and `App.jsx` all have tests now (section 8). The CLI fallback is
+  the one left (open item 3).
+- ✅ **Fixed: a loop that skipped silently.** The rate-invariant test used `"10-J-K"` and
+  `continue`d past it; it now uses `"K-J-10"` and asserts each key exists
+  ([test_generator.py:66-68](../backend/tests/test_generator.py#L66-L68)).
+- ✅ **Fixed: a shared global app.** API tests used to mutate the module-level app. They now build
+  their own with `create_app` ([test_api.py:18-33](../backend/tests/test_api.py#L18-L33)), and one
+  test checks that an injected database is the one used
+  ([test_api.py:383-386](../backend/tests/test_api.py#L383-L386)).
+- ✅ **Fixed: no CI.** [ci.yml](../.github/workflows/ci.yml) runs ruff, mypy, pytest, lint, Vitest,
+  the build and the course checker on every push.
+- ✅ **Fixed: a misleading docstring.** `test_ev.py` no longer claims more folds always raise EV
+  ([test_ev.py:9-10](../backend/tests/test_ev.py#L9-L10)), and `test_folds_hurt_unbeatable_hands`
+  ([test_ev.py:149-152](../backend/tests/test_ev.py#L149-L152)) shows the opposite for w = 1.
+
+Still open:
+
+1. **One test depends on your shell.** `test_analyze_is_rate_limited`
+   ([test_api.py:363-373](../backend/tests/test_api.py#L363-L373)) builds its app without
+   `"OPENROUTER_API_KEY": ""`. With the key exported, its first two requests go to the real
+   OpenRouter (spending credits), and without network they come back 502, so the test fails
+   (`assert [502, 502, 429] == [200, 200, 429]`). *Fix:* add the empty key to its config
+   (exercise 5).
+2. **Two budgets are measured but not asserted.** The CLI (0.12–0.18 s vs 300 ms) and memory
+   (about 1.2 MiB vs 10 MB), [AGENTS.md:129-130](../AGENTS.md#L129-L130). *Fix:* exercises 6 and 7.
+3. **The CLI's plain-text fallback is untested** ([cli.py:54-61](../backend/src/cli.py#L54-L61)).
+   *Fix:* section 10.
+4. **Single-shot timing.** [test_calling_range.py:76-80](../backend/tests/test_calling_range.py#L76-L80)
+   times one call. `PERF_BUDGET_FACTOR` widens the limit, but a single pause can still fail it.
+   *Fix:* take the best of several runs with `timeit.repeat`, as the evaluation test does.
+5. **Decorative "-> PASS".** The scenario narratives print PASS before the test has finished
    ([test_dynamic_scenarios.py:76](../backend/tests/test_dynamic_scenarios.py#L76)).
-8. **No CI.** Nothing runs the suite on a push (lesson 16).
+6. **No coverage number**, for either half (section 8).
 
 ---
 
@@ -417,9 +547,10 @@ python -m pytest -q
 ```
 
 ```
-........................................................................ [ 77%]
-.....................                                                    [100%]
-93 passed in 1.74s
+........................................................................ [ 45%]
+........................................................................ [ 90%]
+...............                                                          [100%]
+159 passed in 1.88s
 ```
 
 Count tests per file:
@@ -429,16 +560,17 @@ python -m pytest --collect-only -q | grep '::' | cut -d: -f1 | sort | uniq -c
 ```
 
 ```
-     17 tests/test_api.py
-      9 tests/test_calling_range.py
-      6 tests/test_cli.py
-      6 tests/test_db.py
+     40 tests/test_api.py
+     12 tests/test_calling_range.py
+     10 tests/test_cli.py
+     13 tests/test_db.py
       6 tests/test_dynamic_scenarios.py
-     18 tests/test_evaluator.py
-     13 tests/test_ev.py
-      7 tests/test_generator.py
-      5 tests/test_hands.py
-      6 tests/test_range_finder.py
+     27 tests/test_evaluator.py
+     15 tests/test_ev.py
+      8 tests/test_exceptions.py
+     12 tests/test_generator.py
+      8 tests/test_hands.py
+      8 tests/test_range_finder.py
 ```
 
 Run just the timing tests, by name:
@@ -448,10 +580,23 @@ python -m pytest -k "latency or budget" -v
 ```
 
 ```
-tests/test_calling_range.py::TestCallingRangeModel::test_full_table_within_latency_budget PASSED [ 50%]
-tests/test_db.py::TestWinRateDB::test_lookup_latency_budget PASSED       [100%]
+tests/test_calling_range.py::TestCallingRangeModel::test_full_table_within_latency_budget PASSED [ 33%]
+tests/test_db.py::TestWinRateDB::test_lookup_latency_budget PASSED       [ 66%]
+tests/test_evaluator.py::TestErrorsAndSpeed::test_evaluation_within_latency_budget PASSED [100%]
 
-======================= 2 passed, 91 deselected in 0.33s =======================
+====================== 3 passed, 156 deselected in 0.48s =======================
+```
+
+The static checks:
+
+```bash
+ruff check .
+mypy
+```
+
+```
+All checks passed!
+Success: no issues found in 12 source files
 ```
 
 Read the stories: `python -m pytest tests/test_dynamic_scenarios.py -s -q`. Find the slowest
@@ -469,26 +614,21 @@ print(round(min(timeit.repeat(lambda: evaluate_hand(cards), number=100000, repea
 ```
 
 ```
-2.53 us
+0.34 us
 ```
 
 The frontend:
 
 ```bash
-npm test 2>&1 | grep -E "^ok|^# (tests|pass|fail)"
+npm test 2>&1 | grep -E 'Test Files|Tests '
 ```
 
 ```
-ok 1 - formatMoney uses the requested locale's thousands separator
-ok 2 - formatMoney rounds to whole VND and keeps the minus sign
-ok 3 - formatMoney shows 0 before any value has arrived
-ok 4 - formatZones lists every profitable fold-frequency interval
-ok 5 - every language defines exactly the English keys, with the same kinds of values
-ok 6 - messages with a parameter include it in every language
-# tests 6
-# pass 6
-# fail 0
+ Test Files  3 passed (3)
+      Tests  18 passed (18)
 ```
+
+(`npx vitest run --reporter=verbose` lists all 18 by name; lesson 12 shows the list.)
 
 ---
 
@@ -501,138 +641,162 @@ Exercises marked 🟡 or 🔴 change code. Undo them afterwards with `git checko
 
 <details><summary>Solution</summary>
 
-`python -m pytest` still passes all 93, because `-m` adds the current folder (`backend/`) to
-`sys.path`. Plain `pytest` gets 10 collection errors, one per file:
-`ModuleNotFoundError: No module named 'src'`. Restore it with
-`git checkout -- tests/__init__.py`.
+`python -m pytest` still passes all 159, because `-m` adds the current folder (`backend/`) to
+`sys.path`. Plain `pytest` gets 11 collection errors, one per file: nine
+`ModuleNotFoundError: No module named 'src'` and two `No module named 'app'` (the two files that
+import the app first). Restore it with `git checkout -- tests/__init__.py`.
 </details>
 
 **🟢 2. Predict.** You change `scope="module"` to the default scope on the `model` fixture in
-`test_calling_range.py`. Does anything fail? What changes?
+[test_calling_range.py:21](../backend/tests/test_calling_range.py#L21). Does anything fail? What
+changes?
 
 <details><summary>Solution</summary>
 
-Nothing fails. The model is built once per test instead of once per file: 9 builds instead of 1.
-On the course machine one build showed up as about 0.1 s of "setup" in `--durations`, so the file
-gets slower. Scope is a speed choice here, because no test mutates the model.
+Nothing fails. The model is built once per test that asks for it instead of once per file: 10
+builds instead of 1, each about 0.05–0.06 s of "setup" in `--durations`. The file goes from about
+0.11 s to 0.59 s. Scope is a speed choice here, because no test mutates the model.
 </details>
 
-**🟢 3. Predict.** Fix the key in [test_generator.py:69](../backend/tests/test_generator.py#L69)
-from `"10-J-K"` to `"K-J-10"`. Does the test still pass?
+**🟢 3. Predict.** What happens with `PERF_BUDGET_FACTOR=0.01 python -m pytest -k "latency or budget" -q`?
 
 <details><summary>Solution</summary>
 
-Yes. K-J-10 is an ordinary 0-point Điểm hand (10, J and K are all worth 0), and its rates add up
-like every other hand's. The point of the fix is that the sixth key is now actually checked, which
-makes the test a little slower. Run `python -m pytest tests/test_generator.py -q`: 7 passed.
+All three timing tests fail: the budgets shrink to 0.01 µs, 0.05 µs and 0.25 ms, below what the
+code can do. The messages show the measured values, for example
+`AssertionError: evaluate_hand took 0.313 us` and `AssertionError: Lookup latency too high: 0.077 us`
+(the table test has no message). That is the factor working in the other direction: CI uses 3 to
+make room, and you can use a small factor to check that a timing test can fail at all.
 </details>
 
-**🟡 4. Add the worked example.** Add the `TestTieBreaks` class from section 9 to
-`tests/test_evaluator.py`. Check: `python -m pytest -q` reports `95 passed, 1 xfailed`.
+**🟡 4. Add the worked example.** Add the two tests from section 10. Check: `python -m pytest -q`
+reports `160 passed, 1 xfailed`, and `ruff check .` still passes.
 
 <details><summary>Solution</summary>
 
-Paste the class at the end of the file (it uses `Hand` and `pytest`, both already imported). If you
-see `96 passed`, someone has fixed `Hand.__hash__` and you will see the `xfail` turn into an
-`XPASS(strict)` failure: remove the marker.
+Both files already import what the tests need (`main` and `MEDIUM_HAND` in `test_cli.py`;
+`pytest`, `WinRateDB` and `DEFAULT_DB_PATH` in `test_db.py`). If you see `161 passed` with an
+`XPASS(strict)` failure, someone has fixed the rounding: remove the marker.
 </details>
 
-**🟡 5. Test a malformed database.** Use pytest's `tmp_path` fixture to write a broken JSON file
-and a file with a missing field, and assert that `WinRateDB.load` raises `DatabaseError` for both.
-Check: `python -m pytest tests/test_db.py -q` shows 8 passed.
+**🟡 5. Make the rate-limit test independent of your shell.** First see the problem without
+touching the network: `OPENROUTER_API_KEY=dummy HTTPS_PROXY=http://127.0.0.1:9 python -m pytest tests/test_api.py -q`
+(the dead proxy makes every outgoing request fail at once). Then fix
+[test_api.py:363-373](../backend/tests/test_api.py#L363-L373) so the same command passes.
+
+<details><summary>Solution</summary>
+
+Before: `1 failed, 39 passed`, with `test_analyze_is_rate_limited` getting `[502, 502, 429]`
+because the app read the key from the environment and tried OpenRouter. Add the override the
+`app` fixture already uses:
+
+```python
+        config={"TESTING": True, "RATELIMIT_ENABLED": True, "ANALYZE_RATE_LIMIT": "2 per minute", "OPENROUTER_API_KEY": ""},
+```
+
+Now `40 passed` with the key set. The lesson generalises: every app a test builds should state the
+settings it depends on, because `create_app` reads the environment for anything you leave out.
+</details>
+
+**🔴 6. Turn the memory budget into a test.** Add a test to `test_calling_range.py` that builds a
+`WinRateDB` and a `CallingRangeModel` under `tracemalloc` and asserts that the memory they keep is
+under 10 MB (AGENTS.md §6).
 
 <details><summary>Solution</summary>
 
 ```python
-    def test_malformed_json_raises(self, tmp_path) -> None:
-        bad = tmp_path / "bad.json"
-        bad.write_text("{not json", encoding="utf-8")
-        with pytest.raises(DatabaseError, match="Malformed JSON"):
-            WinRateDB().load(bad)
-
-    def test_missing_field_raises(self, tmp_path) -> None:
-        bad = tmp_path / "schema.json"
-        bad.write_text('{"A-A-A": {"equity": 1.0}}', encoding="utf-8")
-        with pytest.raises(DatabaseError, match="Invalid record schema"):
-            WinRateDB().load(bad)
+def test_lookup_structures_fit_the_memory_budget() -> None:
+    """AGENTS.md section 6: the lookup structures stay under 10 MB."""
+    tracemalloc.start()
+    try:
+        before = tracemalloc.get_traced_memory()[0]
+        db, model = WinRateDB(DEFAULT_DB_PATH), CallingRangeModel()
+        used = tracemalloc.get_traced_memory()[0] - before
+    finally:
+        tracemalloc.stop()
+    assert db.is_loaded and model.equity_table(0.35)
+    assert used < 10 * 1024 * 1024, f"{used / 1024 / 1024:.2f} MiB"
 ```
 
-`tmp_path` is a fresh temporary folder per test, deleted by pytest later.
+plus `import tracemalloc` and `from src.paths import DEFAULT_DB_PATH` at the top. It passes with
+about 1.2 MiB used (179 KiB for the DB, 1.04 MiB for the model). Keep `db` and `model` referenced
+until after the second reading, or the garbage collector may free them first. Memory doesn't depend
+on CPU speed, so this one needs no `budget()` factor.
 </details>
 
-**🔴 6. Test the OpenRouter branch offline.** Set a fake key with `monkeypatch.setenv`, replace
-`requests.post` with a function that returns an object with `status_code = 500` and `text =
-"boom"`, and assert that `/api/analyze` answers 502 with an `error` containing `500`. Add a
-second test where the fake raises `requests.ConnectionError`.
+**🔴 7. Turn the CLI budget into a test.** Add a test to `test_cli.py` that runs
+`python -m src.cli --hand "As Kh Qd" --opponent-model range` as a real subprocess three times and
+asserts the best time is under `budget(300.0)` ms. Check that it passes, then that
+`PERF_BUDGET_FACTOR=0.1` makes it fail with a useful message.
 
-<details><summary>Hints</summary>
+<details><summary>Solution</summary>
 
 ```python
-class FakeResponse:
-    status_code = 500
-    text = "boom"
-
-monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
-monkeypatch.setattr("app.requests.post", lambda *args, **kwargs: FakeResponse())
+def test_cli_cold_start_within_budget() -> None:
+    """AGENTS.md section 6: one cold-start CLI command in under 300 ms (best of 3)."""
+    argv = [sys.executable, "-m", "src.cli", "--hand", "As Kh Qd", "--opponent-model", "range"]
+    times = []
+    for _ in range(3):
+        start = time.perf_counter()
+        subprocess.run(argv, cwd=BACKEND_DIR, capture_output=True, check=True)
+        times.append(time.perf_counter() - start)
+    assert min(times) * 1000 < budget(300.0), f"best of 3: {min(times) * 1000:.0f} ms"
 ```
 
-Patch `app.requests.post`, the name `app.py` uses. Nothing reaches the network, and the 502 body
-shows the upstream text, which is weak spot 8 of lesson 10.
-</details>
-
-**🔴 7. Turn a budget into a test.** Add a memory test: build a `WinRateDB` and a
-`CallingRangeModel` under `tracemalloc` and assert that the memory they keep is under 10 MB
-(AGENTS.md §6). Then decide what to do about the evaluation budget, and write the decision down
-in a test or in AGENTS.md.
-
-<details><summary>Hints</summary>
-
-`tracemalloc.start()`, read `tracemalloc.get_traced_memory()[0]` before and after building the
-objects, and keep references to them until after the second reading. On the course machine the
-difference was about 151 KiB for the DB and 1.1 MiB for the model. For evaluation, either assert
-a realistic limit (for example < 20 µs, with `timeit.repeat`) or change AGENTS.md §6: a budget
-nobody checks drifts into fiction.
+with `import subprocess, sys, time` (one per line, for ruff's import sorting),
+`from src.paths import BACKEND_DIR` and `from tests.perf import budget`. `sys.executable` is the
+Python running the tests, so the subprocess uses the same virtual environment; `cwd=BACKEND_DIR`
+makes `-m src.cli` resolvable from anywhere. It passes; with `PERF_BUDGET_FACTOR=0.1` it fails with
+`AssertionError: best of 3: 172 ms`. It adds about half a second to the suite, the price of testing
+a cold start for real.
 </details>
 
 ---
 
 ## ❓ Quiz
 
-1. Why do 91 test functions produce 93 tests?
+1. Why do 143 test functions produce 159 tests?
 2. What does the empty `tests/__init__.py` change?
-3. Why are the calling-range fixtures module-scoped while the API `client` is function-scoped?
-4. Which AGENTS.md §6 budgets are met, and which are tested?
-5. How does the suite guarantee that `/api/analyze` never calls OpenRouter during a test run?
+3. Why is the API `app` module-scoped while the `client` is function-scoped?
+4. Which AGENTS.md §6 budgets are met, which are tested, and what does `PERF_BUDGET_FACTOR` change?
+5. How does the suite keep `/api/analyze` from calling OpenRouter, and which test forgets to?
 
 <details><summary>Answers</summary>
 
-1. Two tests are parametrised with two cases each: `test_analyze_rejects_malformed_hand_evaluation`
-   and `test_invalid_input_exits_with_message`.
+1. Five functions are parametrised: three in `test_api.py` (5, 3 and 4 cases), one in `test_cli.py`
+   (2 cases) and one in `test_exceptions.py` (7 cases). 143 + 4 + 2 + 3 + 1 + 6 = 159.
 2. It makes `tests/` a package, so pytest puts its parent `backend/` on `sys.path`, which makes
-   `import src` and `from app import app` work however pytest is started.
-3. Building a `CallingRangeModel` takes tens of milliseconds and no test changes it, so sharing it
-   saves time. A test client is cheap, and a fresh one per test keeps tests independent.
-4. Met: lookup, full range EV, memory. Missed: hand evaluation and the CLI. Tested: lookup
-   ([test_db.py:45](../backend/tests/test_db.py#L45)) and the equity table
-   ([test_calling_range.py:74](../backend/tests/test_calling_range.py#L74)).
-5. The only test that reaches the LLM branch, [test_api.py:72](../backend/tests/test_api.py#L72),
-   first removes `OPENROUTER_API_KEY` with `monkeypatch.delenv`; the other analyze tests fail
-   validation before the key is read.
+   `import src`, `from app import create_app` and `from tests.perf import budget` work however
+   pytest is started.
+3. Building the app means building its services (the calling-range model takes about 60 ms), and no
+   test changes the shared app, so one per file is enough. A test client is cheap, and a fresh one
+   per test keeps tests independent. Tests that need a differently configured app build their own.
+4. All five are met. Three are tested: evaluation
+   ([test_evaluator.py:298-302](../backend/tests/test_evaluator.py#L298-L302)), lookup
+   ([test_db.py:50-62](../backend/tests/test_db.py#L50-L62)) and the equity table
+   ([test_calling_range.py:76-80](../backend/tests/test_calling_range.py#L76-L80)). The factor
+   multiplies every tested limit; CI sets it to 3.
+5. The shared `app` fixture passes `"OPENROUTER_API_KEY": ""` ([test_api.py:27](../backend/tests/test_api.py#L27)),
+   which overrides the environment, and the tests that need a key use `keyed_client` with
+   `requests.post` patched. `test_analyze_is_rate_limited` builds its own app without the override,
+   so it reads your shell's key.
 </details>
 
 ---
 
 ## Recap
 
-- 93 backend tests in 10 files (one per module, plus CLI, API and stories) and 6 frontend tests;
-  the backend suite runs in about 2 s.
-- `tests/__init__.py` is the whole pytest configuration: it puts `backend/` on `sys.path`.
-- Fixtures share expensive objects per module; `monkeypatch` fakes the keyboard and removes the
-  API key; `capsys` captures output; `-s` shows the story narratives.
-- Two budgets are asserted with wide margins (lookup, equity table) and met. Hand evaluation
-  (2.5–5.3 µs) and the CLI (0.11–0.22 s) miss theirs and are untested.
-- Known gaps: `Hand` hashing, tie-breaks, a malformed DB, OpenRouter, HTTP errors, the CLI
-  fallback, `App.jsx`, and a silently skipped key.
+- 159 backend tests in 11 files (one per module, plus CLI, API and stories) and 18 frontend tests
+  in 3 files; the backend suite runs in about 2 s.
+- `tests/__init__.py` puts `backend/` on `sys.path`; `pyproject.toml` adds only `testpaths`.
+- Fixtures share expensive objects per module; `create_app(config=…)` gives each test the app it
+  needs; `monkeypatch` fakes the keyboard and OpenRouter; `capsys` captures output; `-s` shows the
+  story narratives.
+- All five AGENTS.md budgets are met. Three are asserted, scaled by `PERF_BUDGET_FACTOR`; the CLI
+  (now < 300 ms) and memory budgets are not.
+- ruff, strict mypy, oxlint and the course checker run in CI with the tests.
+- Known gaps: one test that reads your shell's API key, the CLI fallback, two untested budgets, a
+  single-shot timing test, and no coverage number.
 - New test: find the current behaviour by running code, pin it next to the module's other tests,
   and use `xfail(strict=True)` for a known bug you are not fixing yet.
 

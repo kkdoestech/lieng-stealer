@@ -1,7 +1,7 @@
 # Lesson 04 — The generator and `winrates.json`
 
 > **Goal:** understand how `generator.py` plays every one of the 455 hand classes against every
-> possible opponent hand, why that takes a minute and not a week, and what each field of the
+> possible opponent hand, why that takes seconds and not a week, and what each field of the
 > resulting `winrates.json` means.
 > **Files:** [`backend/src/generator.py`](../backend/src/generator.py),
 > [`backend/data/winrates.json`](../backend/data/winrates.json),
@@ -35,12 +35,12 @@ committed to git, so a fresh clone works without running the generator at all.
 | # | Location | What to look for |
 |---|----------|------------------|
 | 1 | [generator.py:1-7](../backend/src/generator.py#L1-L7) | The docstring: exact enumeration and Monte Carlo, both supported. |
-| 2 | [generator.py:28-97](../backend/src/generator.py#L28-L97) | `compute_hand_equity`: one hand class against its opponents. |
-| 3 | [generator.py:100-104](../backend/src/generator.py#L100-L104) | `_worker_task`: a tiny wrapper that exists for the process pool. |
-| 4 | [generator.py:107-149](../backend/src/generator.py#L107-L149) | `generate_winrates_database`: 455 tasks, in parallel, then one JSON file. |
-| 5 | [generator.py:152-207](../backend/src/generator.py#L152-L207) | The command line: `--monte-carlo`, `--samples`, `--output`, `--workers`. |
+| 2 | [generator.py:32-106](../backend/src/generator.py#L32-L106) | `compute_hand_equity`: one hand class against its opponents. |
+| 3 | [generator.py:109-113](../backend/src/generator.py#L109-L113) | `_worker_task`: a tiny wrapper that exists for the process pool. |
+| 4 | [generator.py:116-161](../backend/src/generator.py#L116-L161) | `generate_winrates_database`: 455 tasks, in parallel, then one JSON file. |
+| 5 | [generator.py:164-228](../backend/src/generator.py#L164-L228) | The command line: `--exact` / `--monte-carlo` (one or the other), `--samples`, `--output`, `--workers`. |
 | 6 | [winrates.json](../backend/data/winrates.json) | Open it and read the first two records. Don't edit it by hand. |
-| 7 | [test_generator.py](../backend/tests/test_generator.py) | 7 tests: exact values, invariants, the schema, the CLI defaults. |
+| 7 | [test_generator.py](../backend/tests/test_generator.py) | 12 tests: exact values, invariants, the schema, the CLI defaults, and five safety tests. |
 
 ---
 
@@ -61,11 +61,13 @@ A tie splits the pot, so it counts as half a win. **Equity** is the number the E
 actually call".
 
 How many opponent hands are there? You hold 3 of the 52 cards, so the opponent picks 3 of the other
-49: C(49, 3) = **18,424** hands. That number appears everywhere in this lesson and the next two.
+49: C(49, 3) = **18,424** hands. That number appears everywhere in this lesson and the next two. In
+the code it is `OPPONENT_COMBINATIONS`, computed once in `hands.py` as `math.comb(52 - 3, 3)`
+([hands.py:34](../backend/src/hands.py#L34), lesson 03).
 
 ### 2. One hand against every opponent: exact enumeration
 
-📍 [`backend/src/generator.py:48-70`](../backend/src/generator.py#L48-L70)
+📍 [`backend/src/generator.py:57-79`](../backend/src/generator.py#L57-L79)
 ```python
     hero_cards = get_representative_cards(canonical_hand.canonical_id)
     hero_score = canonical_hand.score
@@ -81,7 +83,7 @@ How many opponent hands are there? You hold 3 of the 52 cards, so the opponent p
     if exact:
         # Full combinatorial enumeration: C(49, 3) = 18,424 opponent hands
         opponent_combinations = itertools.combinations(remaining_deck, 3)
-        total_showdowns = 18424
+        total_showdowns = OPPONENT_COMBINATIONS
         for opp_cards in opponent_combinations:
             opp_score = evaluate_hand(opp_cards)
             if hero_score > opp_score:
@@ -95,13 +97,13 @@ How many opponent hands are there? You hold 3 of the 52 cards, so the opponent p
 Read it in three steps:
 
 1. **Pick concrete cards for the class.** `get_representative_cards("Q-K-A")` returns `Q♠ K♥ A♦`
-   ([hands.py:119](../backend/src/hands.py#L119), lesson 03). `canonical_hand.score` is the
+   ([hands.py:136](../backend/src/hands.py#L136), lesson 03). `canonical_hand.score` is the
    `HandScore` computed once when the class was built.
 2. **Build the 49-card deck the opponent draws from.** Cards are frozen dataclasses (lesson 01), so
    they hash and `c not in hero_set` is a fast set lookup.
 3. **Walk every opponent hand.** `itertools.combinations(remaining_deck, 3)` yields each unordered
    3-card hand exactly once. `HandScore` defines `>` and `==` on its `score_tuple`
-   ([evaluator.py:256-279](../backend/src/evaluator.py#L256-L279), lesson 02), so one comparison
+   ([evaluator.py:263-286](../backend/src/evaluator.py#L263-L286), lesson 02), so one comparison
    decides each showdown.
 
 **Worked example: Q-K-A.** Counting by hand, without rounding:
@@ -117,8 +119,9 @@ Read it in three steps:
 saw in lesson 07's worked example.
 
 For the whole file the generator does 455 × 18,424 = **8,382,920** evaluations. One class takes
-about 0.1 s on the machine this course was written on (4 cores). A full run with one worker took
-57 s. Your timings will differ.
+about 0.02 s on the machine this lesson was re-run on, and a full run with one worker took 10 s.
+Before the evaluator's 455-entry score table (lesson 02) the same run took 57 s: almost all the
+time is spent in `evaluate_hand`. Your timings will differ.
 
 ### 3. Why one representative per class is enough
 
@@ -138,14 +141,14 @@ lesson 03 pay off here: 455 runs instead of 22,100, about 49 times less work.
 
 ### 4. The other branch: Monte Carlo
 
-📍 [`backend/src/generator.py:71-82`](../backend/src/generator.py#L71-L82)
+📍 [`backend/src/generator.py:80-91`](../backend/src/generator.py#L80-L91)
 ```python
     else:
         # Monte Carlo random sampling
         total_showdowns = samples
         for _ in range(samples):
-            opp_cards = random.sample(remaining_deck, 3)
-            opp_score = evaluate_hand(opp_cards)
+            sampled = rng.sample(remaining_deck, 3)
+            opp_score = evaluate_hand(sampled)
             if hero_score > opp_score:
                 wins += 1
             elif hero_score == opp_score:
@@ -155,7 +158,7 @@ lesson 03 pay off here: 455 runs instead of 22,100, about 49 times less work.
 ```
 
 Instead of visiting all 18,424 opponents, Monte Carlo draws `samples` random ones and hopes they
-are representative. `random.sample(remaining_deck, 3)` picks 3 distinct cards. The same opponent can
+are representative. `rng.sample(remaining_deck, 3)` picks 3 distinct cards. The same opponent can
 come up twice across iterations, which is fine for an estimate.
 
 How good is the estimate? Here is K-Q-3 (true equity 0.36) with `seed=7`:
@@ -174,15 +177,26 @@ technique you need when the full space is too big (5-card poker against several 
 
 The test pins a sanity bound instead of a value: Q-K-A with 5,000 samples and `seed=42` gives
 0.9973, within 0.015 of the exact 0.9969
-([test_generator.py:82-88](../backend/tests/test_generator.py#L82-L88)).
+([test_generator.py:78-84](../backend/tests/test_generator.py#L78-L84)).
 
-The seed is set at the top of the function:
-[generator.py:45-46](../backend/src/generator.py#L45-L46) calls `random.seed(seed)`. That reseeds
-Python's **global** random generator, which is a weak spot (see below).
+Where does `rng` come from? The top of the function:
+
+📍 [`backend/src/generator.py:53-55`](../backend/src/generator.py#L53-L55)
+```python
+    if not exact and samples < 1:
+        raise ValueError(f"Monte Carlo needs at least 1 sample, got {samples}.")
+    rng = random.Random(seed)
+```
+
+`random.Random(seed)` is a **private** generator that belongs to this one call. Until October 2026
+the function called `random.seed(seed)` instead, which reseeds Python's global generator, the one
+every other module shares (weak spot 3). A private `Random(42)` produces exactly the same sequence
+as `random.seed(42)` did, so every Monte Carlo number in this lesson stayed the same. The first two
+lines reject `samples=0`, which would otherwise divide by zero further down.
 
 ### 5. The record: seven fields
 
-📍 [`backend/src/generator.py:84-97`](../backend/src/generator.py#L84-L97)
+📍 [`backend/src/generator.py:93-106`](../backend/src/generator.py#L93-L106)
 ```python
     win_rate = wins / total_showdowns
     tie_rate = ties / total_showdowns
@@ -223,11 +237,13 @@ Every one of the 455 records has one of those three tie rates.
 **Rounding has a cost.** Each rate is rounded on its own, so the three do not always add up to 1.
 In the real file, 151 of the 455 records sum to 1.0001. And `equity` is rounded from the raw counts,
 so in 314 records it differs from `win_rate + 0.5 × tie_rate` by up to 0.0001. The tests allow
-0.001 for both ([test_generator.py:74-80](../backend/tests/test_generator.py#L74-L80)).
+0.001 for both ([test_generator.py:70-76](../backend/tests/test_generator.py#L70-L76)), and the
+database loader, which now checks both sums, allows 0.0002 ([db.py:20-21](../backend/src/db.py#L20-L21),
+lesson 05).
 
 ### 6. All 455 classes, in parallel
 
-📍 [`backend/src/generator.py:124-140`](../backend/src/generator.py#L124-L140)
+📍 [`backend/src/generator.py:133-149`](../backend/src/generator.py#L133-L149)
 ```python
     canonical_hands = generate_all_canonical_hands()
     num_workers = workers or os.cpu_count() or 1
@@ -261,7 +277,7 @@ so in 314 records it differs from `win_rate + 0.5 × tie_rate` by up to 0.0001. 
 
 Why does `_worker_task` exist at all, instead of passing `compute_hand_equity` with a `lambda`?
 
-📍 [`backend/src/generator.py:100-104`](../backend/src/generator.py#L100-L104)
+📍 [`backend/src/generator.py:109-113`](../backend/src/generator.py#L109-L113)
 ```python
 def _worker_task(args: tuple[CanonicalHand, bool, int, int | None]) -> tuple[str, dict[str, Any]]:
     """Worker task wrapper for ProcessPoolExecutor."""
@@ -278,17 +294,33 @@ also returns the canonical ID next to the result, so the parent knows which reco
 
 ### 7. Writing the file
 
-📍 [`backend/src/generator.py:142-149`](../backend/src/generator.py#L142-L149)
+📍 [`backend/src/generator.py:151-161`](../backend/src/generator.py#L151-L161)
 ```python
-    # Ensure destination directory exists
+    # Write to a temporary file in the same folder, then rename it over the target: readers see
+    # either the old file or the complete new one, never a half-written file.
     out_file = Path(output_path)
     out_file.parent.mkdir(parents=True, exist_ok=True)
-
-    with open(out_file, "w", encoding="utf-8") as f:
-        json.dump(results, f, indent=2)
+    with tempfile.NamedTemporaryFile(
+        "w", encoding="utf-8", dir=out_file.parent, suffix=".tmp", delete=False
+    ) as tmp:
+        json.dump(results, tmp, indent=2)
+    os.replace(tmp.name, out_file)
 
     return results
 ```
+
+Opening the real file with `open(out_file, "w")`, as the code did until October 2026, empties it
+first: if the process died during `json.dump`, the app would find a truncated file (weak spot 5).
+Now the JSON goes to a randomly named `….tmp` file **in the same folder**, and `os.replace` renames
+it over the target in one step. A rename within one file system is atomic, so a reader sees either
+the old file or the complete new one. (`delete=False` keeps the temporary file after the `with`
+closes it, so it can be renamed.)
+
+Where is `out_file`? By default `DEFAULT_DB_PATH` from [paths.py](../backend/src/paths.py), the
+absolute path `backend/data/winrates.json` worked out from the location of `paths.py` itself, not
+from your current directory ([generator.py:119](../backend/src/generator.py#L119),
+[:200](../backend/src/generator.py#L200)). Run the generator from anywhere and it writes where the
+app reads.
 
 `indent=2` makes the file readable and diff-friendly: 455 records, 82,694 bytes. The order is the
 order of `generate_all_canonical_hands`, which is **multiset order, not strength order**. It starts
@@ -297,22 +329,24 @@ next to `"6-2-2"` (0 points, 0.0038). The file ends with `"Q-K-A", "A-A-Q", "K-K
 "A-A-K", "A-A-A"`. Never assume a position in this file means anything. Lesson 06 builds its own
 strength order.
 
-The exact run is deterministic. I regenerated it into a scratch path and compared it with the
-committed file: `cmp` reported them **byte-for-byte identical**. That one check proves the
-evaluator, the canonical classes and the generator still agree with the data the app serves.
+The exact run is deterministic. I regenerated it into a scratch path with the current code (one
+worker, 10 s) and compared it with the committed file: `cmp` reported them **byte-for-byte
+identical**. That one check proves that the rewritten evaluator, the canonical classes and the
+generator still agree with the data the app serves.
 
 ### 8. The command line
 
-📍 [`backend/src/generator.py:163-175`](../backend/src/generator.py#L163-L175)
+📍 [`backend/src/generator.py:183-196`](../backend/src/generator.py#L183-L196)
 ```python
-    parser.add_argument(
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
         "--exact",
         dest="exact",
         action="store_true",
         default=True,
         help="Run exact combinatorial enumeration over all C(49, 3) = 18,424 hands (default).",
     )
-    parser.add_argument(
+    mode.add_argument(
         "--monte-carlo",
         dest="exact",
         action="store_false",
@@ -323,22 +357,41 @@ evaluator, the canonical classes and the generator still agree with the data the
 Both flags write to the same `dest="exact"`. Exact is the default, and `--monte-carlo` flips it to
 `False`. Earlier versions defaulted to Monte Carlo and quietly produced a file that failed the
 tests, so the safe choice became the default
-([test_generator.py:118-124](../backend/tests/test_generator.py#L118-L124) pins that). The price is
-a flag that does nothing (weak spot 1). Run it as `python -m src.generator` from `backend/`: the
-`-m` form puts `backend/` on the import path, so `from src.evaluator import …` works.
+([test_generator.py:114-120](../backend/tests/test_generator.py#L114-L120) pins that). `--exact`
+on its own changes nothing, but it is now in a **mutually exclusive group**, so giving both flags is
+an error instead of "the last one wins":
+
+```
+$ python -m src.generator --exact --monte-carlo
+usage: generator.py [-h] [--samples SAMPLES] [--exact | --monte-carlo]
+                    [--output OUTPUT] [--workers WORKERS]
+generator.py: error: argument --monte-carlo: not allowed with argument --exact
+```
+
+`--samples` and `--workers` go through `_positive_int`
+([generator.py:164-169](../backend/src/generator.py#L164-L169)), so `--samples 0` is also a usage
+error (exit code 2): `argument --samples: must be at least 1, got 0`. Run it as
+`python -m src.generator` from `backend/`: the `-m` form puts `backend/` on the import path, so
+`from src.evaluator import …` works.
 
 ### 9. What the tests pin
 
 | Test | Pins |
 |------|------|
-| [test_aaa_exact_equity :37](../backend/tests/test_generator.py#L37) | A-A-A: equity 1.0, no ties, `samples == 18424`, `"SAP"` |
-| [test_equity_hierarchy_monotonicity :48](../backend/tests/test_generator.py#L48) | A-A-A > 2-2-2 > Q-K-A > A-2-3 > K-K-Q (Đĩ) |
-| [test_rate_invariants :67](../backend/tests/test_generator.py#L67) | rates sum to 1 and equity = win + ½ tie, within 0.001 |
-| [test_monte_carlo_convergence :82](../backend/tests/test_generator.py#L82) | 5,000 samples land within 0.015 of exact |
-| [test_generated_json_database_schema :90](../backend/tests/test_generator.py#L90) | the committed file: 455 keys, 7 fields, `samples == 18424` everywhere |
-| [:118](../backend/tests/test_generator.py#L118), [:121](../backend/tests/test_generator.py#L121) | exact by default, Monte Carlo only on request |
+| [test_aaa_exact_equity :34](../backend/tests/test_generator.py#L34) | A-A-A: equity 1.0, no ties, `samples == 18424`, `"SAP"` |
+| [test_equity_hierarchy_monotonicity :45](../backend/tests/test_generator.py#L45) | A-A-A > 2-2-2 > Q-K-A > A-2-3 > K-K-Q (Đĩ) |
+| [test_rate_invariants :64](../backend/tests/test_generator.py#L64) | rates sum to 1 and equity = win + ½ tie, within 0.001 |
+| [test_monte_carlo_convergence :78](../backend/tests/test_generator.py#L78) | 5,000 samples land within 0.015 of exact |
+| [test_generated_json_database_schema :86](../backend/tests/test_generator.py#L86) | the committed file: 455 keys, 7 fields, `samples == 18424` everywhere |
+| [:114](../backend/tests/test_generator.py#L114), [:117](../backend/tests/test_generator.py#L117) | exact by default, Monte Carlo only on request |
+| [:124](../backend/tests/test_generator.py#L124), [:128](../backend/tests/test_generator.py#L128) | `--exact --monte-carlo` and `--samples 0` are usage errors |
+| [:132](../backend/tests/test_generator.py#L132) | the default output is the absolute `DEFAULT_DB_PATH` |
+| [:138](../backend/tests/test_generator.py#L138) | a seeded Monte Carlo run leaves the global `random` state alone |
+| [:147](../backend/tests/test_generator.py#L147) | a real write (Monte Carlo, 5 samples, one worker) leaves one complete file and no `.tmp` |
 
 The schema test reads the real file, so it fails if someone commits a Monte Carlo file by mistake.
+`test_rate_invariants` lists six hands, and since October 2026 it asserts that each is a real
+canonical id instead of skipping unknown ones (weak spot 6).
 
 ---
 
@@ -353,7 +406,7 @@ arguments into bytes, ships them through a pipe, and unpickles them on the other
   name, so it cannot be sent.
 - On Linux the default start method is `fork` (the worker starts as a copy of the parent). On
   Windows and macOS it is `spawn` (a fresh Python that re-imports your module). That is why
-  [generator.py:206](../backend/src/generator.py#L206) has an `if __name__ == "__main__":` guard:
+  [generator.py:227](../backend/src/generator.py#L227) has an `if __name__ == "__main__":` guard:
   without it, every spawned worker would start the generator again.
 
 ## 💡 Concept: how wrong is a Monte Carlo estimate?
@@ -370,8 +423,8 @@ For K-Q-3 that is 0.048 at 100 samples and 0.0048 at 10,000, as in the table in 
 
 ## Design decisions
 
-- **Exact by default.** The space is small (18,424 opponents), so the true value costs about a
-  minute of CPU, once. An estimate would add noise to every downstream number and break the
+- **Exact by default.** The space is small (18,424 opponents), so the true value costs about ten
+  seconds of CPU, once. An estimate would add noise to every downstream number and break the
   exact cross-check in lesson 06.
 - **One representative per class.** Suit symmetry makes it exact, not an approximation, and it
   cuts the work by about 49 times.
@@ -381,45 +434,59 @@ For K-Q-3 that is 0.048 at 100 samples and 0.0048 at 10,000, as in the table in 
 - **JSON, not a binary format.** 83 KB, readable, diff-able, and loads in a few milliseconds.
 - **Processes over threads.** It is CPU-bound Python, so only processes help. Tasks are big
   (18,424 evaluations each), so the cost of pickling them is negligible.
+- **Write to a temporary file, then rename.** The app may be reading `winrates.json` at any moment
+  (a restart, a test run); an atomic rename means it never sees half a file.
 
 ---
 
 ## ⚠️ Weak spots
 
-1. **`--exact` does nothing.** [generator.py:163-169](../backend/src/generator.py#L163-L169):
-   `store_true` with `default=True` can never change the value. Worse, the last flag wins:
-   `--monte-carlo --exact` gives exact, `--exact --monte-carlo` gives Monte Carlo. *Fix:* drop
-   `--exact`, or put both flags in `parser.add_mutually_exclusive_group()`.
-2. **Hard-coded 18,424.** [generator.py:62](../backend/src/generator.py#L62) states the count
-   instead of computing it. It is correct today, but if the deck or hand size ever changed, every
-   rate would be silently wrong. *Fix:* `math.comb(len(remaining_deck), 3)`, or divide by
-   `wins + ties + losses` (exercise 4).
-3. **Global random state.** [generator.py:45-46](../backend/src/generator.py#L45-L46) calls
-   `random.seed(seed)`, which reseeds the generator every other module shares. AGENTS.md §2.2
-   forbids global mutable state. I checked: after one Monte Carlo call with `seed=1`, a caller's
-   own `random.seed(123); random.random()` sequence no longer continues where it was.
-   *Fix:* `rng = random.Random(seed)` and `rng.sample(...)` (exercise 5).
-4. **Output relative to the current directory.** The default `output_path="data/winrates.json"`
-   ([generator.py:110](../backend/src/generator.py#L110)) is resolved from wherever you run the
-   command. `db.py` has a fallback to `backend/` (lesson 05), the generator doesn't. Run it from
-   another directory (with `PYTHONPATH=backend`) and you get a second `data/winrates.json` there,
-   while the app keeps reading the old one. *Fix:* default to
-   `Path(__file__).resolve().parent.parent / "data" / "winrates.json"`.
-5. **Non-atomic write.** [generator.py:146-147](../backend/src/generator.py#L146-L147) opens the
-   real file for writing, which empties it first. If the process dies during `json.dump`, the file
-   is truncated, and an app starting at that moment fails to load it. *Fix:* write to a `.tmp`
-   file next to it, then `os.replace` it into place (exercise 6).
-6. **A test that silently skips a hand.**
-   [test_generator.py:69-72](../backend/tests/test_generator.py#L69-L72) lists `"10-J-K"`, but the
-   canonical ID is `"K-J-10"` (descending, lesson 03), so `continue` skips it without a word. The
-   test checks 5 hands while claiming 6. *Fix:* use `"K-J-10"` and replace the `continue` with an
-   `assert` (exercise 3).
-7. **Rounded rates don't add up.** 151 records sum to 1.0001 (section 5). Harmless for the app,
-   which only reads `equity`, but surprising if you validate the file. *Fix:* store the raw counts
-   too, or round only `equity`.
-8. **Small things.** `Card` is imported but unused ([generator.py:20](../backend/src/generator.py#L20)).
-   `Any` appears in three signatures and one variable although AGENTS.md §2.1 asks for a justification. A `TypedDict`
-   for the record would document the 7 fields in one place.
+Eight weak spots were listed here when the course was written. Commit `bba5e63` ("fix(core)",
+October 2026) fixed six of them. Two small ones remain, and the atomic write brought a new one.
+
+1. ✅ **Fixed: `--exact` did nothing, and the last flag won.** `--monte-carlo --exact` gave exact and
+   `--exact --monte-carlo` gave Monte Carlo. Now both flags are in a mutually exclusive group
+   ([generator.py:183-196](../backend/src/generator.py#L183-L196)), so giving both is a usage error.
+   Pinned by `test_exact_and_monte_carlo_are_mutually_exclusive`
+   ([test_generator.py:124-126](../backend/tests/test_generator.py#L124-L126)).
+2. ✅ **Fixed: a hard-coded 18,424.** The count was typed out in the generator (and 22,100 in two
+   other modules). Now it is `OPPONENT_COMBINATIONS` from `hands.py`
+   ([generator.py:71](../backend/src/generator.py#L71)), computed with `math.comb` and pinned by
+   [test_hands.py:127-131](../backend/tests/test_hands.py#L127-L131). Exercise 4 shows how far one
+   wrong constant would reach.
+3. ✅ **Fixed: global random state.** `random.seed(seed)` reseeded the generator every module shares,
+   against AGENTS.md §2.2. Now each call has its own `random.Random(seed)`
+   ([generator.py:55](../backend/src/generator.py#L55)). Pinned by
+   `test_seeded_monte_carlo_leaves_global_random_untouched`
+   ([test_generator.py:138-145](../backend/tests/test_generator.py#L138-L145)).
+4. ✅ **Fixed: output relative to the current directory.** The default was the relative
+   `"data/winrates.json"`, so running from another folder wrote a second file there while the app
+   kept reading the old one. Now the default is the absolute `DEFAULT_DB_PATH`
+   ([paths.py:8-9](../backend/src/paths.py#L8-L9)), shared with `db.py` and the CLI. Pinned by
+   [test_generator.py:132-136](../backend/tests/test_generator.py#L132-L136).
+5. ✅ **Fixed: a non-atomic write**, which truncated the real file before writing it. Now it writes a
+   temporary file and renames it ([generator.py:151-159](../backend/src/generator.py#L151-L159)),
+   pinned by [test_generator.py:147-153](../backend/tests/test_generator.py#L147-L153).
+6. ✅ **Fixed: a test that silently skipped a hand.** `test_rate_invariants` listed `"10-J-K"`, which
+   is not a canonical id (it is `"K-J-10"`), and `continue`d past it. Now it uses `"K-J-10"` and
+   asserts every key exists ([test_generator.py:66-68](../backend/tests/test_generator.py#L66-L68)).
+   Exercise 3 puts the typo back.
+7. **The new file is private to its owner, and a failed write leaves litter.**
+   `NamedTemporaryFile` always creates its file with mode `0600`, and `os.replace` keeps that mode.
+   So a regenerated `winrates.json` is `-rw-------` (I checked: the committed file is `-rw-rw-r--`,
+   a fresh run gives `-rw-------`, whatever your umask). Harmless on your laptop; on a server where
+   the app runs as a different user than the one who regenerated the data, the app can no longer read
+   it. And if `json.dump` fails half-way, the `….tmp` file stays in `data/`. Git only records the
+   executable bit, so it won't show the change. *Fix:* `os.chmod(tmp.name, 0o644)` before the
+   rename, and delete the temporary file when the dump raises (exercise 6).
+8. **Rounded rates don't add up.** 151 records sum to 1.0001 (section 5). Harmless for the app,
+   which only reads `equity`, and the database loader tolerates it, but surprising if you validate
+   the file yourself. *Fix:* store the raw counts too, or round only `equity`.
+9. **Small things.** The unused `Card` import is gone (`ruff` now checks for unused imports), but
+   `Any` still appears in three signatures and one variable although AGENTS.md §2.1 asks for a
+   justification. A `TypedDict` for the record would document the 7 fields in one place. And the
+   `samples < 1` check raises a plain `ValueError` ([generator.py:53-54](../backend/src/generator.py#L53-L54)),
+   not a `LiengError` (lesson 01).
 
 ---
 
@@ -434,8 +501,8 @@ python -m pytest tests/test_generator.py -q
 Expected output (the timing varies):
 
 ```
-.......                                                                  [100%]
-7 passed in 1.03s
+............                                                             [100%]
+12 passed in 0.33s
 ```
 
 Peek at the file without dumping it:
@@ -479,7 +546,7 @@ exact 0.36
 ```
 
 Regenerate the whole database **into a scratch file** (never over `data/winrates.json`) and
-compare it with the committed one. With one worker this took 57 s here; drop `--workers 1` to use
+compare it with the committed one. With one worker this took 10 s here; drop `--workers 1` to use
 every core.
 
 ```bash
@@ -493,6 +560,19 @@ Starting equity generation in Exact Combinatorial Enumeration across 1 workers..
 Successfully generated database for 455 canonical hands -> /tmp/winrates_check.json
 IDENTICAL
 ```
+
+Then look at the permissions of the two files (weak spot 7):
+
+```bash
+ls -l data/winrates.json /tmp/winrates_check.json
+```
+
+```
+-rw-rw-r-- 1 you you 82694 … data/winrates.json
+-rw------- 1 you you 82694 … /tmp/winrates_check.json
+```
+
+(The first line depends on your umask, e.g. `-rw-r--r--`; the second is always `-rw-------`.)
 
 ---
 
@@ -511,48 +591,52 @@ Check with `python -c 'import json; print(json.load(open("data/winrates.json"))[
 </details>
 
 **🟢 2. Predict.** What `tie_rate` does 9-9-4 get, and what does
-`build_parser().parse_args(["--monte-carlo", "--exact"]).exact` return?
+`build_parser().parse_args(["--monte-carlo", "--exact"]).exact` do?
 
 <details><summary>Solution</summary>
 
 9-9-4 is a pair: the opponent needs both remaining 9s and one of three 4s, C(2,2) × 3 = 3 ties,
-so `3 / 18,424 = 0.0002`. The parse returns `True`: both flags share `dest="exact"`, and the last
-one wins. Check the second with
-`python -c 'from src.generator import build_parser; print(build_parser().parse_args(["--monte-carlo", "--exact"]).exact)'`.
+so `3 / 18,424 = 0.0002`. The parse doesn't return at all: the two flags are mutually exclusive, so
+argparse prints `error: argument --exact: not allowed with argument --monte-carlo` and exits with
+code 2 (`SystemExit`). Before October 2026 it returned `True`, because the last flag won. Check with
+`python -c 'from src.generator import build_parser; print(build_parser().parse_args(["--monte-carlo", "--exact"]).exact)'; echo $?`.
 </details>
 
-**🟡 3. Make the skipped hand count.** In
-[test_generator.py:69-72](../backend/tests/test_generator.py#L69-L72), change `"10-J-K"` to
-`"K-J-10"` and replace the two `if … continue` lines with `assert key in canonical_map, key`.
-Check with `python -m pytest tests/test_generator.py -q`.
+**🟡 3. Put the skipped hand back.** In
+[test_generator.py:66](../backend/tests/test_generator.py#L66) change `"K-J-10"` back to `"10-J-K"`,
+the typo the test used to have. Predict what happens now, then run
+`python -m pytest tests/test_generator.py -q`.
 
 <details><summary>Solution</summary>
 
-```python
-        test_keys = ["A-A-A", "Q-K-A", "A-2-3", "9-8-7", "K-K-Q", "K-J-10"]
-        for key in test_keys:
-            assert key in canonical_map, key
-```
-
-All 7 tests still pass, and now a typo in the list fails loudly instead of shrinking the test.
-Try `"10-J-K"` again with the assert to see the failure.
+`1 failed, 11 passed`, with `AssertionError: 10-J-K is not a canonical ID` from
+[test_generator.py:68](../backend/tests/test_generator.py#L68). Before the fix, the same typo was
+skipped by an `if key not in canonical_map: continue`, and the test quietly checked five hands
+while claiming six. A test that can silently do less than it says is worse than no test, because it
+looks like coverage. Undo with `git checkout -- backend/tests/test_generator.py`.
 </details>
 
-**🟡 4. Remove the magic number.** Replace `total_showdowns = 18424` at
-[generator.py:62](../backend/src/generator.py#L62) with a computed value. Check with
-`python -m pytest tests/test_generator.py -q`, then regenerate into `/tmp` and `cmp` as in 🧪.
+**🟡 4. How far does one constant reach?** In [hands.py:34](../backend/src/hands.py#L34) change
+`math.comb(52 - 3, 3)` to `math.comb(52, 3)`, a plausible slip. Predict which modules' tests fail and
+what Q-K-A's record looks like, then run `python -m pytest -q` and `compute_hand_equity` on Q-K-A.
 
 <details><summary>Solution</summary>
 
-Add `import math` and write `total_showdowns = math.comb(len(remaining_deck), 3)`. The tests still
-pass (7 passed), and since the value is still 18,424 the regenerated file is identical. An
-alternative that cannot disagree with the loop is to compute
-`total_showdowns = wins + ties + losses` after it.
+`5 failed, 154 passed`: the constant test in `test_hands.py`, three generator tests
+(`test_aaa_exact_equity`, `test_rate_invariants`, `test_monte_carlo_convergence`) and the
+calling-range test `test_card_removal_rows_sum_to_18424`, which compares against the same constant
+re-exported by `calling_range.py`. Q-K-A becomes
+`{'equity': 0.8311, 'win_rate': 0.8305, 'tie_rate': 0.0012, 'loss_rate': 0.0019, …, 'samples': 22100}`:
+the loop still counts 18,424 showdowns, but divides by 22,100, so the rates no longer sum to 1. One
+definition means one place to get wrong, and the tests that compare it with `math.comb(49, 3)`
+catch it immediately. A divisor that cannot disagree with the loop is `wins + ties + losses`. Undo
+with `git checkout -- backend/src/hands.py`.
 </details>
 
-**🟡 5. A private random generator.** Replace the global `random.seed(seed)` at
-[generator.py:45-46](../backend/src/generator.py#L45-L46) with an `rng` that belongs to the call.
-Check: `python -m pytest tests/test_generator.py -q` still passes, and this prints `True`:
+**🟡 5. Undo the private generator.** In `compute_hand_equity`, replace
+`rng = random.Random(seed)` ([generator.py:55](../backend/src/generator.py#L55)) with
+`random.seed(seed)` and `rng.sample(…)` ([:84](../backend/src/generator.py#L84)) with
+`random.sample(…)`. Predict which tests fail, then run `python -m pytest -q` and this probe:
 
 ```bash
 python -c '
@@ -568,40 +652,64 @@ print(a == b)
 
 <details><summary>Solution</summary>
 
-```python
-    rng = random.Random(seed)
-    ...
-            opp_cards = rng.sample(remaining_deck, 3)
-```
-
-Before the change the command prints `False`; after, `True`. `random.Random(42)` produces the same
-sequence as `random.seed(42)`, so the convergence test still gets 0.9973.
+`1 failed, 158 passed`: only `test_seeded_monte_carlo_leaves_global_random_untouched`, and the probe
+prints `False` (with the real code it prints `True`). The Monte Carlo numbers themselves don't
+change, because `random.Random(7)` and `random.seed(7)` produce the same sequence: the convergence
+test still gets 0.9973. The bug is in what the function does to *other* code's random numbers.
+Undo with `git checkout -- backend/src/generator.py`.
 </details>
 
-**🔴 6. Atomic write, with a test.** Make `generate_winrates_database` write to a temporary file
-next to the target and move it into place. Add a test that runs a tiny Monte Carlo database into
-pytest's `tmp_path` and checks that only the final file is left. Check with
-`python -m pytest tests/test_generator.py -q`.
+**🔴 6. Keep the file readable, and clean up after a failed write (weak spot 7).** Write two tests
+first and watch them fail: one that a written file is readable by group and others, and one that a
+write whose `json.dump` raises leaves no file behind. Then fix `generate_winrates_database`.
 
 <details><summary>Solution</summary>
 
-```python
-    tmp_file = out_file.with_name(out_file.name + ".tmp")
-    with open(tmp_file, "w", encoding="utf-8") as f:
-        json.dump(results, f, indent=2)
-    os.replace(tmp_file, out_file)
-```
+The tests, added to `tests/test_generator.py`:
 
 ```python
-def test_atomic_write_leaves_no_temp_file(tmp_path: Path) -> None:
-    out = tmp_path / "w.json"
-    generate_winrates_database(exact=False, samples=10, output_path=out, workers=1)
-    assert len(json.loads(out.read_text())) == 455
-    assert list(tmp_path.iterdir()) == [out]
+def test_written_file_is_readable_by_everyone(tmp_path: Path) -> None:
+    import stat
+
+    from src.generator import generate_winrates_database
+
+    out = tmp_path / "winrates.json"
+    generate_winrates_database(exact=False, samples=5, output_path=out, workers=1)
+    assert stat.S_IMODE(out.stat().st_mode) & 0o044 == 0o044
+
+
+def test_failed_write_leaves_no_temp_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from src import generator
+
+    def broken_dump(*args: object, **kwargs: object) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(generator.json, "dump", broken_dump)
+    with pytest.raises(OSError):
+        generator.generate_winrates_database(exact=False, samples=5, output_path=tmp_path / "w.json", workers=1)
+    assert list(tmp_path.iterdir()) == []
 ```
 
-8 passed. `workers=1` keeps the test fast and avoids starting processes. `os.replace` is atomic
-on the same file system: a reader sees either the old file or the new one, never half of one.
+Before the fix: `2 failed, 12 passed` (`assert (384 & 36) == 36`, i.e. mode `0o600`, and a leftover
+`tmp….tmp`). The fix:
+
+```python
+    with tempfile.NamedTemporaryFile(
+        "w", encoding="utf-8", dir=out_file.parent, suffix=".tmp", delete=False
+    ) as tmp:
+        try:
+            json.dump(results, tmp, indent=2)
+        except BaseException:
+            tmp.close()
+            os.unlink(tmp.name)
+            raise
+    os.chmod(tmp.name, 0o644)  # NamedTemporaryFile creates the file as 0600
+    os.replace(tmp.name, out_file)
+```
+
+`161 passed`, and `ruff` and `mypy` stay clean. The test checks only the "readable by others" bits,
+so it also passes on Windows, where `chmod` can only toggle read-only. Undo with
+`git checkout -- backend/src/generator.py backend/tests/test_generator.py`.
 </details>
 
 ---
@@ -632,7 +740,7 @@ on the same file system: a reader sees either the old file or the new one, never
 ## Recap
 
 - The generator plays one representative of each of the 455 classes against all 18,424 opponent
-  hands: 8,382,920 evaluations, about a minute on one core, run once, offline.
+  hands: 8,382,920 evaluations, about ten seconds on one core, run once, offline.
 - Suit symmetry makes one representative exact, not an approximation.
 - `equity = (wins + ½ ties) / 18,424`. Tie rates are 27, 3 or 0 out of 18,424, depending on the
   class shape.
@@ -641,7 +749,9 @@ on the same file system: a reader sees either the old file or the new one, never
 - `ProcessPoolExecutor.map` runs tasks in parallel and keeps their order. Its function must be
   module-level, because it is pickled by name.
 - `winrates.json` has 455 records with 7 fields, in multiset order. An exact rerun is byte-identical.
-- Weak spots: a no-op `--exact`, a hard-coded 18,424, a global RNG seed, a cwd-relative output, a
-  non-atomic write, a test that skips `"10-J-K"`.
+- Fixed: exclusive `--exact`/`--monte-carlo`, `OPPONENT_COMBINATIONS` instead of 18,424, a private
+  `random.Random`, an absolute default output, an atomic write, a test that no longer skips a hand.
+  Still open: the new file is `0600` and a failed write leaves a `.tmp`, rates that sum to 1.0001,
+  and a few `Any`s.
 
 **Next:** [05 — The win-rate database](05-win-rate-db.md)

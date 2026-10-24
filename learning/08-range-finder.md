@@ -5,7 +5,7 @@
 > classes.
 > **Files:** [`backend/src/range_finder.py`](../backend/src/range_finder.py),
 > [`backend/tests/test_range_finder.py`](../backend/tests/test_range_finder.py), and its callers
-> [`app.py:196-198`](../backend/app.py#L196-L198) and [`cli.py:238-240`](../backend/src/cli.py#L238-L240).
+> [`app.py:330-360`](../backend/app.py#L330-L360) and [`cli.py:258-264`](../backend/src/cli.py#L258-L264).
 > **Time:** ~45 min. **Before this:** [07 — Expected value](07-expected-value.md).
 
 ---
@@ -37,13 +37,14 @@ here it is *your* profitable range.
 
 | # | Location | What to look for |
 |---|----------|------------------|
-| 1 | [range_finder.py:18-29](../backend/src/range_finder.py#L18-L29) | A constant and `HandEVRecord`, the row of the result. |
-| 2 | [range_finder.py:35-47](../backend/src/range_finder.py#L35-L47) | The constructor: a hidden `load()` and a strength map. |
-| 3 | [range_finder.py:49-101](../backend/src/range_finder.py#L49-L101) | `solve_range`: pick an equity source, score 455 classes, sort. |
-| 4 | [range_finder.py:103-112](../backend/src/range_finder.py#L103-L112) | `get_profitable_range`: a filter (used by tests only). |
-| 5 | [range_finder.py:114-134](../backend/src/range_finder.py#L114-L134) | `calculate_range_coverage`: combos, not classes. |
-| 6 | [app.py:196-233](../backend/app.py#L196-L233) | How the API summarises the records. |
-| 7 | [test_range_finder.py](../backend/tests/test_range_finder.py) | 6 tests: boundaries, monotonicity, the two models, tie order. |
+| 1 | [range_finder.py:17-29](../backend/src/range_finder.py#L17-L29) | A re-exported constant and `HandEVRecord`, the row of the result. |
+| 2 | [range_finder.py:35-51](../backend/src/range_finder.py#L35-L51) | The constructor: refuse an unloaded database, build a strength map. |
+| 3 | [range_finder.py:53-105](../backend/src/range_finder.py#L53-L105) | `solve_range`: pick an equity source, score 455 classes, sort. |
+| 4 | [range_finder.py:107-116](../backend/src/range_finder.py#L107-L116) | `get_profitable_range`: a filter (used by tests only). |
+| 5 | [range_finder.py:118-138](../backend/src/range_finder.py#L118-L138) | `calculate_range_coverage`: combos, not classes. |
+| 6 | [range_finder.py:141-161](../backend/src/range_finder.py#L141-L161) | `CategorySummary` and `category_breakdown()`: per-category totals for the API and the CLI. |
+| 7 | [app.py:330-376](../backend/app.py#L330-L376) | How the API summarises the records (`_solve_range`, `_top_hands_payload`). |
+| 8 | [test_range_finder.py](../backend/tests/test_range_finder.py) | 8 tests: boundaries, monotonicity, the two models, tie order, the loaded-database rule, category totals. |
 
 ---
 
@@ -71,27 +72,30 @@ model gives (random or calling range), `ev` comes from `calculate_ev` (lesson 07
 
 ### 2. Construction
 
-📍 [`backend/src/range_finder.py:42-47`](../backend/src/range_finder.py#L42-L47)
+📍 [`backend/src/range_finder.py:46-51`](../backend/src/range_finder.py#L46-L51)
 ```python
         if not db.is_loaded:
-            db.load()
+            raise DatabaseNotLoadedError("RangeFinder needs a loaded WinRateDB; call db.load() first.")
         self._db = db
         self._calling_model = calling_model
         # Showdown strength of each class, used to order hands whose EV and equity tie
         self._strength = {h.canonical_id: h.score.score_tuple for h in generate_all_canonical_hands()}
 ```
 
-- **The database is injected**, as lesson 05 promised. The calling-range model is optional: you
-  only need it for `RANGE`.
-- **A hidden load.** If you pass an unloaded database, the constructor quietly loads the default
-  `"data/winrates.json"` *into your object*. I checked: after `RangeFinder(WinRateDB())`, the
-  database you passed has `is_loaded == True` and 455 records. That is a side effect (weak spot 2).
+- **The database is injected, and it must already be loaded**, as lesson 05 promised. The
+  constructor never touches the filesystem: `RangeFinder(WinRateDB())` raises
+  `DatabaseNotLoadedError: RangeFinder needs a loaded WinRateDB; call db.load() first.`, and the
+  database you passed is still unloaded afterwards. Loading is the caller's job: `create_app()`
+  loads `DEFAULT_DB_PATH` ([app.py:124-125](../backend/app.py#L124-L125)), and the CLI builds
+  `WinRateDB(db_path)` ([cli.py:258](../backend/src/cli.py#L258)), whose constructor loads the
+  file. (An older version loaded a relative default path into your object here; see weak spot 2.)
+- The calling-range model is optional: you only need it for `RANGE`.
 - **`_strength`** maps each ID to its `score_tuple` (lesson 02), for breaking ties in the sort. Building
-  it means generating all 455 classes again: the whole constructor took 4.9 ms here.
+  it means generating all 455 classes again: the whole constructor took about 3 ms here.
 
 ### 3. `solve_range`, part 1: where does equity come from?
 
-📍 [`backend/src/range_finder.py:71-78`](../backend/src/range_finder.py#L71-L78)
+📍 [`backend/src/range_finder.py:75-82`](../backend/src/range_finder.py#L75-L82)
 ```python
         all_stats = self._db.all_items()
         records: list[HandEVRecord] = []
@@ -111,7 +115,7 @@ model gives (random or calling range), `ev` comes from `calculate_ev` (lesson 07
 
 ### 4. `solve_range`, part 2: score and sort
 
-📍 [`backend/src/range_finder.py:80-101`](../backend/src/range_finder.py#L80-L101)
+📍 [`backend/src/range_finder.py:84-105`](../backend/src/range_finder.py#L84-L105)
 ```python
         for cid, stats in all_stats.items():
             equity = range_equity[cid] if range_equity is not None else stats.equity
@@ -155,7 +159,7 @@ pins that. The 455 strength tuples are all different (lesson 06), so the order i
 repeatable.
 
 `reverse=True` applies to the whole tuple: highest EV first, then highest equity, then strongest.
-One full call took about 1.0 ms with `RANDOM` and 1.4 ms with `RANGE` here, well inside the
+One full call took about 1.0 ms with `RANDOM` and 1.5 ms with `RANGE` here, well inside the
 25 ms AGENTS.md §6 allows.
 
 ### 5. Why the profitable hands are always the top of the list
@@ -207,7 +211,7 @@ the next-stronger one (K-K-J 0.9612 just above K-K-Q 0.961). So "the profitable 
 
 ### 6. Coverage counts hands, not classes
 
-📍 [`backend/src/range_finder.py:129-134`](../backend/src/range_finder.py#L129-L134)
+📍 [`backend/src/range_finder.py:133-138`](../backend/src/range_finder.py#L133-L138)
 ```python
         if not profitable_records:
             return 0.0
@@ -231,26 +235,95 @@ be dealt should you raise?":
 The first two rows are close by luck. The last two show how wrong counting classes can be: Sáp is
 almost 3% of the classes and a quarter of a percent of the hands you will ever hold.
 
+`TOTAL_COMBINATIONS` is `math.comb(52, 3)`, computed once in
+[hands.py:33](../backend/src/hands.py#L33) and re-exported at
+[range_finder.py:17](../backend/src/range_finder.py#L17). The `import X as X` form tells `ruff` and
+`mypy` that the name is meant to be imported from this module too.
+
 Notice `if r.is_raise_profitable` inside the sum: the function filters again, so passing *all*
 455 records gives the same 84.65% (weak spot 5).
 
 ### 7. How the callers use the records
 
-📍 [`backend/app.py:196-198`](../backend/app.py#L196-L198)
+📍 [`backend/app.py:330-349`](../backend/app.py#L330-L349)
 ```python
-    records = range_finder.solve_range(pot, bet_size, fold_equity, params.opponent_model)
-    profitable_records = [r for r in records if r.is_raise_profitable]
-    coverage = range_finder.calculate_range_coverage(profitable_records)
+def _solve_range(services: Services, params: GameParams) -> tuple[list[HandEVRecord], Json]:
+    """Score all 455 classes; return the records (best first) and the summary payload."""
+    records = services.range_finder.solve_range(params.pot, params.bet_size, params.fold_equity, params.opponent_model)
+    profitable = [r for r in records if r.is_raise_profitable]
+    summary: Json = {
+        "pot": params.pot,
+        "bet_size": params.bet_size,
+        "fold_equity": params.fold_equity,
+        "opponent_model": params.opponent_model.value,
+        "final_pot": final_pot(params.pot, params.bet_size),
+        "pure_bluff_break_even_fold_equity": calculate_break_even_fold_equity(params.pot, params.bet_size, 0.0),
+        "total_canonical_classes": len(records),
+        "profitable_classes": len(profitable),
+        "total_combinations": TOTAL_COMBINATIONS,
+        "profitable_combinations": sum(r.multiplicity for r in profitable),
+        "range_coverage_percent": services.range_finder.calculate_range_coverage(profitable),
+        "highest_ev_hand": records[0].canonical_id if records else None,
+        "highest_ev_value": records[0].ev if records else None,
+        "threshold_hand": profitable[-1].canonical_id if profitable else None,
+        "threshold_ev_value": profitable[-1].ev if profitable else None,
 ```
 
-The API filters by itself instead of calling `get_profitable_range` (which would solve the range a
-second time). Then it sends the first 30 records as `top_hands`
-([app.py:211](../backend/app.py#L211)), the last profitable record as `threshold_hand`
-([app.py:231](../backend/app.py#L231)), and per-category totals built by `_category_breakdown`
-([app.py:118](../backend/app.py#L118)). Because the profitable records are a prefix of the EV
-order, `profitable_records[-1]` is the lowest-EV hand still worth raising: K-Q-4 in the range
-example above, not the weakest hand by strength. The CLI does the same at
-[cli.py:238-240](../backend/src/cli.py#L238-L240), and lesson 09 draws the result as a heat map.
+`_solve_range` is shared by `/api/solve`, `/api/range` and `/api/analyze` (lesson 10). It filters
+by itself instead of calling `get_profitable_range` (which would solve the range a second time).
+Because the profitable records are a prefix of the EV order, `profitable[-1]` is the lowest-EV hand
+still worth raising: K-Q-4 in the range example above, not the weakest hand by strength. For
+`P = B = 100,000`, `f = 0.35`, `opponent_model: "range"`, `/api/range` answers with (among
+other fields):
+
+```json
+"profitable_classes": 250,
+"profitable_combinations": 12060,
+"range_coverage_percent": 54.57,
+"highest_ev_hand": "A-A-A",
+"highest_ev_value": 165000.0,
+"threshold_hand": "K-Q-4",
+"threshold_ev_value": 420.0,
+```
+
+The rest of the summary is `category_breakdown` ([app.py:350-358](../backend/app.py#L350-L358)),
+one row per category, built by shared code in this module:
+
+📍 [`backend/src/range_finder.py:141-161`](../backend/src/range_finder.py#L141-L161)
+```python
+@dataclass(frozen=True)
+class CategorySummary:
+    """How many classes and combinations of one hand category exist, and how many are profitable."""
+    category: HandCategory
+    classes: int
+    combos: int
+    profitable_combos: int
+
+
+def category_breakdown(records: Sequence[HandEVRecord]) -> list[CategorySummary]:
+    """Summarize classes, combos, and profitable combos per hand category (strongest first)."""
+    breakdown = []
+    for category in sorted(HandCategory, reverse=True):
+        members = [r for r in records if r.category is category]
+        breakdown.append(CategorySummary(
+            category=category,
+            classes=len(members),
+            combos=sum(r.multiplicity for r in members),
+            profitable_combos=sum(r.multiplicity for r in members if r.is_raise_profitable),
+        ))
+    return breakdown
+```
+
+`sorted(HandCategory, reverse=True)` gives Sáp, Liêng, Đĩ, Điểm (lesson 02). In the range example
+every Sáp, Liêng and Đĩ combo is profitable and 11,096 of the 21,136 Điểm combos are.
+[test_range_finder.py:125-131](../backend/tests/test_range_finder.py#L125-L131) pins the class and
+combo totals (13/52, 12/768, 6/144, 424/21,136). This function used to live in `app.py`, with a
+second hand-written copy in `cli.py`; now both import it.
+
+Finally, `_top_hands_payload` ([app.py:363-376](../backend/app.py#L363-L376)) sends the first
+`TOP_HANDS_LIMIT = 30` records as `top_hands`, each with `showdown_equity` (the record's `equity`)
+and a `decision`. The CLI does the same filtering at
+[cli.py:261-264](../backend/src/cli.py#L261-L264), and lesson 09 draws the result as a heat map.
 
 ---
 
@@ -288,32 +361,46 @@ whole comparison, so every element is "biggest first".
 
 ## ⚠️ Weak spots
 
-1. **`TOTAL_COMBINATIONS` is defined twice.** [range_finder.py:18](../backend/src/range_finder.py#L18)
-   and [calling_range.py:24](../backend/src/calling_range.py#L24), and 22,100 also appears as a
-   literal in `app.py` and `cli.py` (lesson 10). *Fix:* define it once and import it (exercise 4).
-2. **The constructor loads the database as a side effect.**
-   [range_finder.py:42-43](../backend/src/range_finder.py#L42-L43) calls `db.load()` with the
-   relative default path and mutates the object it was given. It also defeats the guard in
-   `app.py` (lesson 10): a missing file fails here, at import time. *Fix:* raise
-   `DatabaseNotLoadedError` and let the caller decide (exercise 5).
+1. ✅ **Fixed: `TOTAL_COMBINATIONS` was defined twice.** `range_finder.py` and `calling_range.py`
+   each typed `22100`, and the literal also appeared in `app.py` and `cli.py`. Now it is
+   `math.comb(52, 3)` in one place, [hands.py:33](../backend/src/hands.py#L33); `range_finder.py:17`
+   and [calling_range.py:25](../backend/src/calling_range.py#L25) re-export it, and `app.py` and
+   `cli.py` import it. Pinned by `test_state_space_constants_are_computed`
+   ([test_hands.py:127-131](../backend/tests/test_hands.py#L127-L131)); exercise 4 shows what else
+   notices a wrong value.
+2. ✅ **Fixed: the constructor loaded the database as a side effect.** It used to call `db.load()`
+   with the relative default path and mutate the object it was given, so a missing file failed
+   inside `RangeFinder`, at import time. Now it raises `DatabaseNotLoadedError`
+   ([range_finder.py:46-47](../backend/src/range_finder.py#L46-L47)) and the caller loads: the app
+   factory fails fast with a `DatabaseError` if the file is missing (lesson 10). Pinned by
+   `test_requires_a_loaded_database`
+   ([test_range_finder.py:119-123](../backend/tests/test_range_finder.py#L119-L123)); exercise 5
+   puts the old line back.
 3. **`get_profitable_range` is used only by tests.**
-   [range_finder.py:103-112](../backend/src/range_finder.py#L103-L112): `app.py` and `cli.py`
+   [range_finder.py:107-116](../backend/src/range_finder.py#L107-L116): `app.py` and `cli.py`
    filter the records themselves. It is fine as a convenience, but it means the tests exercise a
    path production never takes.
-4. **Only the 455 real IDs can be sorted.** `_strength` comes from `generate_all_canonical_hands`
-   ([range_finder.py:47](../backend/src/range_finder.py#L47)), so a database with any other key
-   fails with `KeyError` at [range_finder.py:100](../backend/src/range_finder.py#L100). Lesson 05,
-   exercise 6 hits this with a fake database. Under `RANGE`, `range_equity[cid]` at
-   [:81](../backend/src/range_finder.py#L81) has the same problem. *Fix:* take the strength from
-   the injected data, or validate the key set once in `__init__`.
+4. **Only the 455 real IDs can be sorted (mostly fixed elsewhere).** `_strength` comes from
+   `generate_all_canonical_hands` ([range_finder.py:51](../backend/src/range_finder.py#L51)), so a
+   database with any other key would fail with `KeyError` at
+   [range_finder.py:104](../backend/src/range_finder.py#L104), and under `RANGE` at
+   `range_equity[cid]` ([:85](../backend/src/range_finder.py#L85)). A real `WinRateDB` can no longer
+   hold such a key: `load()` now refuses any file that is not exactly the 455 classes
+   ([db.py:163-176](../backend/src/db.py#L163-L176), lesson 05). Only a hand-made stand-in object
+   can still hit the `KeyError`. *Fix, if you want it here too:* check the key set once in
+   `__init__`.
 5. **`calculate_range_coverage` filters twice.** Its parameter is called `profitable_records`,
-   but [range_finder.py:132](../backend/src/range_finder.py#L132) re-checks
-   `is_raise_profitable`, and the `min`/`max` clamp can never change a sum of positive counts
-   below 22,100. Harmless, but it hides what the function expects. *Fix:* accept all records and
+   but [range_finder.py:136](../backend/src/range_finder.py#L136) re-checks
+   `is_raise_profitable`, and with a correct constant the `min`/`max` clamp can never change a
+   sum of positive counts below 22,100 (exercise 4 shows the one case where it hides a bug).
+   Harmless, but it hides what the function expects. *Fix:* accept all records and
    rename it, or drop the inner filter.
 6. **Nobody checks the inputs here.** `P`, `B` and `f` are validated only inside `calculate_ev`
    (lesson 07) on the first record, or by `equity_table` under `RANGE`, so the error message talks
-   about EV, not about the range. Minor, since `app.py` validates first.
+   about EV, not about the range. Minor, since `app.py` and `cli.py` validate first, and the error
+   is an `InvalidGameParamsError` either way. One leftover: `RANGE` without a calling-range model
+   still raises a bare `ValueError` ([range_finder.py:80-81](../backend/src/range_finder.py#L80-L81)),
+   not a project error type.
 
 ---
 
@@ -328,8 +415,8 @@ python -m pytest tests/test_range_finder.py -q
 Expected output (the timing varies):
 
 ```
-......                                                                   [100%]
-6 passed in 0.10s
+........                                                                 [100%]
+8 passed in 0.20s
 ```
 
 Both models with a pot-sized bet, with the last profitable hand and the first one out:
@@ -416,37 +503,47 @@ the EV-sorted list, which is what the code relies on. Check by comparing
 `{r.canonical_id for r in records if r.is_raise_profitable}` with `set(CallingRangeModel()._ids[:250])`.
 </details>
 
-**🟡 4. One constant.** Delete `TOTAL_COMBINATIONS` from
-[range_finder.py:18](../backend/src/range_finder.py#L18) and import it from `calling_range`
-instead. Will [test_range_finder.py:15](../backend/tests/test_range_finder.py#L15), which imports
-it from `range_finder`, still work? Check with `python -m pytest -q`.
+**🟡 4. Break the one constant.** Weak spot 1 was fixed by computing `TOTAL_COMBINATIONS` once in
+[hands.py:33](../backend/src/hands.py#L33). Make it wrong on purpose: `math.comb(52, 3) - 1`. Before
+you run `python -m pytest tests/test_range_finder.py tests/test_hands.py -q`, predict: which tests
+notice, and does `test_pure_fold_equity_100_percent` (coverage must be exactly 100.0) fail?
 
 <details><summary>Solution</summary>
 
-```python
-from src.calling_range import TOTAL_COMBINATIONS, CallingRangeModel, OpponentModel
+```
+FAILED tests/test_hands.py::TestCanonicalHandSafety::test_state_space_constants_are_computed
+ERROR tests/test_range_finder.py::TestOpponentModels::test_profitable_range_respects_opponent_model
+ERROR tests/test_range_finder.py::TestOpponentModels::test_equal_ev_hands_are_ordered_strongest_first
+1 failed, 13 passed, 2 errors in 0.14s
 ```
 
-and remove `Final` from the `typing` import. The test import still works: a name imported into a
-module is an attribute of that module, so `from src.range_finder import TOTAL_COMBINATIONS` finds
-it. (The test never uses it, so it is an unused import there anyway.) All tests pass.
+The two errors happen while building the `finder_with_model` fixture:
+`CallingRangeModel()` now checks that its classes cover every hand and stops with
+`LiengError: The calling-range model needs classes covering all 22099 hands.` The coverage test
+**passes**: 22,100 / 22,099 × 100 is 100.0045, and the `min(100.0, …)` clamp in
+`calculate_range_coverage` rounds it back to 100.0. So the clamp that weak spot 5 calls useless
+does matter in one case: it hides a bug. Because there is one constant, every user of it was wrong
+together, and the calling-range check caught it. Undo it with `git checkout -- backend/src/hands.py`.
 </details>
 
-**🟡 5. No hidden load.** Replace [range_finder.py:42-43](../backend/src/range_finder.py#L42-L43)
-with a `DatabaseNotLoadedError` (import it from `src.exceptions`). Which tests break? What would
-change in `app.py` if `data/winrates.json` were missing?
+**🟡 5. Put the hidden load back.** Weak spot 2 was fixed at
+[range_finder.py:46-47](../backend/src/range_finder.py#L46-L47). Replace the `raise` line with the
+old `db.load()`. Which test fails, and what does `ruff check src/range_finder.py` say?
 
 <details><summary>Solution</summary>
 
-```python
-        if not db.is_loaded:
-            raise DatabaseNotLoadedError("RangeFinder needs a loaded WinRateDB.")
+```
+E       Failed: DID NOT RAISE DatabaseNotLoadedError
+FAILED tests/test_range_finder.py::TestConstructionAndSummaries::test_requires_a_loaded_database
+1 failed, 7 passed in 0.15s
 ```
 
-No test breaks: every fixture passes a loaded database. In `app.py`, a missing file now fails at
-import with "RangeFinder needs a loaded WinRateDB" instead of a `DatabaseError` from the hidden
-`load()`. Either way the app cannot start without the file, which is lesson 10's point about the
-`if DB_PATH.is_file()` guard.
+Only the new test notices, because every other fixture passes a loaded database. `ruff` reports
+`F401 [*] `src.exceptions.DatabaseNotLoadedError` imported but unused`. That is two independent
+alarms for one regression: the test pins the behaviour, the linter notices the dead import. In
+`app.py` nothing would change: `create_app()` loads the database itself before it builds the
+`RangeFinder`, so the hidden load would never run there. Undo it with
+`git checkout -- backend/src/range_finder.py`.
 </details>
 
 **🔴 6. Prove the threshold.** Add `required_equity(pot, bet_size, fold_equity)` to
@@ -459,8 +556,11 @@ is profitable exactly when its equity is above the threshold. Check with `python
 ```python
 def required_equity(pot: float, bet_size: float, fold_equity: float) -> float:
     """Smallest equity when called for which raising is +EV (fold_equity < 1)."""
-    return (bet_size - fold_equity * pot / (1.0 - fold_equity)) / (pot + 2.0 * bet_size)
+    return (bet_size - fold_equity * pot / (1.0 - fold_equity)) / final_pot(pot, bet_size)
 ```
+
+(Add `final_pot` to the `src.ev` import, and `required_equity` to the test file's
+`src.range_finder` import.)
 
 ```python
 @pytest.mark.parametrize("bet", [50000.0, 100000.0, 300000.0])
@@ -471,7 +571,7 @@ def test_random_model_cut_is_an_equity_threshold(loaded_finder: RangeFinder, bet
         assert r.is_raise_profitable == (r.equity > need), (r.canonical_id, r.equity, need)
 ```
 
-That adds 15 cases. With exercises 4, 5 and 6 together, the whole suite gave 108 passed.
+That adds 15 cases: `python -m pytest tests/test_range_finder.py -q` gives `23 passed`.
 `required_equity(100000, 100000, 0.35)` is 0.1538…, which is why K-K-4 (0.1538) misses by EV −9.
 </details>
 
@@ -512,7 +612,9 @@ That adds 15 cases. With exercises 4, 5 and 6 together, the whole suite gave 108
 - Pot-sized bet, `f = 0.35`: 387 classes / 84.65% against random callers, 250 / 54.57% against a
   calling range. A half-pot bet at the same `f` makes all 455 profitable.
 - Coverage is weighted by multiplicity: hands, not classes.
-- Weak spots: a duplicated constant, a hidden `load()`, a test-only method, a hard dependency on
-  the 455 real IDs, a double filter.
+- `category_breakdown()` gives the per-category totals that both the API and the CLI show.
+- Fixed: the duplicated constant (now `hands.TOTAL_COMBINATIONS`) and the hidden `load()` (now
+  `DatabaseNotLoadedError`). Still open: a test-only method, a dependency on the 455 real IDs, a
+  double filter.
 
 **Next:** [09 — The command-line interface](09-cli.md)

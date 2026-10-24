@@ -22,20 +22,20 @@ explained in a short 💡 box the first time it appears.
 
 ## Setup
 
-You need **Python 3.11+**, **Node.js 20.19+ or 22.12+** (Vite 8 requires it), npm and git.
+You need **Python 3.11+**, **Node.js 22.22+** (Vite 8 and the Vitest/jsdom test stack require it), npm and git.
 
 ```bash
 # Backend (from the repository root)
 cd backend
 python -m venv .venv
 source .venv/bin/activate        # Windows PowerShell: .venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-python -m pytest -q              # 93 passed
+pip install -r requirements-dev.txt   # API + CLI + tests + ruff/mypy (requirements.txt = server only)
+python -m pytest -q              # 159 passed
 
 # Frontend (in a second terminal)
 cd frontend
 npm install
-npm test                         # 6 tests pass
+npm test                         # 18 tests pass (Vitest)
 ```
 
 Unless a lesson says otherwise, Python commands run from `backend/` **with the virtual environment
@@ -45,7 +45,7 @@ To see the whole app running:
 
 ```bash
 cd backend && python app.py      # API on http://127.0.0.1:5000
-cd frontend && npm run dev       # web UI on http://localhost:5173
+cd frontend && npm run dev       # web UI on http://localhost:5173 (it proxies /api to the backend)
 ```
 
 `/api/analyze` works without an API key: it falls back to a rule-based answer (lesson 10). Keep
@@ -144,6 +144,22 @@ lieng-stealer/
         ├── *.test.js              13, 15
         └── index.css, App.css     14
 ```
+
+Files added when the weak spots were fixed (2026-10-24), and where they come up:
+
+- [`backend/src/paths.py`](../backend/src/paths.py), the default data path that doesn't depend on the
+  current folder: lessons [04](04-generator.md) and [05](05-win-rate-db.md).
+- [`backend/tests/test_exceptions.py`](../backend/tests/test_exceptions.py), which pins the exception
+  hierarchy, and [`backend/tests/perf.py`](../backend/tests/perf.py), the timing-budget helper: lessons
+  [01](01-errors-and-cards.md) and [15](15-tests-and-performance.md).
+- [`backend/pyproject.toml`](../backend/pyproject.toml) (ruff, strict mypy, pytest),
+  [`backend/requirements-dev.txt`](../backend/requirements-dev.txt),
+  [`backend/.env.example`](../backend/.env.example) and
+  [`.github/workflows/ci.yml`](../.github/workflows/ci.yml): lessons [15](15-tests-and-performance.md)
+  and [16](16-deployment.md).
+- [`frontend/src/App.test.jsx`](../frontend/src/App.test.jsx) and
+  [`frontend/src/test-setup.js`](../frontend/src/test-setup.js), the Vitest tests for the page: lessons
+  [12](12-frontend-tooling.md), [13](13-frontend-app.md) and [15](15-tests-and-performance.md).
 
 ---
 
