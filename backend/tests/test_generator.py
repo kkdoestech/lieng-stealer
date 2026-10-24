@@ -70,13 +70,13 @@ class TestGeneratorEngine:
             if key not in canonical_map:
                 continue
             res = compute_hand_equity(canonical_map[key], exact=True)
-            # win_rate + tie_rate + loss_rate == 1.0 (within rounding precision)
+            # Rates are stored to 8 decimal places.
             total_prob = res["win_rate"] + res["tie_rate"] + res["loss_rate"]
-            assert abs(total_prob - 1.0) <= 0.001
+            assert abs(total_prob - 1.0) <= 0.00000002
 
             # equity == win_rate + 0.5 * tie_rate
             expected_equity = res["win_rate"] + 0.5 * res["tie_rate"]
-            assert abs(res["equity"] - expected_equity) <= 0.001
+            assert abs(res["equity"] - expected_equity) <= 0.00000002
 
     def test_monte_carlo_convergence(self, canonical_map: dict) -> None:
         """Monte Carlo with N=5000 should converge to within 1.5% of exact equity."""

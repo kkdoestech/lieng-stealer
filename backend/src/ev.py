@@ -8,6 +8,7 @@ EV = [P(Fold) * Pot] + [1 - P(Fold)] * [(P(Win|Call) * FinalPot) - BetSize]
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import isfinite
 
 
 @dataclass(frozen=True)
@@ -47,6 +48,8 @@ def calculate_ev(
     Raises:
         ValueError: If any parameter violates physical/probability bounds.
     """
+    if not all(isfinite(value) for value in (pot, bet_size, fold_equity, win_rate_when_called)):
+        raise ValueError("All EV parameters must be finite numbers.")
     if pot <= 0:
         raise ValueError(f"Pot must be strictly positive, got {pot}.")
     if bet_size <= 0:
@@ -60,7 +63,7 @@ def calculate_ev(
     showdown_value = (win_rate_when_called * final_pot) - bet_size
 
     ev = (fold_equity * pot) + (1.0 - fold_equity) * showdown_value
-    return round(ev, 4)
+    return ev
 
 
 def calculate_break_even_fold_equity(
@@ -83,6 +86,8 @@ def calculate_break_even_fold_equity(
     Returns:
         Required fold equity in [0.0, 1.0]. Returns 0.0 if already profitable.
     """
+    if not all(isfinite(value) for value in (pot, bet_size, win_rate_when_called)):
+        raise ValueError("All break-even parameters must be finite numbers.")
     if pot <= 0:
         raise ValueError(f"Pot must be strictly positive, got {pot}.")
     if bet_size <= 0:
@@ -130,4 +135,3 @@ def evaluate_action(
         break_even_fold_equity=be_fe,
         is_profitable=is_profitable(ev),
     )
-

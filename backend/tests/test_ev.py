@@ -57,6 +57,17 @@ class TestEVEngine:
         assert ev == 72000.0
         assert is_profitable(ev) is True
 
+    def test_small_positive_ev_is_not_rounded_to_break_even(self) -> None:
+        """Keep EV sign accurate near zero; display rounding must not change the action."""
+        ev = calculate_ev(
+            pot=1.0,
+            bet_size=0.5,
+            fold_equity=0.0,
+            win_rate_when_called=0.250001,
+        )
+        assert 0.0 < ev < 0.0001
+        assert is_profitable(ev) is True
+
     def test_monotonicity(self) -> None:
         """Increasing fold equity or win rate must strictly increase EV."""
         pot = 100000.0
@@ -102,6 +113,23 @@ class TestEVEngine:
             calculate_ev(pot=100.0, bet_size=50.0, fold_equity=1.5, win_rate_when_called=0.5)
         with pytest.raises(ValueError):
             calculate_ev(pot=100.0, bet_size=50.0, fold_equity=0.5, win_rate_when_called=-0.1)
+
+    @pytest.mark.parametrize("invalid", [float("nan"), float("inf"), float("-inf")])
+    def test_non_finite_parameters_are_rejected(self, invalid: float) -> None:
+        """Reject values that would otherwise propagate undefined EV results."""
+        with pytest.raises(ValueError, match="finite"):
+            calculate_ev(
+                pot=invalid,
+                bet_size=50.0,
+                fold_equity=0.5,
+                win_rate_when_called=0.5,
+            )
+        with pytest.raises(ValueError, match="finite"):
+            calculate_break_even_fold_equity(
+                pot=100.0,
+                bet_size=50.0,
+                win_rate_when_called=invalid,
+            )
 
     def test_evaluate_action_helper(self) -> None:
         """Verify evaluate_action returns complete EVResult object."""

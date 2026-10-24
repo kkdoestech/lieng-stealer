@@ -38,7 +38,7 @@ class TestWinRateDB:
 
         # Test Liêng Q-K-A
         qka_stats = loaded_db.get("Q-K-A")
-        assert qka_stats.equity == 0.9969
+        assert qka_stats.equity == pytest.approx(0.9969, abs=0.00005)
         assert qka_stats.category == HandCategory.LIENG
         assert qka_stats.multiplicity == 64
 
@@ -62,7 +62,7 @@ class TestWinRateDB:
         stats = loaded_db.get_by_cards(cards)
 
         assert stats.category == HandCategory.LIENG
-        assert stats.equity == 0.9969
+        assert stats.equity == pytest.approx(0.9969, abs=0.00005)
 
     def test_unloaded_query_raises(self) -> None:
         """Querying an unloaded DB instance must raise DatabaseNotLoadedError."""
@@ -85,4 +85,3 @@ class TestWinRateDB:
         """Querying an unknown canonical ID raises KeyError."""
         with pytest.raises(KeyError):
             loaded_db.get("INVALID_KEY")
-

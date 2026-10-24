@@ -87,10 +87,10 @@ def compute_hand_equity(
     equity = (wins + 0.5 * ties) / total_showdowns
 
     return {
-        "equity": round(equity, 4),
-        "win_rate": round(win_rate, 4),
-        "tie_rate": round(tie_rate, 4),
-        "loss_rate": round(loss_rate, 4),
+        "equity": round(equity, 8),
+        "win_rate": round(win_rate, 8),
+        "tie_rate": round(tie_rate, 8),
+        "loss_rate": round(loss_rate, 8),
         "category": canonical_hand.category.name,
         "multiplicity": canonical_hand.multiplicity,
         "samples": total_showdowns,
@@ -193,4 +193,3 @@ def main(args: Sequence[str] | None = None) -> None:
 
 if __name__ == "__main__":
     main()
-
