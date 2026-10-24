@@ -5,7 +5,7 @@
 > A-J-J) is decided, why the rules now run only 455 times, and how the `Hand` class's broken
 > hash was fixed.
 > **Files:** [`backend/src/evaluator.py:179-485`](../backend/src/evaluator.py#L179-L485),
-> [`backend/tests/test_evaluator.py:89-302`](../backend/tests/test_evaluator.py#L89-L302).
+> [`backend/tests/test_evaluator.py:89-306`](../backend/tests/test_evaluator.py#L89-L306).
 > **Time:** ~75 min. **Before this:** [01 — Errors and cards](01-errors-and-cards.md).
 
 ---
@@ -46,7 +46,7 @@ recommendation is wrong with it, which is why it has the most tests of any domai
 | 5 | [evaluator.py:343-401](../backend/src/evaluator.py#L343-L401) | `_score_for_sorted_ranks`: the four checks in order, and the 455-entry table built from it. |
 | 6 | [evaluator.py:404-485](../backend/src/evaluator.py#L404-L485) | `Hand`: parsing, the cached `score`, comparisons, and `__eq__`/`__hash__` at the end. |
 | 7 | [test_evaluator.py:89-251](../backend/tests/test_evaluator.py#L89-L251) | The rule tests: Sáp order, 12 Liêng, K-A-2, Đĩ, mod 10. |
-| 8 | [test_evaluator.py:253-302](../backend/tests/test_evaluator.py#L253-L302) | House rules, hashing, caching, errors and the 1 µs budget. |
+| 8 | [test_evaluator.py:253-306](../backend/tests/test_evaluator.py#L253-L306) | House rules, hashing, caching, errors and the 1 µs budget. |
 
 ---
 
@@ -200,10 +200,11 @@ This is the fix for the old weak spot "the 1 µs budget is not met". Until Octob
 machine this lesson was re-run on); now it is a validation, a sort and one dict lookup, about
 0.32 µs. The commit that made the change checked that the table gives identical scores on all
 132,600 *ordered* hands (22,100 × 3! orders), and `test_evaluation_within_latency_budget`
-([test_evaluator.py:298-302](../backend/tests/test_evaluator.py#L298-L302)) now pins the budget.
+([test_evaluator.py:302-306](../backend/tests/test_evaluator.py#L302-L306)) now pins the budget.
 
 One side effect: every hand with the same ranks gets the **same** `HandScore` object back, not just
-an equal one. That is safe because `HandScore` is frozen, and it matters for one test (weak spot 2).
+an equal one. That is safe because `HandScore` is frozen, and it is why an earlier version of the
+cache test could not fail (weak spot 2).
 
 The rules function starts by building the descending tuple used as the final tie-breaker:
 
@@ -382,7 +383,7 @@ class Hand:
 commas or hyphens with `re.split(r"[\s,\-]+", …)` ([evaluator.py:434](../backend/src/evaluator.py#L434)):
 `"As,Kh,Qd"`, `"As-Kh-Qd"` and `"  As   Kh  Qd "` all parse to `As Kh Qd`; `"AsKhQd"` is one token
 and fails with `found 1`. This is the entry point for the CLI ([cli.py:253](../backend/src/cli.py#L253))
-and the API ([app.py:276](../backend/app.py#L276)).
+and the API ([app.py:296](../backend/app.py#L296)).
 
 The strength is evaluated **once per hand** and then remembered:
 
@@ -402,7 +403,8 @@ The first read of `hand.score` calls `evaluate_hand` and stores the result in `h
 every later read finds it there without calling the function. A frozen dataclass blocks
 `hand.score = …` (its `__setattr__` raises), but `cached_property` writes to `__dict__` directly,
 which is allowed. Until October 2026 this was a plain `@property` that re-evaluated on every
-access, so `a > b` on two hands evaluated both of them each time.
+access, so `a > b` on two hands evaluated both of them each time. `test_score_is_cached_on_the_hand`
+checks exactly that `__dict__` entry (weak spot 2).
 
 All five comparison operators delegate to `score`, so `hand_a > hand_b` reads exactly like a rule:
 `Hand.from_str("2s 2h 2d") > Hand.from_str("Qs Kh Ad")` is "Sáp beats Liêng". The last two methods
@@ -514,7 +516,8 @@ type". Python then tries the other operand's method and, if that fails too, rais
 ## ⚠️ Weak spots
 
 Six weak spots were listed here when the course was written. Commit `bba5e63` ("fix(core)", October
-2026) fixed four of them; two are still open, and the fixes left one new gap in a test.
+2026) fixed four of them; two are still open. The fixes left one new gap in a test, which commit
+`a9d9ce9` closed.
 
 1. ✅ **Fixed: `Hand.__eq__` and `__hash__` disagreed.** `__eq__` compared strength while the
    dataclass-generated hash used the ordered `cards` tuple, so equal hands had different hashes and
@@ -523,15 +526,20 @@ Six weak spots were listed here when the course was written. Commit `bba5e63` ("
    hash from the same key ([evaluator.py:288-290](../backend/src/evaluator.py#L288-L290)); AGENTS.md
    documents the choice ([AGENTS.md:25](../AGENTS.md#L25)). Pinned by `TestHashing`
    ([test_evaluator.py:272-280](../backend/tests/test_evaluator.py#L272-L280)). Exercise 4 undoes it.
-2. ✅ **Fixed, but the test can't fail: `score` was not cached.** It re-ran `evaluate_hand` on every
-   access. Now it is a `cached_property`
+2. ✅ **Fixed: `score` was not cached, and then the test couldn't fail.** It re-ran
+   `evaluate_hand` on every access. Now it is a `cached_property`
    ([evaluator.py:442-449](../backend/src/evaluator.py#L442-L449)); `a > b` on two hands takes about
    0.71 µs, against 1.34 µs with a plain `@property` over the new table and 8.3 µs with the old
-   code. *Still open:* the test meant to pin it, `test_score_is_computed_once`
-   ([test_evaluator.py:282-284](../backend/tests/test_evaluator.py#L282-L284)), asserts
+   code. The first test meant to pin it, `test_score_is_computed_once`, asserted
    `hand.score is hand.score`. Since the table returns the same `HandScore` object for every hand
-   with those ranks, that is true even without caching: put `@property` back and all 159 tests
-   pass. *Fix:* assert `"score" in hand.__dict__` after the first read (exercise 5).
+   with those ranks, that was true even without caching: with `@property` back, all 159 tests of
+   the time passed. Commit `a9d9ce9` replaced it with `test_score_is_cached_on_the_hand`
+   ([test_evaluator.py:282-288](../backend/tests/test_evaluator.py#L282-L288)), which looks at the
+   cache itself: `assert "score" not in hand.__dict__` before the first read, then
+   `assert hand.__dict__["score"] is first` after it. Change `@cached_property` to `@property` now
+   and the suite says `1 failed, 171 passed`: the last line raises `KeyError: 'score'`, because a
+   plain property never writes to `__dict__`. The first assert matters too: it proves the value
+   isn't there before anyone asked for it.
 3. **A redundant `score` field.** For Điểm it always equals `primary_rank`; for the other
    categories it is always 0 ([evaluator.py:248](../backend/src/evaluator.py#L248),
    [:259](../backend/src/evaluator.py#L259)). Removing it from `score_tuple` leaves 455 distinct
@@ -543,13 +551,13 @@ Six weak spots were listed here when the course was written. Commit `bba5e63` ("
    spec then allowed, failed only one test, indirectly. Now AGENTS.md states the rules as
    implemented ([AGENTS.md:61](../AGENTS.md#L61), [:72](../AGENTS.md#L72)), `TestTieBreakHouseRules`
    ([test_evaluator.py:253-266](../backend/tests/test_evaluator.py#L253-L266)) pins them, and the
-   calling-range model refuses to start if two classes are equally strong
+   calling-range model refuses to start, with a `ModelError`, if two classes are equally strong
    ([calling_range.py:67-68](../backend/src/calling_range.py#L67-L68), lesson 06). Exercise 6 shows
    what a rule change does now.
 5. ✅ **Fixed: the 1 µs budget was not met.** `evaluate_hand` took 2.6–3.8 µs per hand (all 22,100
    hands: 0.084 s), and nothing measured it. With the 455-entry table it takes about 0.32 µs (all
    22,100: 0.007 s); `test_evaluation_within_latency_budget`
-   ([test_evaluator.py:298-302](../backend/tests/test_evaluator.py#L298-L302)) checks it, scaled by
+   ([test_evaluator.py:302-306](../backend/tests/test_evaluator.py#L302-L306)) checks it, scaled by
    `PERF_BUDGET_FACTOR` on slow CI machines ([tests/perf.py](../backend/tests/perf.py)), and
    AGENTS.md records the measurement ([AGENTS.md:126](../AGENTS.md#L126)).
 6. **Small duplications, and a list that isn't copied.** `calculate_points`
@@ -558,7 +566,7 @@ Six weak spots were listed here when the course was written. Commit `bba5e63` ("
    `Hand(cards=[…])` with a list passes validation, because the type hint isn't enforced, and the
    hand keeps that very list: append a fourth card to it afterwards and `len(hand.cards)` is 4, while
    a score cached earlier still describes the first three. *Fix:* in `__post_init__`, store
-   `tuple(self.cards)` with `object.__setattr__(self, "cards", tuple(self.cards))`.
+   `tuple(self.cards)` with `object.__setattr__(self, "cards", tuple(self.cards))` (exercise 5).
 
 ---
 
@@ -670,35 +678,45 @@ section 11 prints and which test fails, then run both and `python -m pytest -q`.
 
 The snippet prints the old, broken output again: `hash equal: False` twice, `len({a, b, c}): 3`,
 and `b in seen: False | c in seen: False`. No error is raised anywhere: without an explicit
-`__hash__`, the frozen dataclass quietly generates one from the `cards` field. `1 failed, 158
+`__hash__`, the frozen dataclass quietly generates one from the `cards` field. `1 failed, 171
 passed`: only `test_equal_hands_hash_equally_and_collapse_in_a_set`
 ([test_evaluator.py:272-276](../backend/tests/test_evaluator.py#L272-L276)) notices, which is why
 that test exists. Undo with `git checkout -- backend/src/evaluator.py`.
 </details>
 
-**🟡 5. Undo the cache, and find the test that doesn't notice.** Change `@cached_property` on
-`Hand.score` ([evaluator.py:442](../backend/src/evaluator.py#L442)) to `@property`. Predict whether
-`test_score_is_computed_once` fails, then run `python -m pytest -q` and time a comparison before and
-after:
-`python -m timeit -s "from src.evaluator import Hand; a = Hand.from_str('As Kh Qd'); b = Hand.from_str('9s 8h 2d')" "a > b"`.
-Then write a test that does fail.
+**🟡 5. Give `Hand` its own copy of the cards (weak spot 6).** First show the problem: build
+`cards = [Card.from_str(s) for s in ("As", "Kh", "Qd")]`, then `hand = Hand(cards=cards)`, print
+`hand.score`, append `Card.from_str("2c")` to `cards`, and print `len(hand.cards)`, `hand.score`
+and `type(hand.cards).__name__`. Then make `Hand.__post_init__`
+([evaluator.py:407-411](../backend/src/evaluator.py#L407-L411)) store a tuple, add a test, and run
+`python -m pytest -q` and `python -m mypy`.
 
 <details><summary>Solution</summary>
 
-`159 passed`: the test still passes. It asserts `hand.score is hand.score`, and with a plain
-`@property` each read calls `evaluate_hand`, which returns the shared table entry, the *same*
-object every time. The timing shows the cost the test misses: about 0.71 µs with the cache,
-1.34 µs without. A test that checks the cache itself:
+Before the fix the second print is `4 Liêng Q-K-A list`: the "immutable" hand now holds four cards,
+and its cached score still describes the first three. `frozen=True` only stops you from assigning
+`hand.cards = …`; it doesn't copy what you passed in. Add one line at the top of `__post_init__`:
 
 ```python
-    def test_score_is_stored_on_the_instance(self) -> None:
-        hand = Hand.from_str("As Kh Qd")
-        _ = hand.score
-        assert "score" in hand.__dict__
+        object.__setattr__(self, "cards", tuple(self.cards))  # keep our own copy, never the caller's list
 ```
 
-It passes with `cached_property` (the value lands in `__dict__`) and fails with `@property`. Undo
-with `git checkout -- backend/src/evaluator.py` (and the test file, if you don't keep the test).
+(`object.__setattr__` is the standard way for a frozen dataclass to set its own field, the same
+trick `cached_property` relies on.) The second print becomes `3 Liêng Q-K-A tuple`. A test:
+
+```python
+def test_hand_keeps_its_own_copy_of_the_cards() -> None:
+    cards = [Card.from_str(s) for s in ("As", "Kh", "Qd")]
+    hand = Hand(cards=cards)  # type: ignore[arg-type]
+    cards.append(Card.from_str("2c"))
+    assert hand.cards == tuple(cards[:3])
+    assert isinstance(hand.cards, tuple)
+```
+
+`173 passed`; mypy reports `Success: no issues found in 12 source files` (it checks `src/` and
+`app.py`, not the tests). The length and duplicate checks below the new line now run on the copy,
+so they check exactly what the hand keeps. Undo with
+`git checkout -- backend/src/evaluator.py backend/tests/test_evaluator.py`.
 </details>
 
 **🟡 6. Change a house rule.** Make every Đĩ tie, the option AGENTS.md used to allow: in the Đĩ
@@ -711,9 +729,9 @@ branch ([evaluator.py:375-382](../backend/src/evaluator.py#L375-L382)) set `prim
 The evaluator tests give `1 failed, 26 passed`: `test_di_order_highest_face_card_then_middle_then_rest`
 now pins the rule. The whole suite stops early: `Interrupted: 2 errors during collection`.
 `test_api.py` and `test_dynamic_scenarios.py` build the app when they are imported, the app builds a
-`CallingRangeModel`, and the model refuses to start: `LiengError: The calling-range model needs
+`CallingRangeModel`, and the model refuses to start: `ModelError: The calling-range model needs
 every canonical class to have a distinct strength.` (With `--continue-on-collection-errors`:
-`5 failed, 96 passed, 14 errors`.) Before the fixes, the same change failed one test, and the
+`5 failed, 103 passed, 14 errors`.) Before the fixes, the same change failed one test, and the
 calling-range numbers were silently wrong. Now a rule change is loud, as it should be: it is a data
 change too, because `winrates.json` was computed with the old rule. Undo with
 `git checkout -- backend/src/evaluator.py`.
@@ -731,7 +749,7 @@ comparison (weak spot 3: the order is the same without it), so every `>` and `==
 answer, the 455 classes keep their order, and nothing computed from them changes. The snippet
 still prints 455 distinct tuples, now with four elements (`weakest: (1, 0, 4, (4, 3, 3))`; ignore its
 `same order` line, which assumes five slots);
-`159 passed`; mypy reports `Success: no issues found in 12 source files`. What does change is
+`172 passed`; mypy reports `Success: no issues found in 12 source files`. What does change is
 documentation: AGENTS.md §3.3 and the note at the top of EXPERIMENT.md describe a five-element
 tuple, so a real change would update them in the same commit. Undo with
 `git checkout -- backend/src/evaluator.py`.
@@ -780,8 +798,8 @@ tuple, so a real change would update them in the same commit. Undo with
 - Đĩ is `r1 >= 11 and r3 <= 13` after Sáp and Liêng are gone: 6 shapes, Ace excluded.
 - The 22,100 hands produce exactly 455 distinct score tuples; ties need identical ranks.
 - `Hand` means "equal strength" for both `==` and `hash`, and caches its score.
-- Fixed: the hash contract, the uncached score, untested house rules, the missed 1 µs budget.
-  Still open: the cache test can't fail, a redundant tuple slot, a duplicated points helper and an
-  uncopied `cards` list.
+- Fixed: the hash contract, the uncached score (now with a test that can fail), untested house
+  rules, the missed 1 µs budget. Still open: a redundant tuple slot, a duplicated points helper and
+  an uncopied `cards` list.
 
 **Next:** [03 — Canonical hands: 22,100 → 455](03-canonical-hands.md)

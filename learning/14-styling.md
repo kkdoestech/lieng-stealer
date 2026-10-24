@@ -341,7 +341,7 @@ Each `.hud-card` is a small grid: a 200px label, a 110px right-aligned value and
 uses the same widths, so the values line up without a table. Below 640px the row becomes
 `1fr auto` and the note wraps to its own line ([App.css:458-466](../frontend/src/App.css#L458-L466)).
 Only the EV value gets an extra class, `green-metric`, and only when it is positive
-([App.jsx:463](../frontend/src/App.jsx#L463)).
+([App.jsx:464](../frontend/src/App.jsx#L464)).
 
 The tables ([App.css:475-498](../frontend/src/App.css#L475-L498)) have muted headers over a
 `--line-control` rule, `--line` between rows and `--bg-hover` on hover. Colour means something
@@ -462,6 +462,8 @@ Fixed since the first version of this course:
   [:310](../frontend/src/App.css#L310), and DESIGN.md lists them.
 - ✅ **Fixed: a footnote that said "Monte Carlo".** It now says "Exact enumeration, 455 canonical
   classes", and [DESIGN.md:72](../DESIGN.md#L72) asks to keep it true.
+- ✅ **Fixed: "GTO Insight" in the offline analysis.** The rule-based notes' third heading broke §6's
+  "no GTO" rule; it is now "Nhận định chiến thuật" ([app.py:588](../backend/app.py#L588), lesson 13).
 
 None of these fixes is pinned by a test (weak spot 2).
 
@@ -474,13 +476,13 @@ Still open:
    commit, together with the course excerpts that quote them (exercise 5).
 2. **Nothing enforces DESIGN.md.** §7 ([DESIGN.md:92-95](../DESIGN.md#L92-L95)) relies on build,
    lint, tests and manual screenshots, and none of those reads a CSS value or a class name. The
-   seven problems fixed above went unnoticed for the same reason. *Fix:* a check script in CI
+   seven CSS problems of section 8 went unnoticed for the same reason. *Fix:* a check script in CI
    (exercises 7 and 8).
 3. **The rulebook and the copy still disagree in places.** DESIGN.md §5 calls the footnote "Engine
    specs" in a file whose §1 bans "engine" copy. The Vietnamese notes title "Tư vấn lý thuyết trò
-   chơi" ("game-theory advice") and the offline analysis heading "GTO Insight" (lesson 13) break §6's
-   "no GTO" rule ([DESIGN.md:88](../DESIGN.md#L88)). A few `k` suffixes still live outside `i18n.js`
-   (lesson 13, weak spot 4).
+   chơi" ("game-theory advice", [i18n.js:185](../frontend/src/i18n.js#L185)) still breaks §6's "no
+   GTO" rule ([DESIGN.md:88](../DESIGN.md#L88)), although the offline heading below it no longer
+   does. A few `k` suffixes still live outside `i18n.js` (lesson 13, weak spot 4).
 
 ---
 
@@ -600,7 +602,7 @@ is weak spot 2. Exercise 7 writes a check that does fail. Undo with
 </details>
 
 **🟡 5. Rename a legacy class.** Rename `tactical-btn` to `solve-btn` in
-[App.jsx:374](../frontend/src/App.jsx#L374) and in the three rules at
+[App.jsx:375](../frontend/src/App.jsx#L375) and in the three rules at
 [App.css:298-316](../frontend/src/App.css#L298-L316). Check: `grep -rn tactical-btn src` prints
 nothing, the build succeeds and the button still looks the same. Then run
 `python3 learning/verify_course.py` from the repository root.
@@ -621,7 +623,7 @@ nothing, although "Fold" cells have lost their style. Find the two reasons, and 
 <details><summary>Solution</summary>
 
 1. `act-fold` is set in a plain expression, `className={item.is_profitable ? "act-raise" : "act-fold"}`
-   ([App.jsx:548](../frontend/src/App.jsx#L548)), which the regex doesn't read: it only knows
+   ([App.jsx:549](../frontend/src/App.jsx#L549)), which the regex doesn't read: it only knows
    `className="…"` and template strings.
 2. `css.includes(".act-fold")` is still true, because `.act-folded` contains it.
 

@@ -38,13 +38,13 @@ and bad input **raises** an exception from one family instead of returning `None
 
 | # | Location | What to look for |
 |---|----------|------------------|
-| 1 | [exceptions.py:9-42](../backend/src/exceptions.py#L9-L42) | Eight classes, one root. Note the two that have a second parent, a built-in. |
+| 1 | [exceptions.py:9-46](../backend/src/exceptions.py#L9-L46) | Nine classes, one root. Note the two that have a second parent, a built-in. |
 | 2 | [evaluator.py:21-39](../backend/src/evaluator.py#L21-L39) | `Suit`: an `Enum` with a symbol and a parser. |
 | 3 | [evaluator.py:42-83](../backend/src/evaluator.py#L42-L83) | `Rank`: an `IntEnum`, its point value, face cards, parser. |
 | 4 | [evaluator.py:86-108](../backend/src/evaluator.py#L86-L108) | The four lookup tables both enums use, built once at import. |
 | 5 | [evaluator.py:111-163](../backend/src/evaluator.py#L111-L163) | `Card`: a frozen dataclass and `from_str`, with the `"10"` special case. |
 | 6 | [evaluator.py:166-176](../backend/src/evaluator.py#L166-L176) | `Deck.standard_52`: all 52 cards as a tuple. |
-| 7 | [test_evaluator.py:31-86](../backend/tests/test_evaluator.py#L31-L86), [:287-296](../backend/tests/test_evaluator.py#L287-L296), [test_exceptions.py](../backend/tests/test_exceptions.py) | The tests that pin parsing, validation, the message wording and the exception tree. |
+| 7 | [test_evaluator.py:31-86](../backend/tests/test_evaluator.py#L31-L86), [:291-300](../backend/tests/test_evaluator.py#L291-L300), [test_exceptions.py](../backend/tests/test_exceptions.py) | The tests that pin parsing, validation, the message wording and the exception tree. |
 
 ---
 
@@ -52,7 +52,7 @@ and bad input **raises** an exception from one family instead of returning `None
 
 ### 1. The exception family
 
-📍 [`backend/src/exceptions.py:9-42`](../backend/src/exceptions.py#L9-L42)
+📍 [`backend/src/exceptions.py:9-46`](../backend/src/exceptions.py#L9-L46)
 ```python
 class LiengError(Exception):
     """Base exception class for all Liêng engine errors."""
@@ -82,6 +82,10 @@ class UnknownHandError(LiengError, KeyError):
         return str(self.args[0]) if self.args else ""
 
 
+class ModelError(LiengError):
+    """Raised when the solver's own model is missing or inconsistent (a bug or bad setup, not bad input)."""
+
+
 class DatabaseError(LiengError):
     """Base error for precomputed database operations."""
 
@@ -98,23 +102,29 @@ LiengError
 ├── InvalidHandSizeError       not 3 cards                      evaluator.py:326, :411, :436, hands.py:115
 │   └── DuplicateCardError     the same card twice              evaluator.py:332, :413, hands.py:117
 ├── InvalidGameParamsError     bad pot / bet / fold / model     ev.py:65-71, calling_range.py:145,
-│   (also a ValueError)                                         cli.py:255, app.py:214-275
+│   (also a ValueError)                                         cli.py:255, app.py:231-295
 ├── UnknownHandError           id is not one of the 455         db.py:130, calling_range.py:123
 │   (also a KeyError)
+├── ModelError                 model missing or inconsistent    calling_range.py:66, :68,
+│                              (a bug, not bad input)           range_finder.py:81
 └── DatabaseError              winrates.json missing or broken  db.py:89-107, :173-193
     └── DatabaseNotLoadedError   query before load()            db.py:127, :153, range_finder.py:47
 ```
 
 The point of a family is the `except` at the edges. The CLI catches `DatabaseError` first and
 reports `Cannot load the win-rate database: …` with exit code 1
-([cli.py:364](../backend/src/cli.py#L364)), then catches the rest of the family once and turns it
-into `Invalid input: …` with exit code 2 ([cli.py:367](../backend/src/cli.py#L367)). The API has one
+([cli.py:367](../backend/src/cli.py#L367)), then `ModelError` as `Internal model error: …`, also
+exit 1 ([cli.py:370](../backend/src/cli.py#L370)), and only then catches the rest of the family
+once and turns it into `Invalid input: …` with exit code 2 ([cli.py:373](../backend/src/cli.py#L373)).
+The order matters: `ModelError` is a `LiengError` too, so the last `except` would otherwise blame
+the user for a broken model. The API has one
 handler that turns `InvalidGameParamsError` into a 400 with `"code": "invalid_params"`
-([app.py:184](../backend/app.py#L184)) and one that turns a bad card or hand, duplicates included,
-into a 400 with `"code": "invalid_hand"` ([app.py:188-191](../backend/app.py#L188-L191)). Any
+([app.py:199](../backend/app.py#L199)) and one that turns a bad card or hand, duplicates included,
+into a 400 with `"code": "invalid_hand"` ([app.py:203-206](../backend/app.py#L203-L206)). Any
 *other* exception, such as a `TypeError` from a real bug, is still not mistaken for bad input: the
 CLI crashes with a traceback, and the API logs it and answers a generic 500
-([app.py:198](../backend/app.py#L198)).
+([app.py:216](../backend/app.py#L216)). The API has no handler for `ModelError`, on purpose: a
+broken model is a server bug, so it lands in that same 500.
 
 Three classes are more than a plain child of `LiengError`, each for a reason:
 
@@ -324,12 +334,13 @@ Six tests in two classes cover parsing and validation
 parse with the right point values; lower case and `"9♠"` work; `"X"`, `"11h"` and `"Ax"` raise
 `InvalidCardError`; and a `Hand` rejects duplicates and wrong counts with `InvalidHandSizeError`.
 Two more pin the fixes from this lesson's weak spots
-([test_evaluator.py:287-296](../backend/tests/test_evaluator.py#L287-L296)): a duplicate raises the
+([test_evaluator.py:291-300](../backend/tests/test_evaluator.py#L291-L300)): a duplicate raises the
 specific `DuplicateCardError`, and the message for `"11h"` starts with `Invalid card '11h'`.
 
-[test_exceptions.py](../backend/tests/test_exceptions.py) pins the tree itself: one parametrized
-test checks every class's parents with `issubclass` (seven cases), and one checks that
-`UnknownHandError` prints its message without quotes. The exact wording of a card error is also
+[test_exceptions.py](../backend/tests/test_exceptions.py) pins the tree itself, in 9 tests: one parametrized
+test checks every class's parents with `issubclass` (eight cases, one per class below the root;
+`ModelError` was added in `a9d9ce9`), and one checks that `UnknownHandError` prints its message
+without quotes. The exact wording of a card error is also
 asserted by two CLI tests ([test_cli.py:56](../backend/tests/test_cli.py#L56),
 [:64](../backend/tests/test_cli.py#L64)) and one API test
 ([test_api.py:110](../backend/tests/test_api.py#L110)). Nothing tests `Deck` directly or
@@ -408,7 +419,7 @@ Six weak spots were listed here when the course was written. The October 2026 fi
    ([hands.py:117](../backend/src/hands.py#L117), lesson 03). Because it subclasses
    `InvalidHandSizeError`, the old test `test_duplicate_cards_raises` and the API's `invalid_hand`
    handler still catch it. Pinned by `test_duplicate_cards_raise_duplicate_card_error`
-   ([test_evaluator.py:288-292](../backend/tests/test_evaluator.py#L288-L292)) and
+   ([test_evaluator.py:292-296](../backend/tests/test_evaluator.py#L292-L296)) and
    [test_hands.py:115-119](../backend/tests/test_hands.py#L115-L119).
 2. ✅ **Fixed: built-in errors leaked past `LiengError`.** `WinRateDB.get` and
    `CallingRangeModel.equity` used to raise a plain `KeyError` for an unknown id, and `ev.py` and
@@ -419,22 +430,29 @@ Six weak spots were listed here when the course was written. The October 2026 fi
    [calling_range.py:145](../backend/src/calling_range.py#L145)), each of which is *both* a
    `LiengError` and the built-in it replaced. Pinned by
    `test_unknown_id_is_a_project_error_and_a_key_error`
-   ([test_db.py:146-151](../backend/tests/test_db.py#L146-L151)) and the parents test. *Still open,
-   and minor:* three plain `ValueError`s remain for programming mistakes rather than user input
-   (`steps < 1` at [ev.py:178](../backend/src/ev.py#L178), a missing calling model at
-   [range_finder.py:81](../backend/src/range_finder.py#L81), `samples < 1` at
+   ([test_db.py:146-151](../backend/tests/test_db.py#L146-L151)) and the parents test. A third
+   plain `ValueError`, for `OpponentModel.RANGE` without a calling model, became a `ModelError` in
+   `a9d9ce9` ([range_finder.py:81](../backend/src/range_finder.py#L81)), the same class the
+   calling-range model's own checks now raise (lesson 06). It is pinned by
+   `test_range_model_without_calling_model_is_a_model_error`
+   ([test_range_finder.py:134-138](../backend/tests/test_range_finder.py#L134-L138)), and the CLI
+   reports it as `Internal model error: …`, exit 1, instead of blaming the input
+   (`test_a_broken_model_is_an_internal_error_not_invalid_input`,
+   [test_cli.py:97-108](../backend/tests/test_cli.py#L97-L108)). *Still open, and minor:* two plain
+   `ValueError`s remain for programming mistakes rather than user input (`steps < 1` at
+   [ev.py:178](../backend/src/ev.py#L178), `samples < 1` at
    [generator.py:54](../backend/src/generator.py#L54)), which is why the CLI still catches
-   `(LiengError, ValueError)` ([cli.py:367](../backend/src/cli.py#L367)).
+   `(LiengError, ValueError)` ([cli.py:373](../backend/src/cli.py#L373)).
 3. ✅ **Fixed: nothing pinned the hierarchy.** If `DatabaseError` stopped inheriting from
    `LiengError`, all 93 tests at the time still passed. Now
-   [test_exceptions.py:22-36](../backend/tests/test_exceptions.py#L22-L36) checks every class's
+   [test_exceptions.py:23-38](../backend/tests/test_exceptions.py#L23-L38) checks every class's
    parents, and that change fails two of its cases (exercise 4).
 4. ✅ **Fixed: error messages quoted the fragment, not the input.** `"11h"` used to report
    `Invalid rank '1'`, and `"10"` reported `Invalid suit ''`. Now `Card.from_str` wraps both
    parser calls and re-raises with the whole card first
    ([evaluator.py:151-156](../backend/src/evaluator.py#L151-L156)):
    `Invalid card '11h': Invalid rank '1'. …`. Pinned by `test_card_error_names_the_whole_card`
-   ([test_evaluator.py:294-296](../backend/tests/test_evaluator.py#L294-L296)) and the CLI/API tests
+   ([test_evaluator.py:298-300](../backend/tests/test_evaluator.py#L298-L300)) and the CLI/API tests
    that assert the full text.
 5. **Two definitions of "face card", and dead helpers.** `Rank.is_face_card`
    ([evaluator.py:72-75](../backend/src/evaluator.py#L72-L75)) is used only by `Card.is_face_card`,
@@ -495,6 +513,7 @@ LiengError
         DuplicateCardError
     InvalidGameParamsError
     UnknownHandError
+    ModelError
     DatabaseError
         DatabaseNotLoadedError
 ```
@@ -579,19 +598,19 @@ All four are caught. (a) `InvalidHandSizeError`. (b) `InvalidCardError`
 `"A-K-Q"` (lesson 03). Before the fixes, (d) escaped as a plain `KeyError`.
 </details>
 
-**🟡 4. Break the hierarchy on purpose.** In [exceptions.py:37](../backend/src/exceptions.py#L37)
+**🟡 4. Break the hierarchy on purpose.** In [exceptions.py:41](../backend/src/exceptions.py#L41)
 change `DatabaseError(LiengError)` to `DatabaseError(Exception)`. Predict which tests fail, then run
 `python -m pytest -q`. Also predict, then run,
 `python -m src.cli --db nope.json --pot 1 --bet 1; echo $?`.
 
 <details><summary>Solution</summary>
 
-`2 failed, 157 passed`: the `DatabaseError` and `DatabaseNotLoadedError` cases of
-`test_exception_parents` ([test_exceptions.py:22-36](../backend/tests/test_exceptions.py#L22-L36)).
+`2 failed, 170 passed`: the `DatabaseError` and `DatabaseNotLoadedError` cases of
+`test_exception_parents` ([test_exceptions.py:23-38](../backend/tests/test_exceptions.py#L23-L38)).
 Nothing else notices. The CLI still prints
 `Cannot load the win-rate database: Database file 'nope.json' does not exist.` and exits 1,
 because it catches `DatabaseError` by name before the catch-all
-([cli.py:364](../backend/src/cli.py#L364)). Before the fixes, the same change made every test pass
+([cli.py:367](../backend/src/cli.py#L367)). Before the fixes, the same change made every test pass
 while the CLI crashed with a traceback; the parents test is now the only safety net, which is
 exactly its job. Undo with `git checkout -- backend/src/exceptions.py`.
 </details>
@@ -613,12 +632,12 @@ r = c.post("/api/evaluate", json={"hand": "As As Qd"}); print(r.status_code, r.g
 
 Before the change it prints
 `400 {'code': 'invalid_hand', 'error': 'A Liêng hand cannot have duplicate cards.'}`. After it,
-`3 failed, 156 passed`: `test_duplicate_cards_raises` (it expects `InvalidHandSizeError`), the
+`3 failed, 169 passed`: `test_duplicate_cards_raises` (it expects `InvalidHandSizeError`), the
 `DuplicateCardError` case of the parents test, and `test_analyze_rejects_an_invalid_hand`
 ([test_api.py:297-300](../backend/tests/test_api.py#L297-L300)), which now gets a 500. The probe
 logs a traceback and prints `500 {'code': 'internal_error', 'error': 'Internal server error.'}`: the
 API's `invalid_hand` handler is registered for `InvalidHandSizeError`
-([app.py:188-191](../backend/app.py#L188-L191)), so a duplicate that is no longer one falls through
+([app.py:203-206](../backend/app.py#L203-L206)), so a duplicate that is no longer one falls through
 to the catch-all. Subclassing is what let the new error be added without touching any caller. Undo
 with `git checkout -- backend/src/exceptions.py`.
 </details>
@@ -630,9 +649,9 @@ with `git checkout -- backend/src/exceptions.py`.
 <details><summary>Solution</summary>
 
 `"Canonical hand 'J-Q-K' not found in database."`, with the double quotes: `KeyError.__str__`
-returns the `repr` of its argument, and `UnknownHandError` inherits it. `1 failed, 158 passed`:
+returns the `repr` of its argument, and `UnknownHandError` inherits it. `1 failed, 171 passed`:
 `test_unknown_hand_error_message_is_not_quoted`
-([test_exceptions.py:39-41](../backend/tests/test_exceptions.py#L39-L41)). The quotes would reach any
+([test_exceptions.py:41-43](../backend/tests/test_exceptions.py#L41-L43)). The quotes would reach any
 user who sees the message, such as a CLI error line. Undo with
 `git checkout -- backend/src/exceptions.py`.
 </details>
@@ -660,7 +679,7 @@ def test_space_inside_a_card_is_rejected() -> None:
     assert str(Card.from_str(" 10h ")) == "10h"
 ```
 
-`160 passed`. Nothing else breaks, because `Hand.from_str` splits on whitespace before it calls
+`173 passed`. Nothing else breaks, because `Hand.from_str` splits on whitespace before it calls
 `Card.from_str`, so no token it passes contains a space: `Hand.from_str("As  Kh,Qd")` still gives
 `As Kh Qd`. Undo with `git checkout -- backend/src/evaluator.py backend/tests/test_evaluator.py`.
 </details>
@@ -687,7 +706,7 @@ def test_space_inside_a_card_is_rejected() -> None:
 4. Equal cards have equal hashes, because `@dataclass(frozen=True)` generates `__eq__` and
    `__hash__` from the same fields.
 5. `except LiengError` and `except KeyError` (also `except UnknownHandError`). It subclasses
-   `LiengError` so the project's catch-alls handle it ([cli.py:367](../backend/src/cli.py#L367)),
+   `LiengError` so the project's catch-alls handle it ([cli.py:373](../backend/src/cli.py#L373)),
    and `KeyError` so code written when `WinRateDB.get` raised a plain `KeyError`
    ([db.py:130](../backend/src/db.py#L130)) keeps working.
 </details>
@@ -696,9 +715,9 @@ def test_space_inside_a_card_is_rejected() -> None:
 
 ## Recap
 
-- `exceptions.py` is one tree of eight classes rooted at `LiengError`. Edges of the program
-  (`cli.py`, `app.py`) catch it and turn it into exit code 2 (1 for a database problem) or a 400
-  JSON response with a `code`.
+- `exceptions.py` is one tree of nine classes rooted at `LiengError`. Edges of the program
+  (`cli.py`, `app.py`) catch it and turn it into exit code 2 (1 for a database or model problem) or
+  a 400 JSON response with a `code`. `ModelError` means the solver itself is broken, not the input.
 - `DuplicateCardError` subclasses `InvalidHandSizeError`; `InvalidGameParamsError` and
   `UnknownHandError` are also a `ValueError` and a `KeyError`. New errors fit under old `except`s,
   and `test_exceptions.py` pins every parent.

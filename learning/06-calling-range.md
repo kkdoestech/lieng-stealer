@@ -36,7 +36,7 @@ once at start-up; then every query is a few array lookups.
 | # | Location | What to look for |
 |---|----------|------------------|
 | 1 | [calling_range.py:1-11](../backend/src/calling_range.py#L1-L11) | The model in one paragraph, and the claim "455 distinct strengths". |
-| 2 | [calling_range.py:23-37](../backend/src/calling_range.py#L23-L37) | Constants re-exported from `hands.py`, the `_COMB` table, the `OpponentModel` enum. |
+| 2 | [calling_range.py:24-37](../backend/src/calling_range.py#L24-L37) | Constants re-exported from `hands.py`, the `_COMB` table, the `OpponentModel` enum. |
 | 3 | [calling_range.py:60-76](../backend/src/calling_range.py#L60-L76) | Sort classes strongest-first, check the two invariants, build running totals. |
 | 4 | [calling_range.py:78-99](../backend/src/calling_range.py#L78-L99) | One card-removal row per hero class. |
 | 5 | [calling_range.py:142-150](../backend/src/calling_range.py#L142-L150) | `_calling_boundary`: where the calling range ends, with `bisect_right`. |
@@ -96,9 +96,9 @@ At `f = 0.35` that is 14,365 combos. To get your equity you need three things:
             reverse=True,
         )
         if sum(h.multiplicity for h in ordered) != TOTAL_COMBINATIONS:
-            raise LiengError(f"The calling-range model needs classes covering all {TOTAL_COMBINATIONS} hands.")
+            raise ModelError(f"The calling-range model needs classes covering all {TOTAL_COMBINATIONS} hands.")
         if len({h.score.score_tuple for h in ordered}) != len(ordered):
-            raise LiengError("The calling-range model needs every canonical class to have a distinct strength.")
+            raise ModelError("The calling-range model needs every canonical class to have a distinct strength.")
         self._ids: tuple[str, ...] = tuple(h.canonical_id for h in ordered)
         self._index: dict[str, int] = {cid: i for i, cid in enumerate(self._ids)}
         self._mult: tuple[int, ...] = tuple(h.multiplicity for h in ordered)
@@ -127,14 +127,16 @@ Everything below relies on two facts, and the two `if`s check them before any ta
 - **The classes cover the whole deck.** Their multiplicities must add up to 22,100
   (`TOTAL_COMBINATIONS`, re-exported from `hands.py`), because the fold rate `f` is a share of
   22,100 (section 5). A list of the 100 strongest classes is refused:
-  `LiengError: The calling-range model needs classes covering all 22100 hands.`
+  `ModelError: The calling-range model needs classes covering all 22100 hands.`
 - **No two classes are equally strong.** The module docstring states it
   ([calling_range.py:8](../backend/src/calling_range.py#L8)), and the second check enforces it by
   counting distinct score tuples. It is true today: the 455 classes have 455 different score tuples.
   If a house rule made the six Đĩ classes tie (lesson 02, exercise 6), the model would now refuse to
   start instead of silently counting ties as wins or losses (weak spot 1).
 
-Both checks were added in October 2026. They cost one pass over the list, at start-up only.
+Both checks were added in October 2026. They cost one pass over the list, at start-up only. Both
+raise `ModelError`, the exception for "the solver's own model is broken" (lesson 01): a failed
+check is a bug or a bad rule change, never something the user typed.
 
 ### 4. Step 2: card-removal rows
 
@@ -355,7 +357,7 @@ Whether this module is used at all is decided by the `OpponentModel` enum
 `OpponentModel.RANGE == "range"` is `True`, `str(OpponentModel.RANGE)` is `"range"`, and
 `OpponentModel("range")` turns the text of a web request into the enum. It is switched on in
 [range_finder.py:79](../backend/src/range_finder.py#L79), [cli.py:260](../backend/src/cli.py#L260)
-and [app.py:286](../backend/app.py#L286).
+and [app.py:306](../backend/app.py#L306).
 
 The same module re-exports the two state-space sizes from `hands.py` (lesson 03):
 
@@ -443,12 +445,12 @@ sorted (multiplicities are positive), which is what makes the search valid.
 
 Six weak spots were listed here when the course was written. Commit `bba5e63` ("fix(core)", October
 2026) fixed three of them. Two modelling choices remain, the private-state test is unchanged, and
-the fix introduced one small new problem.
+the fix introduced one small new problem, which commit `a9d9ce9` fixed.
 
 1. ✅ **Fixed: it silently needed 455 distinct strengths.** The `hero < k` / `hero == k` cases assume
    one strict order. Under a house rule where all Đĩ hands tie, six classes would be equal and
    `_equity_at` would have counted some ties as wins or losses, with no error. Now `__init__`
-   counts distinct score tuples and raises `LiengError` if any two classes are equally strong
+   counts distinct score tuples and raises `ModelError` if any two classes are equally strong
    ([calling_range.py:67-68](../backend/src/calling_range.py#L67-L68)). Pinned by
    `test_rejects_classes_with_equal_strength`
    ([test_calling_range.py:91-101](../backend/tests/test_calling_range.py#L91-L101)). A real tie
@@ -468,7 +470,7 @@ the fix introduced one small new problem.
 4. ✅ **Fixed: the `hands` parameter accepted a subset, but the total was 22,100.** A model built
    from the 20 strongest classes (500 combos) returned `(20, 0.0)` at `f = 0.5`: "everyone calls",
    which is meaningless. Now any list whose multiplicities don't add up to `TOTAL_COMBINATIONS` is
-   refused ([calling_range.py:65-66](../backend/src/calling_range.py#L65-L66)), pinned by
+   refused with a `ModelError` ([calling_range.py:65-66](../backend/src/calling_range.py#L65-L66)), pinned by
    `test_rejects_a_subset_of_hands` ([test_calling_range.py:84-89](../backend/tests/test_calling_range.py#L84-L89)).
 5. ✅ **Fixed: built-in errors escaped `LiengError`.** An unknown id now raises `UnknownHandError`
    ([calling_range.py:123](../backend/src/calling_range.py#L123)) and a bad `f`
@@ -480,14 +482,22 @@ the fix introduced one small new problem.
    `_index`. `OPPONENT_COMBINATIONS` is re-exported here only for that test
    ([calling_range.py:24](../backend/src/calling_range.py#L24)). *Fix:* a small public method such
    as `opponent_combos(cid)`.
-7. **New: a broken model is reported as bad user input.** The two invariant checks raise the base
-   class `LiengError`, and the CLI turns every `LiengError` into `Invalid input: …` with exit code 2
-   ([cli.py:367-370](../backend/src/cli.py#L367-L370)). With the all-Đĩ-tie rule of lesson 02,
-   `python -m src.cli --hand "Ks Kh Qd" --opponent-model range` prints
-   `Invalid input: The calling-range model needs every canonical class to have a distinct strength.`
-   and exits 2, although the user typed nothing wrong; the API, which builds the model in
-   `create_app()`, fails at start-up instead, which is right. *Fix:* a dedicated error (e.g.
-   `ModelError(LiengError)`) that the CLI reports like a database problem, exit code 1.
+7. ✅ **Fixed: a broken model was reported as bad user input.** The two invariant checks raised the
+   base class `LiengError`, and the CLI turns every `LiengError` into `Invalid input: …` with exit
+   code 2. With the all-Đĩ-tie rule of lesson 02, `python -m src.cli --hand "Ks Kh Qd"
+   --opponent-model range` printed `Invalid input: The calling-range model needs every canonical
+   class to have a distinct strength.` and exited 2, although the user typed nothing wrong. Now both
+   checks raise `ModelError` ([calling_range.py:65-68](../backend/src/calling_range.py#L65-L68)), a
+   new `LiengError` subclass ([exceptions.py:37-38](../backend/src/exceptions.py#L37-L38)), and the
+   CLI catches it before the catch-all ([cli.py:370-372](../backend/src/cli.py#L370-L372)): the same
+   command now prints
+   `Internal model error: The calling-range model needs every canonical class to have a distinct strength.`
+   and exits 1, like a database problem. (With the default `random` model the CLI never builds the
+   calling-range model, so it still runs and exits 0.) The API, which builds the model in
+   `create_app()`, fails at start-up, which is right. Pinned by `test_rejects_a_subset_of_hands` and
+   `test_rejects_classes_with_equal_strength`, which now expect `ModelError`, and by
+   `test_a_broken_model_is_an_internal_error_not_invalid_input`
+   ([test_cli.py:97-108](../backend/tests/test_cli.py#L97-L108)).
 
 ---
 
@@ -609,7 +619,7 @@ class always folds completely. Before running anything: which tests will fail? T
 
 <details><summary>Solution</summary>
 
-`2 failed, 157 passed`: `test_medium_hands_regression` (K-Q-3 becomes 0.0072 instead of 0.0108,
+`2 failed, 170 passed`: `test_medium_hands_regression` (K-Q-3 becomes 0.0072 instead of 0.0108,
 K-Q-5 0.3072 instead of 0.3097) and `test_profitable_range_respects_opponent_model` in
 [test_range_finder.py](../backend/tests/test_range_finder.py#L102-L109) (249 profitable classes
 instead of 250). The `f = 0` cross-check still passes, because at `f = 0` nothing is partial.
@@ -640,8 +650,8 @@ for hands in (hs[:20], [h for h in hs if h.canonical_id != "3-3-3"] + [two]):
 ```
 
 ```
-LiengError The calling-range model needs classes covering all 22100 hands.
-LiengError The calling-range model needs every canonical class to have a distinct strength.
+ModelError The calling-range model needs classes covering all 22100 hands.
+ModelError The calling-range model needs every canonical class to have a distinct strength.
 ```
 
 The first list holds only 500 combos, so the coverage check fires first. The second adds up to
@@ -688,7 +698,7 @@ def test_card_aware_equity_matches_at_zero_and_never_rises(model: CallingRangeMo
 
 `row[k + 1] − row[k]` cannot be 0 here: `bisect_right` skips equal values. At `f = 0.35`: Q-K-A
 0.9952 → 0.9953, K-K-Q 0.9394 → 0.94, K-Q-5 0.3097 → 0.314, K-Q-3 0.0108 → 0.0154, K-6-6 0.0 → 0.0.
-Small differences, as weak spot 3 predicted. `160 passed`, and mypy and ruff stay clean. Undo with
+Small differences, as weak spot 3 predicted. `173 passed`, and mypy and ruff stay clean. Undo with
 `git checkout -- backend/src/calling_range.py backend/tests/test_calling_range.py`.
 </details>
 
@@ -732,8 +742,9 @@ Small differences, as weak spot 3 predicted. `160 passed`, and mypy and ruff sta
   range, on the boundary, below it.
 - `f = 0` reproduces `winrates.json` exactly, and equity never rises with `f`.
 - The constructor refuses a hand list that doesn't cover 22,100 combos or has two equally strong
-  classes; errors are `UnknownHandError` / `InvalidGameParamsError`.
-- Still open: `f = 1` returns 0, `f` ignores card removal, tests read private state, and a broken
-  model reaches the CLI user as "Invalid input".
+  classes, with a `ModelError`; bad queries raise `UnknownHandError` / `InvalidGameParamsError`.
+- Fixed: the two invariants, project errors, and (since `a9d9ce9`) a broken model that the CLI
+  reported as "Invalid input". Still open: `f = 1` returns 0, `f` ignores card removal, and tests
+  read private state.
 
 **Next:** [07 — Expected value](07-expected-value.md)

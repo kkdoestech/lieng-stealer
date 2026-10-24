@@ -39,9 +39,9 @@ maths of its own. What is interesting is *how* it prints and *how* it fails.
 | 6 | [cli.py:149-192](../backend/src/cli.py#L149-L192) | Your hand: equity source, EV, "n/a (range model)". |
 | 7 | [cli.py:195-233](../backend/src/cli.py#L195-L233) | The category table, built from `category_breakdown`. |
 | 8 | [cli.py:236-271](../backend/src/cli.py#L236-L271) | `run_solver`: validate, compute, then print. |
-| 9 | [cli.py:274-309](../backend/src/cli.py#L274-L309) | `interactive_mode`: five `input()` prompts, and an exit code back. |
-| 10 | [cli.py:312-370](../backend/src/cli.py#L312-L370) | `main`: argparse, interactive or not, exit codes 1 and 2. |
-| 11 | [test_cli.py](../backend/tests/test_cli.py) | Ten tests: `capsys`, `SystemExit`, a fake keyboard, an empty stdout. |
+| 9 | [cli.py:274-312](../backend/src/cli.py#L274-L312) | `interactive_mode`: five `input()` prompts, and an exit code back. |
+| 10 | [cli.py:315-376](../backend/src/cli.py#L315-L376) | `main`: argparse, interactive or not, exit codes 1 and 2. |
+| 11 | [test_cli.py](../backend/tests/test_cli.py) | Twelve tests: `capsys`, `SystemExit`, a fake keyboard, an empty stdout, a forced plain branch, a fake broken model. |
 
 ---
 
@@ -72,12 +72,12 @@ backend ([db.py:82-89](../backend/src/db.py#L82-L89), lesson 05).
 
 ### 2. `main`: flags, defaults and the interactive switch
 
-[cli.py:315-344](../backend/src/cli.py#L315-L344) declares six options: `--pot`, `--bet`,
+[cli.py:318-347](../backend/src/cli.py#L318-L347) declares six options: `--pot`, `--bet`,
 `--fold-equity` (with the alias `--p-fold`), `--hand`, `--db` and `--opponent-model`. The
 choices for the last one come from the enum itself, `[m.value for m in OpponentModel]`, so a new
 model would appear in `--help` automatically. Then:
 
-📍 [`backend/src/cli.py:346-370`](../backend/src/cli.py#L346-L370)
+📍 [`backend/src/cli.py:349-376`](../backend/src/cli.py#L349-L376)
 ```python
     args = parser.parse_args(argv)
     opponent_model = OpponentModel(args.opponent_model)
@@ -100,6 +100,9 @@ model would appear in `--help` automatically. Then:
     except DatabaseError as err:
         print(f"Cannot load the win-rate database: {err}", file=sys.stderr)
         sys.exit(EXIT_DATABASE_ERROR)
+    except ModelError as err:
+        print(f"Internal model error: {err}", file=sys.stderr)
+        sys.exit(EXIT_DATABASE_ERROR)
     except (LiengError, ValueError) as err:
         # Bad hand text or out-of-range numbers: a clear message and the usage-error exit code
         print(f"Invalid input: {err}", file=sys.stderr)
@@ -117,11 +120,14 @@ model would appear in `--help` automatically. Then:
   given" from "given". The real defaults are `DEFAULT_POT`, `DEFAULT_BET_SIZE` and
   `DEFAULT_FOLD_EQUITY` ([ev.py:15-18](../backend/src/ev.py#L15-L18)), the same constants the API
   uses (lesson 07), so the two front doors cannot drift apart.
-- **Two kinds of failure, two exit codes.** A `DatabaseError` (missing or invalid file) prints
-  `Cannot load the win-rate database: …` and exits with 1. Any other `LiengError` (bad cards, bad
-  numbers) or `ValueError` prints `Invalid input: …` and exits with 2. The order of the `except`
-  clauses matters: `DatabaseError` is itself a `LiengError`, so it has to be caught first. Both
-  messages go to **stderr**, and neither is a traceback.
+- **Three kinds of failure, two exit codes.** A `DatabaseError` (missing or invalid file) prints
+  `Cannot load the win-rate database: …` and exits with 1. A `ModelError` (the solver's own model
+  is missing or inconsistent, for example a calling-range model whose classes don't cover the
+  deck: a bug or a bad setup, not your typing) prints `Internal model error: …` and also exits
+  with 1. Any other `LiengError` (bad cards, bad numbers) or `ValueError` prints `Invalid input: …`
+  and exits with 2. The order of the `except` clauses matters: `DatabaseError` and `ModelError` are
+  themselves `LiengError`s, so they have to be caught first. All three messages go to **stderr**,
+  and none is a traceback.
 - **Interactive mode returns its code.** `main` calls `sys.exit(code)` only when the code is not 0.
 - **The first line of `main` switches stdout to UTF-8.** That used to happen when the module was
   imported. Now importing `src.cli` (as every test does) changes nothing:
@@ -162,9 +168,11 @@ ignore them.
 The codes follow Unix conventions, and the module docstring
 ([cli.py:6-7](../backend/src/cli.py#L6-L7)) lists them. 2 means "you used the command wrongly";
 argparse already uses it for its own errors, so `cli.py` matches it. 1 is a general failure that
-is not your typing: here, a database that cannot be loaded. 130 is `128 + 2`, the shell's code for
-"stopped by signal 2 (SIGINT)", which is what Ctrl+C sends. Running out of input is a normal way
-for a scripted session to end, so it is 0. The constants live at
+is not your typing: here, a database that cannot be loaded, or a broken model
+(`Internal model error: …`). The table has no row for the second one because no command line can
+cause it; only a code change can, and a test fakes one (weak spot 10). 130 is `128 + 2`, the
+shell's code for "stopped by signal 2 (SIGINT)", which is what Ctrl+C sends. Running out of input
+is a normal way for a scripted session to end, so it is 0. The constants live at
 [cli.py:47-49](../backend/src/cli.py#L47-L49), so no bare `sys.exit(2)` is left in the code.
 
 ### 4. `run_solver`: validate, compute, then print
@@ -234,7 +242,7 @@ will differ): building `CallingRangeModel()` took 53–55 ms, loading and valida
 ```
 
 Line 164 is the CLI's version of `app.py`'s `_equity_function`
-([app.py:282-288](../backend/app.py#L282-L288)): the calling-range equity if a model exists,
+([app.py:302-308](../backend/app.py#L302-L308)): the calling-range equity if a model exists,
 otherwise the random-hand equity from the database. The CLI uses the *presence* of
 `calling_model` as the switch, because `run_solver` only builds one for the range model. The CLI
 does not compute profitable fold zones; the API does (lesson 07).
@@ -318,9 +326,10 @@ of the range run above:
 --------------------------
 ```
 
-The two branches show the same totals, but they are still not the same report. The plain category
-table has no coverage column and no sample hands, and the plain hand panel prints
-`Expected Value:     40,200` without the `+` ([cli.py:189](../backend/src/cli.py#L189)).
+The two branches show the same totals, but they are still not the same report: the plain category
+table has no coverage column and no sample hands. The hand panels do agree now. The plain one used
+to print `Expected Value:     40,200` without the `+`; it now uses the same expression as the `rich`
+branch and prints `+40,200` ([cli.py:189](../backend/src/cli.py#L189), weak spot 7).
 
 `rich` is also the slowest import the CLI has: 50–80 ms on the course machine. AGENTS.md §6 now
 budgets 300 ms for one cold-start command (the old 50 ms target could not be met by a fresh Python
@@ -351,7 +360,7 @@ classes, a coverage percentage, and up to five sample hands
 asks for the pot, the bet and the fold rate first, each with a default from `ev.py` when you just
 press Enter. Then:
 
-📍 [`backend/src/cli.py:290-309`](../backend/src/cli.py#L290-L309)
+📍 [`backend/src/cli.py:290-312`](../backend/src/cli.py#L290-L312)
 ```python
         model_str = input(
             f"Opponent folds 'random' or 'range' (weakest hands first)? [{default_model.value}]: "
@@ -362,6 +371,9 @@ press Enter. Then:
         run_solver(pot, bet, fold_equity, hand_str=hand_str or None, db_path=db_path, opponent_model=opponent_model)
     except DatabaseError as err:
         print(f"Cannot load the win-rate database: {err}", file=sys.stderr)
+        return EXIT_DATABASE_ERROR
+    except ModelError as err:
+        print(f"Internal model error: {err}", file=sys.stderr)
         return EXIT_DATABASE_ERROR
     except (ValueError, LiengError) as err:
         print(f"\nExiting session: {err}")
@@ -378,8 +390,8 @@ press Enter. Then:
 - The model question shows `default_model` in brackets and uses it for an empty answer.
 - Every expected failure becomes one line and an exit code. A bad number gives
   `Exiting session: could not convert string to float: 'abc'`, a bad model
-  `Exiting session: 'psychic' is not a valid OpponentModel`, both with 2. A database problem gets
-  the same message and code 1 as in `main`. `EOFError` (stdin closed, for example
+  `Exiting session: 'psychic' is not a valid OpponentModel`, both with 2. A database problem and a
+  broken model get the same messages and code 1 as in `main`. `EOFError` (stdin closed, for example
   `printf '' | python -m src.cli`) is a normal end, 0. Ctrl+C is 130.
 - The function *returns* the code instead of calling `sys.exit`, so a test can call it and look at
   the number, and `main` stays the only place that ends the process.
@@ -495,8 +507,8 @@ annotation `-> Console` is never evaluated (the module starts with
    exercise 4 breaks it on purpose.
 2. ✅ **Fixed: interactive mode always "succeeded".** It printed `Exiting session: …` and returned,
    so the exit code was 0 after an error, and `EOFError` escaped as a traceback. Now
-   `interactive_mode` returns 2, 1, 0 or 130 ([cli.py:297-309](../backend/src/cli.py#L297-L309))
-   and `main` exits with it ([cli.py:349-353](../backend/src/cli.py#L349-L353)). Pinned by
+   `interactive_mode` returns 2, 1, 0 or 130 ([cli.py:297-312](../backend/src/cli.py#L297-L312))
+   and `main` exits with it ([cli.py:352-356](../backend/src/cli.py#L352-L356)). Pinned by
    `test_interactive_mode_reports_invalid_hand` ([test_cli.py:51-56](../backend/tests/test_cli.py#L51-L56))
    and `test_interactive_mode_ends_cleanly_at_end_of_input`
    ([test_cli.py:74-80](../backend/tests/test_cli.py#L74-L80)). The Ctrl+C path has no test yet
@@ -508,37 +520,50 @@ annotation `-> Console` is never evaluated (the module starts with
    `test_category_breakdown_totals` ([test_range_finder.py:125-131](../backend/tests/test_range_finder.py#L125-L131));
    no CLI test reads the table itself.
 4. ✅ **Fixed: a missing database was called "Invalid input".** `DatabaseError` is a `LiengError`
-   ([exceptions.py:37](../backend/src/exceptions.py#L37)), so it used to land in the exit-2 branch.
+   ([exceptions.py:41](../backend/src/exceptions.py#L41)), so it used to land in the exit-2 branch.
    Now it is caught first, with its own message and exit code 1
-   ([cli.py:364-366](../backend/src/cli.py#L364-L366), and
+   ([cli.py:367-369](../backend/src/cli.py#L367-L369), and
    [cli.py:297-299](../backend/src/cli.py#L297-L299) in interactive mode). Pinned by
    `test_missing_database_has_its_own_message_and_exit_code`
    ([test_cli.py:67-71](../backend/tests/test_cli.py#L67-L71)).
 5. ✅ **Fixed: import-time side effects, and a swallowed exception.** Importing the module used to
    reconfigure `sys.stdout` inside `except Exception: pass`, and create a module-level console.
-   Now `main` calls `_use_utf8_stdout()` ([cli.py:314](../backend/src/cli.py#L314)), which catches
+   Now `main` calls `_use_utf8_stdout()` ([cli.py:317](../backend/src/cli.py#L317)), which catches
    only `OSError` and `ValueError` and says why ([cli.py:70-77](../backend/src/cli.py#L70-L77)),
    and the console is created on first use by `_console()`
    ([cli.py:64-67](../backend/src/cli.py#L64-L67)). No test pins this directly.
 6. ✅ **Fixed: defaults written three times.** 100,000 / 50,000 / 0.35 were typed in `main`, in
    `interactive_mode` and in `app.py`. Now all three read `DEFAULT_POT`, `DEFAULT_BET_SIZE` and
    `DEFAULT_FOLD_EQUITY` from [ev.py:15-18](../backend/src/ev.py#L15-L18) (here at
-   [cli.py:281-288](../backend/src/cli.py#L281-L288) and [:357-359](../backend/src/cli.py#L357-L359)).
+   [cli.py:281-288](../backend/src/cli.py#L281-L288) and [:360-362](../backend/src/cli.py#L360-L362)).
    `test_solve_default_ui_request_numbers` ([test_api.py:88-92](../backend/tests/test_api.py#L88-L92))
    pins the API side.
-7. **Two different reports.** The totals now match, but the plain fallback still has a smaller
-   category table ([cli.py:225-233](../backend/src/cli.py#L225-L233): no coverage column, no
-   sample hands) and no `+` on a positive EV ([:189](../backend/src/cli.py#L189)). No test runs the
-   fallback. *Fix:* build the lines once and let `rich` only decorate them (exercise 6 starts with
-   the test).
+7. **Two different reports (half fixed).** The totals match, and the plain hand panel now shows
+   the `+` on a positive EV like the `rich` one ([cli.py:189](../backend/src/cli.py#L189)), pinned
+   by `test_plain_text_report_shows_the_sign_of_a_positive_ev`
+   ([test_cli.py:89-94](../backend/tests/test_cli.py#L89-L94)), the first test that runs the
+   fallback. The plain category table is still smaller
+   ([cli.py:225-233](../backend/src/cli.py#L225-L233): no coverage column, no sample hands), and no
+   test looks at it. *Fix:* build the lines once and let `rich` only decorate them (exercise 6
+   starts with the test).
 8. **Duplicated logic with the API.** The category table is shared now, but the equity choice still
    exists twice ([cli.py:164](../backend/src/cli.py#L164) vs
-   [app.py:282-288](../backend/app.py#L282-L288)). The CLI has no profitable fold zones, so for
+   [app.py:302-308](../backend/app.py#L302-L308)). The CLI has no profitable fold zones, so for
    K-Q-3 it says "n/a" where the web UI shows two zones (exercise 7).
 9. ✅ **Fixed: "Game-Theoretic Solver".** The `--help` description used to promise game theory. It
-   now reads "Expected-Value Solver & Heatmap Viewer" ([cli.py:315](../backend/src/cli.py#L315)),
+   now reads "Expected-Value Solver & Heatmap Viewer" ([cli.py:318](../backend/src/cli.py#L318)),
    which matches README's Limitations section: an EV calculation against an assumed fold rate, not
    an equilibrium. No test pins the wording.
+10. ✅ **Fixed: a broken model was called "Invalid input".** `CallingRangeModel` checks its own
+    classes when it is built, and it used to raise a plain `LiengError` when they were wrong, so
+    the CLI reported a bug in the solver as `Invalid input: …` with exit 2. Now the checks raise
+    `ModelError` ([calling_range.py:65-68](../backend/src/calling_range.py#L65-L68)), and `main`
+    and `interactive_mode` catch it before the exit-2 clause: `Internal model error: …` on stderr,
+    exit 1 ([cli.py:370-372](../backend/src/cli.py#L370-L372) and
+    [cli.py:300-302](../backend/src/cli.py#L300-L302)). Pinned by
+    `test_a_broken_model_is_an_internal_error_not_invalid_input`
+    ([test_cli.py:97-108](../backend/tests/test_cli.py#L97-L108)), which swaps `CallingRangeModel`
+    for a function that raises.
 
 ---
 
@@ -551,8 +576,8 @@ python -m pytest tests/test_cli.py -q
 ```
 
 ```
-..........                                                               [100%]
-10 passed in 0.31s
+............                                                             [100%]
+12 passed in 0.45s
 ```
 
 The medium hand under the range model (the last lines of the report):
@@ -668,14 +693,14 @@ changes in the result: the model prompt shows `[range]`, and the empty answer ta
 **🟡 4. Break the fix for weak spot 1.** In `run_solver`, move the line
 `hand = Hand.from_str(hand_str) if hand_str else None` from the top
 ([cli.py:253](../backend/src/cli.py#L253)) to just above `if hand is not None:`. Before you run
-`python -m pytest tests/test_cli.py -q`, predict which of the ten tests fail. Two other tests also
+`python -m pytest tests/test_cli.py -q`, predict which of the twelve tests fail. Two other tests also
 use a bad hand: why do they still pass?
 
 <details><summary>Solution</summary>
 
 ```
 FAILED tests/test_cli.py::test_invalid_hand_is_reported_before_any_output - A...
-1 failed, 9 passed in 0.38s
+1 failed, 11 passed in 0.39s
 ```
 
 The assertion shows the banner panel that is now printed before the error. The other two
@@ -688,7 +713,7 @@ the fix came with a new test instead of relying on the old ones. Undo it with
 
 **🟡 5. Pin Ctrl+C.** Weak spot 2 left exit code 130 without a test. Write one: a fake `input`
 that raises `KeyboardInterrupt`, then check the exit code and the message. Then delete the
-`except KeyboardInterrupt:` clause ([cli.py:306-308](../backend/src/cli.py#L306-L308)) and run the
+`except KeyboardInterrupt:` clause ([cli.py:309-311](../backend/src/cli.py#L309-L311)) and run the
 tests again. What does pytest print, and what is its own exit code?
 
 <details><summary>Solution</summary>
@@ -705,45 +730,54 @@ def test_interactive_mode_exits_130_on_ctrl_c(monkeypatch, capsys):
     assert "Exiting session: interrupted." in capsys.readouterr().out
 ```
 
-With the clause in place: `11 passed`. Without it, the `KeyboardInterrupt` escapes from the test,
+With the clause in place: `13 passed`. Without it, the `KeyboardInterrupt` escapes from the test,
 and pytest treats it as *you* pressing Ctrl+C: it stops the whole run.
 
 ```
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!! KeyboardInterrupt !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-…/tests/test_cli.py:91: KeyboardInterrupt
+…/tests/test_cli.py:113: KeyboardInterrupt
 (to show a full traceback on KeyboardInterrupt use --full-trace)
-10 passed in 0.52s
+12 passed in 0.52s
 ```
 
-The summary line says "10 passed" and nothing failed, but pytest's exit code is 2 (interrupted),
+The summary line says "12 passed" and nothing failed, but pytest's exit code is 2 (interrupted),
 and the new test never got a result. Read exit codes in CI, not only the summary line. Undo it with
 `git checkout -- backend/src/cli.py backend/tests/test_cli.py`.
 </details>
 
-**🔴 6. One report, two looks.** Start on weak spot 7 with a test. Use
-`monkeypatch.setattr("src.cli.HAS_RICH", False)` to force the plain branch, run the K-Q-3 random
-command, and assert that the hand panel shows `+40,200`. Watch it fail, then fix
-[cli.py:189](../backend/src/cli.py#L189). For the full fix, make both branches print the same lines.
+**🔴 6. One report, two looks.** Weak spot 7 is half fixed: the plain hand panel signs a positive
+EV, and `test_plain_text_report_shows_the_sign_of_a_positive_ev`
+([test_cli.py:89-94](../backend/tests/test_cli.py#L89-L94)) pins it by forcing the plain branch.
+Do the same for the other half. Write a test that forces the plain branch, runs the range model
+with a pot-sized bet (`--pot 100000 --bet 100000 --fold-equity 0.35 --opponent-model range`), and
+asserts that the Điểm row shows its coverage, 52.5%, as the `rich` table's "Category Coverage"
+column does. Watch it fail, then make it pass in the plain branch of `render_categorized_heatmap`
+([cli.py:225-233](../backend/src/cli.py#L225-L233)). For the full fix, make both branches print the
+same lines.
 
 <details><summary>Solution sketch</summary>
 
 ```python
-def test_plain_report_signs_a_positive_ev(monkeypatch, capsys):
+def test_plain_category_table_shows_the_coverage(monkeypatch, capsys):
     monkeypatch.setattr("src.cli.HAS_RICH", False)
-    main(MEDIUM_HAND)
-    assert "Expected Value:     +40,200" in capsys.readouterr().out
+    main(["--pot", "100000", "--bet", "100000", "--fold-equity", "0.35", "--opponent-model", "range"])
+    assert "11,096 / 21,136 combos profitable (52.5%)" in capsys.readouterr().out
 ```
 
-Before the fix: `1 failed, 10 passed`. The fix is the same expression the `rich` branch uses:
+Before the fix: `1 failed, 12 passed`. The fix is the percentage the `rich` branch already computes,
+added to the plain line:
 
 ```python
-        print(f" Expected Value:     {'+' if ev_result.ev > 0 else ''}{format_currency(ev_result.ev)}")
+                f"{row.profitable_combos:,} / {row.combos:,} combos profitable "
+                f"({row.profitable_combos / row.combos * 100.0:.1f}%)"
 ```
 
-Then `11 passed`. `monkeypatch` works here because every renderer reads the module-level
-`HAS_RICH` when it is *called*, not when it is defined. For the full fix, give each renderer one
-list of `(label, value)` pairs, and let the two branches differ only in how they draw it. A single
-test can then compare the plain output with the labels.
+Then `13 passed`, and the plain table ends with
+`DIEM : 219 / 424 classes, 11,096 / 21,136 combos profitable (52.5%)`. `monkeypatch` works here
+because every renderer reads the module-level `HAS_RICH` when it is *called*, not when it is
+defined. For the full fix, give each renderer one list of `(label, value)` pairs (sample hands
+included), and let the two branches differ only in how they draw it. A single test can then
+compare the plain output with the labels.
 </details>
 
 **🔴 7. Show the profit zones in the CLI.** Add a line `Profitable when folds are: 0%–8% ·
@@ -768,7 +802,7 @@ import.
 1. Why does `python src/cli.py` fail while `python -m src.cli` works?
 2. `python -m src.cli --opponent-model range`: does it run the solver straight away?
 3. Which exceptions does `main` turn into exit code 2, which into exit code 1, and why does the
-   order of the two `except` clauses matter?
+   order of the `except` clauses matter?
 4. How does `test_cli.py` answer the interactive prompts without a keyboard?
 5. Under the range model the hand panel says "Break-Even Fold Equity: n/a (range model)". Why
    not print the number `EVResult` already contains?
@@ -783,9 +817,9 @@ import.
    the model question.
 3. Exit 2: `LiengError` (bad cards from `evaluator.py`, bad numbers as `InvalidGameParamsError`
    from `ev.py` and `run_solver`) and `ValueError` (`InvalidGameParamsError` is one too). Exit 1:
-   `DatabaseError`, a missing or invalid database file. `DatabaseError` is itself a `LiengError`,
-   so if the exit-2 clause came first it would catch the database error too, which is exactly the
-   old bug.
+   `DatabaseError`, a missing or invalid database file, and `ModelError`, a missing or inconsistent
+   model (a bug, not your input). Both are themselves `LiengError`s, so if the exit-2 clause came
+   first it would catch them too and blame your input, which is exactly the old bug.
 4. `monkeypatch.setattr("builtins.input", …)` replaces `input` with a lambda that returns the next
    item of a list, and `main([])` forces interactive mode.
 5. That number assumes a constant equity. Under the range model the equity changes with the fold
@@ -804,10 +838,10 @@ import.
 - Equity comes from the calling-range model or the database, exactly as in the API. The category
   totals come from the shared `category_breakdown`, the defaults from `ev.py`. The CLI shows no
   fold zones.
-- `rich` is an optional, development-only dependency: every renderer has a plain branch, and the
-  two reports still differ slightly.
-- Exit codes: 0 success (or end of input), 1 database, 2 invalid input, 130 Ctrl+C. Nothing is
-  printed on stdout before a failure, and nothing happens at import time.
+- `rich` is an optional, development-only dependency: every renderer has a plain branch. The hand
+  panels now agree (both sign a positive EV), but the plain category table is still smaller.
+- Exit codes: 0 success (or end of input), 1 database or broken model, 2 invalid input, 130
+  Ctrl+C. Nothing is printed on stdout before a failure, and nothing happens at import time.
 - The tests call `main(argv)` directly, capture output with `capsys`, and type for you with
   `monkeypatch`.
 

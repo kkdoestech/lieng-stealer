@@ -47,7 +47,7 @@ Flask, and the first request on page load is sent twice, with the first copy can
 | 4 | [main.jsx:6-10](../frontend/src/main.jsx#L6-L10) | `createRoot(...).render(<StrictMode><App /></StrictMode>)`. |
 | 5 | [App.jsx:6-8](../frontend/src/App.jsx#L6-L8) | `API_BASE`: empty by default, so requests stay on the page's own origin. |
 | 6 | [vite.config.js:7-14](../frontend/vite.config.js#L7-L14) | The `/api` proxy that turns those requests into calls to Flask. |
-| 7 | [App.jsx:197-208](../frontend/src/App.jsx#L197-L208) | The mount effect that StrictMode runs twice, and the cleanup that cancels the extra run. |
+| 7 | [App.jsx:198-209](../frontend/src/App.jsx#L198-L209) | The mount effect that StrictMode runs twice, and the cleanup that cancels the extra run. |
 | 8 | [vite.config.js:15-18](../frontend/vite.config.js#L15-L18) and [test-setup.js](../frontend/src/test-setup.js) | How Vitest gets a browser-like DOM. |
 | 9 | [.oxlintrc.json](../frontend/.oxlintrc.json) | Two rules set by hand, on top of oxlint's defaults. |
 
@@ -134,7 +134,7 @@ project has no TypeScript.
 | `npm run build` | `vite build` | `dist/`: one HTML, one CSS and one JS file |
 | `npm run preview` | `vite preview` | serves `dist/` on http://localhost:4173, to test the build |
 | `npm run lint` | `oxlint --deny-warnings` | nothing at all when the code is clean; exit code 1 on any warning |
-| `npm test` | `vitest run` | the 18 tests in `src/*.test.js` and `src/App.test.jsx` |
+| `npm test` | `vitest run` | the 20 tests in `src/*.test.js` and `src/App.test.jsx` |
 
 ### 3. From `index.html` to `<App />`
 
@@ -244,7 +244,7 @@ curl -s http://localhost:5173/health                           # → Vite's inde
 Because the browser only ever talks to port 5173, page and API share one origin in development and
 **CORS plays no part**. Flask still sends CORS headers, but only to the origins listed in
 `CORS_ORIGINS` (by default `http://localhost:5173` and `http://127.0.0.1:5173`,
-[app.py:130-131](../backend/app.py#L130-L131), lesson 16). They matter only when the page and the API
+[app.py:141-142](../backend/app.py#L141-L142), lesson 16). They matter only when the page and the API
 are on different origins, which is what `VITE_API_URL` is for.
 
 When Flask is not running, the proxy cannot connect and answers by itself:
@@ -255,9 +255,9 @@ Content-Type: text/plain
 ```
 
 with an empty body. Every error from Flask has a JSON body with a `code`, so `solveErrorFor`
-([App.jsx:41-45](../frontend/src/App.jsx#L41-L45), lesson 13) reads "5xx without a `code`" as "the
-solver is not running" and shows "Can't reach the solver". A test pins that case
-([App.test.jsx:99](../frontend/src/App.test.jsx#L99)).
+([App.jsx:41-46](../frontend/src/App.jsx#L41-L46), lesson 13) reads "no `code`", whatever the status,
+as "the solver is not reachable" and shows "Can't reach the solver". Two tests pin it: this 502 and
+a bare 404 from some other server ([App.test.jsx:99-100](../frontend/src/App.test.jsx#L99-L100)).
 
 The app used to do this differently, and the comparison explains the current design:
 
@@ -283,7 +283,7 @@ POST http://localhost:5173/api/analyze    answered
 The production build, served by `vite preview`, made one `/api/solve` and one `/api/analyze`. The
 difference comes from StrictMode and this effect:
 
-📍 [`frontend/src/App.jsx:197-208`](../frontend/src/App.jsx#L197-L208)
+📍 [`frontend/src/App.jsx:198-209`](../frontend/src/App.jsx#L198-L209)
 ```jsx
   // The first run on mount. It reads the current inputs without making them effect dependencies.
   const startFirstRun = useEffectEvent((controller) => {
@@ -306,9 +306,9 @@ clean up after themselves. Here the cleanup aborts the first run's `AbortControl
 `/api/solve` is cancelled, its answer is thrown away, and its `/api/analyze` is never sent. The
 request had already left the browser, so Flask may still compute it once; the page just ignores the
 result. A test renders `<StrictMode><App /></StrictMode>` and checks exactly that: two solve requests,
-the first one aborted ([App.test.jsx:172-180](../frontend/src/App.test.jsx#L172-L180)).
+the first one aborted ([App.test.jsx:174-182](../frontend/src/App.test.jsx#L174-L182)).
 
-The language effect at [App.jsx:146-153](../frontend/src/App.jsx#L146-L153) also runs twice, which
+The language effect at [App.jsx:147-154](../frontend/src/App.jsx#L147-L154) also runs twice, which
 is harmless because writing the same value twice changes nothing.
 
 ### 6. Linting: 104 rules, zero warnings
@@ -378,8 +378,8 @@ The first import adds matchers such as `toBeInTheDocument()` and `toHaveTextCont
 `expect`. `cleanup()` removes whatever the previous test rendered, so tests can't see each other's
 DOM.
 
-Vitest finds three files: `src/App.test.jsx` (12 tests), `src/format.test.js` (4) and
-`src/i18n.test.js` (2), 18 tests in all. The App tests replace `fetch` with a fake
+Vitest finds three files: `src/App.test.jsx` (14 tests), `src/format.test.js` (4) and
+`src/i18n.test.js` (2), 20 tests in all. The App tests replace `fetch` with a fake
 ([App.test.jsx:43-55](../frontend/src/App.test.jsx#L43-L55)), so no server is needed. Lesson 13
 reads them, and lesson 15 puts them next to the backend suite.
 
@@ -477,22 +477,26 @@ Fixed since the first version of this course:
   Node 22.22.2 or newer, the floor jsdom sets.
 - ✅ **Fixed: template leftovers.** `src/assets/`, `public/` and the template README were deleted;
   [frontend/README.md](../frontend/README.md) now describes this project.
-- ✅ **Fixed: the component had no tests.** 12 Vitest tests render `App` with `fetch` mocked
-  ([App.test.jsx](../frontend/src/App.test.jsx)); 8 of them fail on the previous `App.jsx`.
+- ✅ **Fixed: the component had no tests.** 14 Vitest tests now render `App` with `fetch` mocked
+  ([App.test.jsx](../frontend/src/App.test.jsx)); 8 of the first 12 fail on the `App.jsx` that came
+  before them.
 - ✅ **Fixed: a title that oversold.** [index.html:6](../frontend/index.html#L6) now says "EV solver",
   matching the README (the tool computes EV, not an equilibrium).
+- ✅ **Fixed: a 4xx without a `code` was called an input problem.** If a production host didn't route
+  `/api` and answered with its own HTML 404, the page used to say "Check your inputs: HTTP 404".
+  `solveErrorFor` now looks only at the body: no `code` means "not the solver"
+  ([App.jsx:42](../frontend/src/App.jsx#L42)), whatever the status; `invalid_hand` and
+  `invalid_params` are input problems; any other API code is a server error
+  ([App.jsx:43-45](../frontend/src/App.jsx#L43-L45)). Two new table cases pin it: a bare 404 shows
+  "Can't reach the solver", and a 404 with the API's `not_found` code shows the internal-error
+  message ([App.test.jsx:100-101](../frontend/src/App.test.jsx#L100-L101)).
 
 Still open:
 
 1. **The tests can't tell a relative URL from an absolute one.** The fake `fetch` keeps only the
-   path ([App.test.jsx:46](../frontend/src/App.test.jsx#L46)), so all 12 App tests still pass when
+   path ([App.test.jsx:46](../frontend/src/App.test.jsx#L46)), so all 14 App tests still pass when
    `API_BASE` is `http://127.0.0.1:5000` (try it: `VITE_API_URL=http://127.0.0.1:5000 npm test`).
    The old fallback could come back unnoticed. *Fix:* one test that checks the exact URL (exercise 7).
-2. **A 4xx without a `code` is called an input problem.** `solveErrorFor`
-   ([App.jsx:44](../frontend/src/App.jsx#L44)) treats any 4xx that isn't `invalid_hand` as bad input.
-   If a production host doesn't route `/api` and answers with its own HTML 404 or 405, the page says
-   "Check your inputs: HTTP 404", which sends the user looking in the wrong place. *Fix:* treat a
-   response without a JSON `code` as "not the solver", the same way the 5xx branch already does.
 
 ---
 
@@ -508,7 +512,7 @@ The end of the output (timings vary):
 
 ```
  Test Files  3 passed (3)
-      Tests  18 passed (18)
+      Tests  20 passed (20)
 ```
 
 List every test by name:
@@ -518,24 +522,26 @@ npx vitest run --reporter=verbose | grep '✓'
 ```
 
 ```
- ✓ src/i18n.test.js > every language defines exactly the English keys, with the same kinds of values 5ms
- ✓ src/i18n.test.js > messages with a parameter include it in every language 1ms
- ✓ src/format.test.js > formatMoney uses the requested locale's thousands separator 17ms
- ✓ src/format.test.js > formatMoney rounds to whole VND and keeps the minus sign 1ms
+ ✓ src/format.test.js > formatMoney uses the requested locale's thousands separator 16ms
+ ✓ src/format.test.js > formatMoney rounds to whole VND and keeps the minus sign 0ms
  ✓ src/format.test.js > formatMoney shows 0 before any value has arrived 0ms
  ✓ src/format.test.js > formatZones lists every profitable fold-frequency interval 1ms
- ✓ src/App.test.jsx > App > renders the verdict and figures from /api/solve 280ms
- ✓ src/App.test.jsx > App > the top-hands table reads showdown_equity 79ms
- ✓ src/App.test.jsx > App > an invalid hand shows its message and clears the old verdict 193ms
- ✓ src/App.test.jsx > App > a network failure shows the matching message 38ms
- ✓ src/App.test.jsx > App > a server error shows the matching message 37ms
- ✓ src/App.test.jsx > App > a 5xx that did not come from the API shows the matching message 89ms
- ✓ src/App.test.jsx > App > the language toggle switches the text and is remembered 203ms
- ✓ src/App.test.jsx > App > the pot stepper moves by 10k and stops at 1,000 250ms
- ✓ src/App.test.jsx > App > the notes show the model the API reports 72ms
- ✓ src/App.test.jsx > App > analysis requests send only the inputs, never client-side results 24ms
- ✓ src/App.test.jsx > App > a click while the analysis is still loading cancels the old run 124ms
- ✓ src/App.test.jsx > App > StrictMode's double mount aborts the duplicate first request 49ms
+ ✓ src/i18n.test.js > every language defines exactly the English keys, with the same kinds of values 3ms
+ ✓ src/i18n.test.js > messages with a parameter include it in every language 1ms
+ ✓ src/App.test.jsx > App > renders the verdict and figures from /api/solve 259ms
+ ✓ src/App.test.jsx > App > the top-hands table reads showdown_equity 43ms
+ ✓ src/App.test.jsx > App > an invalid hand shows its message and clears the old verdict 114ms
+ ✓ src/App.test.jsx > App > a network failure shows the matching message 30ms
+ ✓ src/App.test.jsx > App > a server error shows the matching message 30ms
+ ✓ src/App.test.jsx > App > a 5xx that did not come from the API shows the matching message 39ms
+ ✓ src/App.test.jsx > App > a 404 that did not come from the API shows the matching message 28ms
+ ✓ src/App.test.jsx > App > an API error that isn't about the input shows the matching message 29ms
+ ✓ src/App.test.jsx > App > the language toggle switches the text and is remembered 96ms
+ ✓ src/App.test.jsx > App > the pot stepper moves by 10k and stops at 1,000 199ms
+ ✓ src/App.test.jsx > App > the notes show the model the API reports 70ms
+ ✓ src/App.test.jsx > App > analysis requests send only the inputs, never client-side results 26ms
+ ✓ src/App.test.jsx > App > a click while the analysis is still loading cancels the old run 118ms
+ ✓ src/App.test.jsx > App > StrictMode's double mount aborts the duplicate first request 46ms
 ```
 
 ```bash
@@ -592,7 +598,7 @@ the browser's DevTools, Network tab, filtered on `api`.
 
 In development: two `/api/solve`, the first shown as cancelled, and one `/api/analyze`. StrictMode
 mounts the component twice in development only, and the cleanup of the mount effect
-([App.jsx:203-208](../frontend/src/App.jsx#L203-L208)) aborts the first run before it gets as far as
+([App.jsx:204-209](../frontend/src/App.jsx#L204-L209)) aborts the first run before it gets as far as
 the analysis. In the preview: one of each. `vite preview` uses the same proxy settings as the dev
 server (its `preview.proxy` defaults to `server.proxy`), so the built page reaches Flask too.
 </details>
@@ -628,14 +634,14 @@ find the line of `App.jsx` that chose the message, and the test that pins it.
 `/api/solve` gets `502 Bad Gateway` with an empty `text/plain` body: the proxy itself answers, and
 the dev-server terminal prints `http proxy error: /api/solve … ECONNREFUSED 127.0.0.1:5000`. The
 body isn't JSON, so `.json().catch(() => ({}))` gives `{}`, and `solveErrorFor`
-([App.jsx:42](../frontend/src/App.jsx#L42)) sees a 5xx without a `code`, so the message is "Can't reach
-the solver. Start the backend on port 5000 and try again." The test is the third case of the table at
-[App.test.jsx:96-104](../frontend/src/App.test.jsx#L96-L104), which answers with `reply(502, {})`.
+([App.jsx:42](../frontend/src/App.jsx#L42)) sees no `code`, so the message is "Can't reach the
+solver. Start the backend on port 5000 and try again." The test is the third case of the table at
+[App.test.jsx:96-106](../frontend/src/App.test.jsx#L96-L106), which answers with `reply(502, {})`.
 Nothing to undo; start Flask again.
 </details>
 
 **🟡 5. Bring a warning back.** Replace the mount effect at
-[App.jsx:203-208](../frontend/src/App.jsx#L203-L208) with the old version,
+[App.jsx:204-209](../frontend/src/App.jsx#L204-L209) with the old version,
 `useEffect(() => { startSolve(); }, []);`, and run `npm run lint; echo $?`. How many warnings, and
 what is the exit code?
 
@@ -645,7 +651,7 @@ Three warnings and exit code 1. Two are the old ones on the effect line
 (`react(set-state-in-effect)`, because `startSolve` calls `setIsLoading(true)`, and
 `react-hooks(exhaustive-deps)`, because `startSolve` is not a dependency). The third is new:
 `eslint(no-unused-vars)` for `startFirstRun`, which nothing calls any more. With the old plain
-`oxlint` script the exit code would have been 0. `npm test` still passes all 18, by the way:
+`oxlint` script the exit code would have been 0. `npm test` still passes all 20, by the way:
 `startSolve` aborts whatever run is in `currentRun` before it starts a new one, so the StrictMode
 test still sees the first request aborted. Here the linter is the only guard. Undo with
 `git checkout -- frontend/src/App.jsx`.
@@ -669,7 +675,7 @@ extra request came from StrictMode and not from the code. It is still better to 
 is what showed that the effect needed a cleanup. Undo with `git checkout -- frontend/src/main.jsx`.
 </details>
 
-**🔴 7. Pin the relative URL.** Run `VITE_API_URL=http://127.0.0.1:5000 npm test`. All 18 tests pass,
+**🔴 7. Pin the relative URL.** Run `VITE_API_URL=http://127.0.0.1:5000 npm test`. All 20 tests pass,
 although the page now calls Flask directly, as it did before the fix. Explain why, then add a test to
 [App.test.jsx](../frontend/src/App.test.jsx) that fails in exactly this situation and passes with a
 plain `npm test`.
@@ -741,6 +747,6 @@ Keep the test if you like; undo with `git checkout -- frontend/src/App.test.jsx`
 - StrictMode runs the mount effect twice in development; the effect's cleanup aborts the first run,
   so only one solve and one analysis count. Production makes one of each.
 - `npm run lint` has 104 rules active, prints nothing and exits 0; with `--deny-warnings`, any warning
-  fails it. `npm test` runs 18 tests, 12 of them on the component.
+  fails it. `npm test` runs 20 tests, 14 of them on the component.
 
 **Next:** [13 — The React app](13-frontend-app.md)

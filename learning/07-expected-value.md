@@ -3,7 +3,7 @@
 > **Goal:** understand every line of `ev.py`: the EV formula, the break-even fold rate, and why the
 > code scans for *zones* of fold rates instead of trusting a single threshold.
 > **Files:** [`backend/src/ev.py`](../backend/src/ev.py), [`backend/tests/test_ev.py`](../backend/tests/test_ev.py),
-> and the code that calls it in [`backend/app.py`](../backend/app.py#L282-L327).
+> and the code that calls it in [`backend/app.py`](../backend/app.py#L302-L347).
 > **Time:** ~60 min. **Before this:** [06 — The calling range](06-calling-range.md).
 
 ---
@@ -45,7 +45,7 @@ the best one to understand first in full.
 | 5 | [ev.py:81-121](../backend/src/ev.py#L81-L121) | `calculate_break_even_fold_equity`: the formula solved for `f`. |
 | 6 | [ev.py:124-147](../backend/src/ev.py#L124-L147) | `is_profitable` and `evaluate_action`, which bundle the above. |
 | 7 | [ev.py:150-194](../backend/src/ev.py#L150-L194) | `profitable_fold_zones`: a scan over 101 fold rates. |
-| 8 | [app.py:282-327](../backend/app.py#L282-L327) | How the API feeds `ev.py` (`_equity_function`, `_evaluate_hand`) and turns zones into two JSON fields (`_hand_payload`). |
+| 8 | [app.py:302-347](../backend/app.py#L302-L347) | How the API feeds `ev.py` (`_equity_function`, `_evaluate_hand`) and turns zones into two JSON fields (`_hand_payload`). |
 | 9 | [test_ev.py](../backend/tests/test_ev.py) | 15 tests that pin the boundary cases, the K-Q-3 zones and the strong-hand slope. |
 
 ---
@@ -93,7 +93,7 @@ def final_pot(pot: float, bet_size: float) -> float:
 ```
 
 Every function in `ev.py` calls `final_pot()`, and so do the API's range summary
-([app.py:339](../backend/app.py#L339)) and the CLI report ([cli.py:100](../backend/src/cli.py#L100)).
+([app.py:359](../backend/app.py#L359)) and the CLI report ([cli.py:100](../backend/src/cli.py#L100)).
 If the call model ever changes, this is the line to change.
 
 ### 2. `calculate_ev`: two lines of maths behind four guards
@@ -121,7 +121,7 @@ The guards raise `InvalidGameParamsError`, the project's error for bad numbers (
 derives from both `LiengError` and the built-in `ValueError`
 ([exceptions.py:25-26](../backend/src/exceptions.py#L25-L26)), so code that catches either one
 works. The API rarely reaches these guards, because `_parse_game_params`
-([app.py:236-259](../backend/app.py#L236-L259)) rejects bad input first with the same error type,
+([app.py:256-279](../backend/app.py#L256-L279)) rejects bad input first with the same error type,
 which the API turns into a `400 invalid_params` answer (lesson 10). Tests and the CLI can reach them.
 
 **Worked example.** This is the default hand in the web UI, Q-K-A, with pot 100,000, bet 50,000,
@@ -264,7 +264,7 @@ threshold can say that, so the code scans:
 
 ### 7. How the API uses all of this
 
-📍 [`backend/app.py:291-298`](../backend/app.py#L291-L298)
+📍 [`backend/app.py:311-318`](../backend/app.py#L311-L318)
 ```python
 def _evaluate_hand(services: Services, hand: Hand, params: GameParams) -> HandResult:
     """Evaluate one hand: EV at the given fold rate and the zones where raising is +EV."""
@@ -276,17 +276,17 @@ def _evaluate_hand(services: Services, hand: Hand, params: GameParams) -> HandRe
     return HandResult(hand, canonical, stats, ev_res, zones)
 ```
 
-`_equity_function` ([app.py:282-288](../backend/app.py#L282-L288)) returns either
+`_equity_function` ([app.py:302-308](../backend/app.py#L302-L308)) returns either
 `lambda f: services.calling_model.equity(canonical_id, f)` (range model) or
 `lambda f: random_equity` (random model). The same `equity_at` is used once for your actual fold
 rate, and 101 times for the zones. Everything lands in one frozen `HandResult`
-([app.py:82-89](../backend/app.py#L82-L89)): the hand, its class, its database row, the `EVResult`
+([app.py:86-93](../backend/app.py#L86-L93)): the hand, its class, its database row, the `EVResult`
 and the zones. `services` is the app's own database and calling-range model (lesson 10).
 
 `_hand_payload` then turns a `HandResult` into the JSON that both `/api/solve` and `/api/evaluate`
 send. The zones become two separate fields:
 
-📍 [`backend/app.py:305-327`](../backend/app.py#L305-L327)
+📍 [`backend/app.py:325-347`](../backend/app.py#L325-L347)
 ```python
 def _hand_payload(result: HandResult, model: OpponentModel) -> Json:
     """The hand-evaluation fields, identical in /api/solve and /api/evaluate.
@@ -318,7 +318,7 @@ def _hand_payload(result: HandResult, model: OpponentModel) -> Json:
 - `break_even_fold_equity` comes straight from `EVResult`, but only under the random model.
 - `profitable_from_fold_equity` is the start of the *last* zone.
 - `decision` is `"RAISE"` when `is_profitable`, otherwise `"CHECK/FOLD"`
-  ([app.py:301-302](../backend/app.py#L301-L302)).
+  ([app.py:321-322](../backend/app.py#L321-L322)).
 
 For the junk hand 5-3-2 under the random model, the API answers with
 `break_even_fold_equity: 0.3312` (exact) and `profitable_from_fold_equity: 0.34` (the grid point).
@@ -331,7 +331,7 @@ the pot, which is positive.
 
 `ev.py` has one more caller in the API. `_solve_range` puts `final_pot()` and the pure-bluff
 break-even `calculate_break_even_fold_equity(pot, bet_size, 0.0)` into every range summary
-([app.py:339-340](../backend/app.py#L339-L340)): at the default sizes, `final_pot: 200000.0` and
+([app.py:359-360](../backend/app.py#L359-L360)): at the default sizes, `final_pot: 200000.0` and
 `pure_bluff_break_even_fold_equity: 0.3333`.
 
 ### 8. The other caller: the range finder
@@ -543,7 +543,7 @@ together. Before the fix, the same typo in one copy would have broken only one o
 with `git checkout -- backend/src/ev.py`.
 </details>
 
-**🟡 5. Change the grid.** In [app.py:297](../backend/app.py#L297), pass `steps=1000` to
+**🟡 5. Change the grid.** In [app.py:317](../backend/app.py#L317), pass `steps=1000` to
 `profitable_fold_zones`. Which tests fail, and what do they tell you about the API contract?
 
 <details><summary>Solution</summary>

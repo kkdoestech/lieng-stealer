@@ -40,8 +40,8 @@ first run of everything, so that every later lesson can zoom in on one box of th
 | 1 | [README.md:89-150](../README.md#L89-L150) | "How it works": the ranking table, 22,100 → 455, the two equity models, the EV formula. |
 | 2 | [AGENTS.md:29-83](../AGENTS.md#L29-L83) | The rules as a spec. Since October 2026 it also describes what the code really does (section 9). |
 | 3 | [README.md:371-410](../README.md#L371-L410) | The project layout, one line per file. |
-| 4 | [app.py:124-128](../backend/app.py#L124-L128) | The online half in five lines: load the table, build the models, once per app. |
-| 5 | [cli.py:312](../backend/src/cli.py#L312) | `main`, the terminal entry point you will run below. |
+| 4 | [app.py:135-139](../backend/app.py#L135-L139) | The online half in five lines: load the table, build the models, once per app. |
+| 5 | [cli.py:315](../backend/src/cli.py#L315) | `main`, the terminal entry point you will run below. |
 | 6 | [AGENTS.md:124-130](../AGENTS.md#L124-L130) | The performance budgets, now with measured numbers (section 9). |
 
 ---
@@ -184,7 +184,7 @@ Doing that for every one of the C(52, 3) = **22,100** starting hands means
 Every request after that is a dictionary lookup plus a little arithmetic. The whole online half is
 set up in five lines when the Flask app is created:
 
-📍 [`backend/app.py:124-128`](../backend/app.py#L124-L128)
+📍 [`backend/app.py:135-139`](../backend/app.py#L135-L139)
 ```python
     if db is None:
         db = WinRateDB(DEFAULT_DB_PATH)
@@ -198,7 +198,7 @@ server's state. These lines live inside `create_app()`, an **app factory** (less
 [10](10-flask-api.md)): each app object gets its own services, stored in `app.extensions`, and a
 test can pass in its own database. Until October 2026 the same objects were module-level globals,
 which `AGENTS.md` forbids; the only module-level object left is `app = create_app()`
-([app.py:574](../backend/app.py#L574)), the entry point for `gunicorn app:app` and `python app.py`.
+([app.py:594](../backend/app.py#L594)), the entry point for `gunicorn app:app` and `python app.py`.
 One equity lookup took about 0.1 µs on the same machine.
 
 ### 6. A tour of the repository
@@ -215,7 +215,7 @@ lieng-stealer/
 │   ├── pyproject.toml         ruff, strict mypy and pytest settings         lesson 15
 │   ├── data/winrates.json     455 exact equities (generated)                lesson 04
 │   ├── src/
-│   │   ├── exceptions.py      LiengError and seven subclasses               lesson 01
+│   │   ├── exceptions.py      LiengError and eight subclasses               lesson 01
 │   │   ├── paths.py           the absolute path of winrates.json            lesson 05
 │   │   ├── evaluator.py       Card, Rank, Suit; HandScore, evaluate_hand    lessons 01, 02
 │   │   ├── hands.py           22,100 → 455 canonical hands                  lesson 03
@@ -225,7 +225,7 @@ lieng-stealer/
 │   │   ├── ev.py              EV, break-even, profitable zones              lesson 07
 │   │   ├── range_finder.py    EV of all 455 hands, sorted                   lesson 08
 │   │   └── cli.py             terminal report                               lesson 09
-│   └── tests/                 11 test files, 159 tests                      lesson 15
+│   └── tests/                 11 test files, 172 tests                      lesson 15
 └── frontend/                  React 19 + Vite 8 page                        lessons 12–14
     └── src/  main.jsx  App.jsx  i18n.js  format.js  *.css  *.test.js(x)
 ```
@@ -243,10 +243,10 @@ All commands run from `backend/` with the virtual environment active (see
 **The tests.** `python -m pytest -q` prints:
 
 ```
-........................................................................ [ 45%]
-........................................................................ [ 90%]
-...............                                                          [100%]
-159 passed in 1.57s
+........................................................................ [ 41%]
+........................................................................ [ 83%]
+............................                                             [100%]
+172 passed in 2.11s
 ```
 
 **The CLI.** The README's example, trimmed to the first and last panels:
@@ -310,7 +310,7 @@ A bad request is JSON too, with a stable code, e.g.
 
 ```
  Test Files  3 passed (3)
-      Tests  18 passed (18)
+      Tests  20 passed (20)
 ```
 
 `npm run dev` then serves the page on <http://localhost:5173>. It solves the default spot as soon
@@ -323,33 +323,34 @@ Exercise 3 shows how to run it safely.
 
 Lesson [11](11-request-trace.md) traces a click on "Run solver" through every layer. In short:
 
-1. A click on "Run solver" calls `startSolve` ([App.jsx:187](../frontend/src/App.jsx#L187)), which
+1. A click on "Run solver" calls `startSolve` ([App.jsx:188](../frontend/src/App.jsx#L188)), which
    cancels any run still in flight and calls `fetchSolveAndAnalysis`
-   ([App.jsx:49](../frontend/src/App.jsx#L49)). That sends `POST /api/solve`
-   ([App.jsx:55](../frontend/src/App.jsx#L55)) to a relative URL, which the Vite dev server forwards
+   ([App.jsx:50](../frontend/src/App.jsx#L50)). That sends `POST /api/solve`
+   ([App.jsx:56](../frontend/src/App.jsx#L56)) to a relative URL, which the Vite dev server forwards
    to Flask.
-2. `solve_api` ([app.py:404](../backend/app.py#L404)) validates the numbers with
-   `_parse_game_params` ([app.py:236](../backend/app.py#L236)).
+2. `solve_api` ([app.py:424](../backend/app.py#L424)) validates the numbers with
+   `_parse_game_params` ([app.py:256](../backend/app.py#L256)).
 3. The hand text becomes cards: `Hand.from_str` ([evaluator.py:420-421](../backend/src/evaluator.py#L420-L421)).
 4. The cards become a canonical class and a lookup: `to_canonical` and `db.get`
-   ([app.py:293-294](../backend/app.py#L293-L294)) → `"Q-K-A"` → equity 0.9969.
+   ([app.py:313-314](../backend/app.py#L313-L314)) → `"Q-K-A"` → equity 0.9969.
 5. `ev.py` turns the equity into EV and profitable fold zones
-   ([app.py:296-297](../backend/app.py#L296-L297)).
-6. `range_finder.solve_range` scores all 455 hands ([app.py:332](../backend/app.py#L332)).
+   ([app.py:316-317](../backend/app.py#L316-L317)).
+6. `range_finder.solve_range` scores all 455 hands ([app.py:352](../backend/app.py#L352)).
 7. `jsonify` sends it back, React draws the verdict, tables and the "where raising pays" bar, and
-   the same function then asks `/api/analyze` for the notes ([App.jsx:78](../frontend/src/App.jsx#L78)).
+   the same function then asks `/api/analyze` for the notes ([App.jsx:79](../frontend/src/App.jsx#L79)).
 
 ### 9. The root documents, and how far to trust each
 
 The repository has six Markdown files at the root. They were written at different times; on
 2026-10-24 (commit `8c987ea`, "bring README, AGENTS, SKILLS and DESIGN in line with the code") all
-six were updated, four of them substantially. Here is what each one is good for today:
+six were updated, four of them substantially, and a follow-up commit the same day (`a9d9ce9`) fixed
+the small slips this lesson's weak spots had found. Here is what each one is good for today:
 
 | File | What it is | Trust |
 |------|-----------|-------|
-| [README.md](../README.md) | Front page: rules, maths, CLI/API reference, test table | **High.** Its numbers match real runs: 159 + 18 tests ([README.md:10](../README.md#L10)), the unified API fields and error codes, real JSON examples, every environment variable. Two small slips (weak spot 6). |
-| [AGENTS.md](../AGENTS.md) | The engineering spec: rules, data model, EV, budgets | **High.** Rewritten to describe the code: an EV engine, not an equilibrium solver ([AGENTS.md:4](../AGENTS.md#L4)); exact enumeration; strict mypy and ruff, enforced in CI; the real exception tree, `create_app()`, `Hand` equality, the house tie-breaks, the six-field `HandScore`; and measured budgets. One stale phrase (weak spot 2). |
-| [DESIGN.md](../DESIGN.md) | Rules for the web UI (Ayu Dark colours, layout, copy) | **High** for the current UI. It is the rulebook for lesson [14](14-styling.md); the UI was brought in line with it (new colour tokens, one message per error code). One rule is broken by text the backend sends (weak spot 3). |
+| [README.md](../README.md) | Front page: rules, maths, CLI/API reference, test table | **High.** Its numbers match real runs: 172 + 20 tests ([README.md:10](../README.md#L10)), the unified API fields and error codes, real JSON examples, every environment variable. The two small slips the course found are fixed (weak spot 6). |
+| [AGENTS.md](../AGENTS.md) | The engineering spec: rules, data model, EV, budgets | **High.** Rewritten to describe the code: an EV engine, not an equilibrium solver ([AGENTS.md:4](../AGENTS.md#L4)); exact enumeration; strict mypy and ruff, enforced in CI; the real exception tree, `create_app()`, `Hand` equality, the house tie-breaks, the six-field `HandScore`; and measured budgets. One budget was met by relaxing it (weak spot 2). |
+| [DESIGN.md](../DESIGN.md) | Rules for the web UI (Ayu Dark colours, layout, copy) | **High** for the current UI. It is the rulebook for lesson [14](14-styling.md); the UI was brought in line with it (new colour tokens, one message per error code). Since `a9d9ce9` the text the backend sends obeys it too (weak spot 3). |
 | [SKILLS.md](../SKILLS.md) | A command cheat-sheet | **High** (it was the least trustworthy file). Rewritten from commands that actually run: bash with PowerShell notes, no CLI subcommands, the real dependencies, the exact-by-default generator. I ran a sample: they work (weak spot 1). |
 | [BLOG.md](../BLOG.md) | The origin story, in Vietnamese | Background only. A dated note at the top ([BLOG.md:5](../BLOG.md#L5)) says the data is now exact and the "10,000 games" experiment has no code; the Liêng frequency is corrected to 3.48%. The story itself still describes Monte Carlo. |
 | [EXPERIMENT.md](../EXPERIMENT.md) | A two-student project proposal, in Vietnamese | Background only. A dated note ([EXPERIMENT.md:5](../EXPERIMENT.md#L5)) lists what the code does differently; the body is still the original plan (weak spot 5). |
@@ -408,7 +409,9 @@ compares the file with the current rules and refuses a stale one.
 This lesson's weak spots are all **documentation drift**: a document says something the code no
 longer does. None of them breaks the program, but each one can waste an afternoon. When the course
 was written there were five; the documentation pass of 2026-10-24 (commit `8c987ea`) fixed most of
-them, and a careful re-read turns up a few small new ones.
+them, a careful re-read turned up a few small new ones, and the follow-up commit `a9d9ce9` fixed
+those too. What is left is one budget worth reading carefully (weak spot 2), two historical
+documents (weak spots 4 and 5), and the fact that no test watches the documents.
 
 **1. ✅ Fixed: SKILLS.md commands that failed or did nothing.** It used to document a CLI with
 subcommands (`python -m src.cli solve …`, which exits 2 with `unrecognized arguments: solve`), a
@@ -428,7 +431,7 @@ I ran both: they print the full report and exit 0 (+132,097 with the default `ra
 ([SKILLS.md:87](../SKILLS.md#L87)): it prints `455 hand types loaded and validated`. Nothing tests
 the documents automatically, though; only `verify_course.py` checks the course.
 
-**2. ✅ Mostly fixed: AGENTS.md stated rules the code broke.** The spec forbade global state while
+**2. ✅ Fixed: AGENTS.md stated rules the code broke.** The spec forbade global state while
 `app.py` kept the database in module-level globals; it described a four-field `HandScore`, Đĩ ties
 "based on game configuration", strict `mypy` that nobody ran, a "game-theoretic solver", Monte Carlo
 data, and budgets that weren't met. Now both sides moved: the code got an app factory, mypy and ruff
@@ -440,21 +443,37 @@ how the app obeys it:
 - **No Global Mutable State**: Do not use global variables to store game state or cached databases. State must be injected via constructors or parameters (Dependency Injection). The Flask app is built by `create_app(db=..., calling_model=..., config=...)`, which keeps its services in `app.extensions`; the module-level `app` object exists only as the entry point for gunicorn and `python app.py`.
 ```
 
-*Still open:* §4.2 still says the 455 classes minimise "offline Monte Carlo overhead"
-([AGENTS.md:103](../AGENTS.md#L103)), although the data is exact. And one budget was met by
-changing the spec rather than the code: a CLI run is now budgeted at < 300 ms instead of 50 ms
-([AGENTS.md:129](../AGENTS.md#L129)), with no test. That is a legitimate choice (a fresh Python
-process can't start in 50 ms with these imports), but it is worth knowing which kind of "met" it is.
+The last stale phrase went in `a9d9ce9`. §4.2 used to say the 455 classes minimise "offline Monte
+Carlo overhead", although the data is exact; it now gives the real saving:
 
-**3. ✅ Mostly fixed: "GTO" and "Monte Carlo" in the UI.** The subtitle said "GTO solver for Liêng",
+📍 [`AGENTS.md:103`](../AGENTS.md#L103)
+```
+- Reducing $22,100 \rightarrow 455$ canonical keys cuts the offline work to $455 \times 18{,}424 \approx 8.4$ million exact showdowns and keeps the database below 100 KB.
+```
+
+*Worth knowing:* one budget was met by changing the spec rather than the code. A CLI run is now
+budgeted at < 300 ms instead of 50 ms ([AGENTS.md:129](../AGENTS.md#L129)), with no test. That is
+a legitimate choice (a fresh Python process can't start in 50 ms with these imports), but it is
+worth knowing which kind of "met" it is.
+
+**3. ✅ Fixed: "GTO" and "Monte Carlo" in the UI.** The subtitle said "GTO solver for Liêng",
 so did the browser tab, and the specs footnote said "Monte Carlo". Now the subtitle is
 "Expected-value solver for Liêng" ([i18n.js:8](../frontend/src/i18n.js#L8)), the tab
 "Liêng Scope – EV solver" ([index.html:6](../frontend/index.html#L6)), and the footnote
-"Exact enumeration, 455 canonical classes" ([i18n.js:38](../frontend/src/i18n.js#L38)). *Still
-open:* the text the **backend** writes into the notes panel. The rule-based notes, which are what you
-see without an API key, end with `3. **GTO Insight:**` ([app.py:568](../backend/app.py#L568)), and
-the LLM prompt asks for "[Lời khuyên GTO]" ([app.py:539](../backend/app.py#L539)). DESIGN.md says
-"no 'GTO'" ([DESIGN.md:88](../DESIGN.md#L88)), and no test checks it (exercise 5).
+"Exact enumeration, 455 canonical classes" ([i18n.js:38](../frontend/src/i18n.js#L38)). The text
+the **backend** writes into the notes panel followed in `a9d9ce9`. The rule-based notes, which are
+what you see without an API key, used to end with `3. **GTO Insight:**`; now the heading is
+Vietnamese for "tactical assessment":
+
+📍 [`backend/app.py:588`](../backend/app.py#L588)
+```python
+        f"3. **Nhận định chiến thuật:** "
+```
+
+and the LLM prompt asks for "[Lời khuyên chiến thuật]" (tactical advice) instead of
+"[Lời khuyên GTO]" ([app.py:559](../backend/app.py#L559)), so a real model isn't invited to write
+the word either. That is what DESIGN.md asks: "no 'GTO'" ([DESIGN.md:88](../DESIGN.md#L88)). *Still
+open:* no test pins it, so nothing stops the word from coming back (exercise 5 adds one).
 
 **4. ✅ Fixed: BLOG.md numbers that didn't come from the code.** The Liêng frequency now reads
 3.48% (768 / 22,100, [BLOG.md:22](../BLOG.md#L22)), and the dated note says the "10,000 simulated
@@ -469,11 +488,13 @@ games ([EXPERIMENT.md:75](../EXPERIMENT.md#L75)) and Monte Carlo convergence run
 ([EXPERIMENT.md:102](../EXPERIMENT.md#L102)). Fine for a historical document, as long as nobody
 reads it as a spec.
 
-**6. New: two small slips in the README.** "What it does" says the slow work takes "≈ 30 s"
-([README.md:43](../README.md#L43)), while "Regenerating the data" says "≈ 10 s on one core"
-([README.md:359](../README.md#L359)); 10 s is what I measured. And the configuration section starts
-with an orphaned table header just above the sentence that introduces the real table
-([README.md:451-453](../README.md#L451-L453)), which renders as an empty table.
+**6. ✅ Fixed: two small slips in the README.** "What it does" said the slow work takes "≈ 30 s",
+while "Regenerating the data" says "≈ 10 s on one core" ([README.md:359](../README.md#L359)); 10 s
+is what I measured, and since `a9d9ce9` both say it ([README.md:43](../README.md#L43)). The
+configuration section also started with an orphaned table header just above the sentence that
+introduces the real table, which rendered as an empty table; now the section opens with that
+sentence ([README.md:451](../README.md#L451)). No test reads the README, so slips like these are
+found only by reading it next to the code.
 
 ---
 
@@ -597,34 +618,45 @@ current code generates (lesson 05). Before that check existed, the same change f
 tests and the app served the stale numbers. Undo with `git checkout -- backend/src/evaluator.py`.
 </details>
 
-**🟡 5. Remove the last "GTO" (weak spot 3).** First write a test that the rule-based notes make no
-"GTO" claim, and watch it fail. Then change the text at [app.py:568](../backend/app.py#L568) and run
-`python -m pytest -q`.
+**🟡 5. Pin the "no GTO" rule with a test (weak spot 3).** The word is gone from the backend's
+notes ([app.py:588](../backend/app.py#L588)) and from the LLM prompt
+([app.py:559](../backend/app.py#L559)), but no test would notice if it came back. Write one test in
+`tests/test_api.py` that checks both texts, watch it pass, then put `**GTO Insight:**` back at
+app.py:588 and watch it fail.
 
 <details><summary>Solution</summary>
 
-In `tests/test_api.py`, which already has a `client` fixture without an API key:
+`test_api.py` already has what you need: `client` (no API key, so you get the rule-based notes),
+`keyed_client` (a key, for tests that patch `requests.post`), `ANALYZE_PAYLOAD` and `_FakeResponse`.
+Catch the prompt the way `test_analyze_uses_openrouter_when_a_key_is_set` does:
 
 ```python
-def test_fallback_advice_makes_no_gto_claim(client):
-    res = client.post("/api/analyze", json={"hand": "As Kh Qd"})
-    assert res.status_code == 200
-    assert "GTO" not in res.get_json()["advice"]
+def test_notes_make_no_gto_claim(client, keyed_client, monkeypatch):
+    """DESIGN.md: no "GTO" (the tool computes EV, not an equilibrium)."""
+    assert "GTO" not in client.post("/api/analyze", json=ANALYZE_PAYLOAD).get_json()["advice"]
+    sent = {}
+
+    def fake_post(url, headers, json, timeout):
+        sent["prompt"] = json["messages"][1]["content"]
+        return _FakeResponse(200, {"choices": [{"message": {"content": "Tố."}}]})
+
+    monkeypatch.setattr(requests, "post", fake_post)
+    keyed_client.post("/api/analyze", json=ANALYZE_PAYLOAD)
+    assert "GTO" not in sent["prompt"]
 ```
 
-Before the change: `1 failed, 40 passed` in `test_api.py`,
-`AssertionError: assert 'GTO' not in '**[Phân Tíc...a lợi nhuận.'`. Change `**GTO Insight:**` to,
-say, `**Nhận định EV:**` (the notes are in Vietnamese): `160 passed`. The LLM prompt at
-[app.py:539](../backend/app.py#L539) asks the model for "[Lời khuyên GTO]", so a real model would
-still write the word; change the prompt in the same commit. Undo with
-`git checkout -- backend/app.py backend/tests/test_api.py`.
+`python -m pytest -q` now gives `173 passed`. With `3. **GTO Insight:** ` back in the fallback:
+`1 failed, 46 passed` in `test_api.py`, `AssertionError: assert 'GTO' not in '**[Phân Tíc...a lợi nhuận.'`.
+Put the fallback right and write `[Lời khuyên GTO]` into the prompt instead: the same test fails on
+its second assert, `assert 'GTO' not in 'You are a W...hác đối thủ.'`. A test only for the fallback
+would have missed that half. Undo with `git checkout -- backend/app.py backend/tests/test_api.py`.
 </details>
 
 **🔴 6. A real `python -m src.db` check.** The old SKILLS.md promised `python -m src.db --verify`,
 which did nothing. Add a `__main__` block to [db.py](../backend/src/db.py) that loads the file given
 on the command line (default: `DEFAULT_DB_PATH`), prints the number of classes and the multiplicity
 total, and exits 1 with a message if loading fails. Check:
-`python -m src.db data/winrates.json; echo $?` and `python -m src.db nope.json; echo $?`. The 159
+`python -m src.db data/winrates.json; echo $?` and `python -m src.db nope.json; echo $?`. The 172
 tests, `ruff check .` and `mypy` must still pass.
 
 <details><summary>Solution sketch</summary>

@@ -5,7 +5,7 @@
 > wrong.
 > **Files:** [`backend/src/db.py`](../backend/src/db.py), [`backend/src/paths.py`](../backend/src/paths.py),
 > [`backend/tests/test_db.py`](../backend/tests/test_db.py), and the two places that create it:
-> [`app.py`](../backend/app.py#L124-L125) and [`cli.py`](../backend/src/cli.py#L258)
+> [`app.py`](../backend/app.py#L135-L136) and [`cli.py`](../backend/src/cli.py#L258)
 > ([`range_finder.py`](../backend/src/range_finder.py#L46-L47) only checks that it is loaded).
 > **Time:** ~40 min. **Before this:** [04 — The generator and `winrates.json`](04-generator.md).
 
@@ -43,7 +43,7 @@ hands that call, is computed by `calling_range.py` in lesson 06.
 | 5 | [db.py:163-193](../backend/src/db.py#L163-L193) | `_validate_records`: exactly the 455 hands, the right category and multiplicity, plausible rates. |
 | 6 | [db.py:113-148](../backend/src/db.py#L113-L148) | `get` and `get_by_cards`. |
 | 7 | [db.py:150-160](../backend/src/db.py#L150-L160) | `all_items`, `len()` and `in`. |
-| 8 | [paths.py](../backend/src/paths.py), [app.py:124-125](../backend/app.py#L124-L125) | The default path, and who creates the instance in the web app. |
+| 8 | [paths.py](../backend/src/paths.py), [app.py:135-136](../backend/app.py#L135-L136) | The default path, and who creates the instance in the web app. |
 | 9 | [test_db.py](../backend/tests/test_db.py) | 13 tests, including a latency budget and seven for validation. |
 
 ---
@@ -325,7 +325,7 @@ Notice that these two methods do not check `_is_loaded`, while `get` and `all_it
 
 ### 8. Who creates the database
 
-📍 [`backend/app.py:124-128`](../backend/app.py#L124-L128)
+📍 [`backend/app.py:135-139`](../backend/app.py#L135-L139)
 ```python
     if db is None:
         db = WinRateDB(DEFAULT_DB_PATH)
@@ -624,8 +624,8 @@ same to `__len__`?
             _ = "A-A-A" in WinRateDB()
 ```
 
-None break: `159 passed` before you add the test, because no code asks `in` of an unloaded
-database. `__len__` is different: `bool(db)` falls back to it, and `/health` reports
+None break: `172 passed` before you add the test and `173 passed` with it, because no code asks
+`in` of an unloaded database. `__len__` is different: `bool(db)` falls back to it, and `/health` reports
 `classes_loaded: len(db)` (lesson 10), where 0 is a meaningful answer. A `len()` that raises would
 turn "not loaded" into a 500. Undo with `git checkout -- backend/src/db.py backend/tests/test_db.py`.
 </details>
@@ -674,7 +674,7 @@ def test_range_finder_with_an_injected_fake_db(real_records: dict) -> None:
         WinRateDB.from_mapping({cid: records[cid] for cid in ("A-A-A", "4-3-3")})
 ```
 
-`160 passed`, mypy and ruff clean. The fake 4-3-3 ties A-A-A on EV (150,000) and equity (1.0), and
+`173 passed`, mypy and ruff clean. The fake 4-3-3 ties A-A-A on EV (150,000) and equity (1.0), and
 the range finder's last tie-break, real hand strength (lesson 08), puts A-A-A first. The last two
 lines show the price of validation: a two-record fake, which the course's first version of this
 exercise used, is now rejected. Validation and easy test doubles pull in opposite directions; here

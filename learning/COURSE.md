@@ -30,12 +30,12 @@ cd backend
 python -m venv .venv
 source .venv/bin/activate        # Windows PowerShell: .venv\Scripts\Activate.ps1
 pip install -r requirements-dev.txt   # API + CLI + tests + ruff/mypy (requirements.txt = server only)
-python -m pytest -q              # 159 passed
+python -m pytest -q              # 172 passed
 
 # Frontend (in a second terminal)
 cd frontend
 npm install
-npm test                         # 18 tests pass (Vitest)
+npm test                         # 20 tests pass (Vitest)
 ```
 
 Unless a lesson says otherwise, Python commands run from `backend/` **with the virtual environment

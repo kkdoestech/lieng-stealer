@@ -249,8 +249,8 @@ multiplicity into one frozen `CanonicalHand`. Both the id and the `ranks` tuple 
 `_canonical_ranks`, so they can't disagree: `A-2-3` has ranks `(ACE, TWO, THREE)`, while `K-Q-J`
 has `(KING, QUEEN, JACK)`. Until October 2026 the A-2-3/Q-K-A decision was written out twice, once
 in each function (weak spot 2). The API and CLI call this on the player's hand
-([app.py:293](../backend/app.py#L293), [cli.py:162](../backend/src/cli.py#L162)), and the API then
-looks the stats up by the id it returns ([app.py:294](../backend/app.py#L294)), so the id is
+([app.py:313](../backend/app.py#L313), [cli.py:162](../backend/src/cli.py#L162)), and the API then
+looks the stats up by the id it returns ([app.py:314](../backend/app.py#L314)), so the id is
 computed once per request. (Before the API refactor it was computed twice: once by
 `db.get_by_cards`, once here.)
 
@@ -283,7 +283,7 @@ list comes out in that **multiset order**, not strength order: it starts
 Modules that need strength order sort by `score_tuple` themselves (lesson 06).
 
 The generator, the calling-range model and the range finder all call this function at start-up
-([generator.py:133](../backend/src/generator.py#L133),
+([generator.py:142](../backend/src/generator.py#L142),
 [calling_range.py:61](../backend/src/calling_range.py#L61),
 [range_finder.py:51](../backend/src/range_finder.py#L51)).
 
@@ -530,10 +530,10 @@ from 🧪 Try it prints, then run both and `python -m pytest -q`.
 
 <details><summary>Solution</summary>
 
-`1 failed, 158 passed`: only `test_duplicate_cards_are_rejected`
+`1 failed, 171 passed`: only `test_duplicate_cards_are_rejected`
 ([test_hands.py:115-119](../backend/tests/test_hands.py#L115-L119)). The probe's last line goes back
 to `0.2806` (it prints the equity without raising), A-A-K's stats for an impossible hand. The other
-158 tests pass because every other path builds a `Hand` first: the hole is latent, which is exactly
+171 tests pass because every other path builds a `Hand` first: the hole is latent, which is exactly
 why it needs its own test. Undo with `git checkout -- backend/src/hands.py`.
 </details>
 
@@ -546,7 +546,7 @@ Predict which comparisons still work on two `CanonicalHand`s and which test fail
 `<`, `>`, `==`, `min()`, `max()` and `sorted()` still work: they only need the methods the class
 writes itself. `<=` and `>=` raise
 `TypeError: '<=' not supported between instances of 'CanonicalHand' and 'CanonicalHand'`.
-`1 failed, 158 passed`: `test_canonical_hands_support_all_comparisons`
+`1 failed, 171 passed`: `test_canonical_hands_support_all_comparisons`
 ([test_hands.py:121-125](../backend/tests/test_hands.py#L121-L125)). Undo with
 `git checkout -- backend/src/hands.py`.
 </details>
@@ -567,7 +567,7 @@ then run `python -m pytest -q`.
 
 `get_canonical_id` rejects duplicates; `evaluate_hand` does too (`DuplicateCardError`, lesson 02), so
 calling it first keeps `to_canonical([As, As, Kd])` an error. About 4.9 µs before, 3.5 µs after;
-`159 passed`, and the suit-invariance and round-trip tests prove the ids didn't change. The cost is
+`172 passed`, and the suit-invariance and round-trip tests prove the ids didn't change. The cost is
 that `to_canonical` now repeats the join instead of calling the one function that defines an id;
 a helper `_join(ranks)` used by both would remove that too. Undo with
 `git checkout -- backend/src/hands.py`.
@@ -586,8 +586,8 @@ First, delete the two special cases at [hands.py:88-91](../backend/src/hands.py#
 Without the special case, pytest stops at collection (`Interrupted: 2 errors during collection`):
 `WinRateDB` now validates the file and refuses it, `'data/winrates.json' must contain exactly the
 455 canonical hands: 2 missing (e.g. ['A-3-2', 'A-K-Q']), 2 unknown (e.g. ['A-2-3', 'Q-K-A'])`.
-(With `--continue-on-collection-errors`: `15 failed, 86 passed, 14 errors`.) After regenerating:
-`10 failed, 149 passed`, the tests that spell `"Q-K-A"` or `"A-2-3"` out (in `test_api.py`,
+(With `--continue-on-collection-errors`: `17 failed, 90 passed, 15 errors`.) After regenerating:
+`10 failed, 162 passed`, the tests that spell `"Q-K-A"` or `"A-2-3"` out (in `test_api.py`,
 `test_db.py`, `test_generator.py` and `test_hands.py`). An id format is a public contract: it is in
 the data file, the API and the tests.
 
@@ -604,7 +604,7 @@ def normalise_canonical_id(text: str) -> str:
 
 With `db.get` retrying through it, `db.get("J-Q-K")` returns 0.995, `"A-K-Q"` and `"q k a"` return
 0.9969, `"3-2-A"` returns 0.962, and `"INVALID_KEY"` still raises `UnknownHandError`. One test fails,
-`1 failed, 158 passed`: `test_unknown_id_is_a_project_error_and_a_key_error`
+`1 failed, 171 passed`: `test_unknown_id_is_a_project_error_and_a_key_error`
 ([test_db.py:146-151](../backend/tests/test_db.py#L146-L151)) uses `"J-Q-K"` as its example of an
 unknown id, which is now found. That is a decision, not a bug: change its example to a truly invalid
 id such as `"Z-Z-Z"`. Undo with `git checkout -- backend/src/hands.py backend/src/db.py`, and

@@ -43,9 +43,9 @@ frontend); nothing in the repo is specific to any of them.
 | # | Location | What to look for |
 |---|----------|------------------|
 | 1 | [Procfile:1](../backend/Procfile#L1) | The production start command, token by token. |
-| 2 | [app.py:574](../backend/app.py#L574) and [app.py:99-144](../backend/app.py#L99-L144) | What gunicorn imports: `app = create_app()`, which loads the DB, builds the tables, sets up CORS and the limiter. |
-| 3 | [app.py:50-60](../backend/app.py#L50-L60) and [app.py:147-160](../backend/app.py#L147-L160) | Every setting with its default, and how the environment overrides it. |
-| 4 | [app.py:577-579](../backend/app.py#L577-L579) | The development entry point, which gunicorn never runs. |
+| 2 | [app.py:594](../backend/app.py#L594) and [app.py:103-156](../backend/app.py#L103-L156) | What gunicorn imports: `app = create_app()`, which loads the DB, builds the tables, sets up CORS and the limiter. |
+| 3 | [app.py:51-64](../backend/app.py#L51-L64) and [app.py:159-175](../backend/app.py#L159-L175) | Every setting with its default, and how the environment overrides it. |
+| 4 | [app.py:597-599](../backend/app.py#L597-L599) | The development entry point, which gunicorn never runs. |
 | 5 | [requirements.txt:1-6](../backend/requirements.txt#L1-L6) and [requirements-dev.txt](../backend/requirements-dev.txt) | Five runtime pins; the tools stay in the dev file. |
 | 6 | [App.jsx:6-8](../frontend/src/App.jsx#L6-L8) | `VITE_API_URL` and its same-origin default. |
 | 7 | [package.json:6-12](../frontend/package.json#L6-L12) | `build` and `preview`. |
@@ -69,7 +69,7 @@ A `Procfile` is a convention from Heroku that several platforms read: one line p
 |-------|---------|
 | `web:` | The process type that receives HTTP traffic. |
 | `gunicorn` | A production WSGI server (see the 💡 box). It replaces Flask's development server. |
-| `app:app` | "Import the module `app` (`app.py`) and serve the variable `app` in it": `app = create_app()` at [app.py:574](../backend/app.py#L574). |
+| `app:app` | "Import the module `app` (`app.py`) and serve the variable `app` in it": `app = create_app()` at [app.py:594](../backend/app.py#L594). |
 | `--bind 0.0.0.0:$PORT` | Listen on every network interface, on the port the platform assigns in `$PORT`. |
 | `--workers 2` | Start two worker *processes*. |
 | `--worker-class gthread --threads 4` | Each worker runs four threads, so up to 8 requests are handled at once. |
@@ -77,7 +77,7 @@ A `Procfile` is a convention from Heroku that several platforms read: one line p
 | `--preload` | Import `app.py` once in the master process, *before* forking the workers. |
 
 Because `app:app` names an object, the `if __name__ == "__main__":` block at
-[app.py:577-579](../backend/app.py#L577-L579) never runs under gunicorn. That block is only for
+[app.py:597-599](../backend/app.py#L597-L599) never runs under gunicorn. That block is only for
 `python app.py`, and it now listens on `127.0.0.1` unless `HOST` says otherwise.
 
 ### 2. Two workers, one build
@@ -103,8 +103,8 @@ carry all their inputs, so it does not matter which worker or thread answers (le
 what makes adding workers, or machines, safe.
 
 The threads are there for `/api/analyze`. With a key it waits for OpenRouter for up to
-`OPENROUTER_TIMEOUT` seconds (15 by default, [app.py:59](../backend/app.py#L59), used at
-[app.py:490](../backend/app.py#L490)). While one thread waits, the other three in that worker keep
+`OPENROUTER_TIMEOUT` seconds (15 by default, [app.py:63](../backend/app.py#L63), used at
+[app.py:510](../backend/app.py#L510)). While one thread waits, the other three in that worker keep
 answering `/api/solve`. With the old single-threaded `sync` workers, two slow analyses occupied
 both workers and every solve behind them waited. Solves are CPU-bound but take 1–2 ms, so the GIL
 costs little here.
@@ -124,15 +124,16 @@ requests==2.31.0
 | Package | Used by | Where it is listed |
 |---------|---------|--------------------|
 | `flask` | `app.py` | `requirements.txt` |
-| `flask-cors` | CORS headers, [app.py:130-131](../backend/app.py#L130-L131) | `requirements.txt` |
-| `flask-limiter` | the `/api/analyze` rate limit, [app.py:133-139](../backend/app.py#L133-L139) | `requirements.txt` |
+| `flask-cors` | CORS headers, [app.py:141-142](../backend/app.py#L141-L142) | `requirements.txt` |
+| `flask-limiter` | the `/api/analyze` rate limit, [app.py:144-151](../backend/app.py#L144-L151) | `requirements.txt` |
 | `gunicorn` | the `Procfile` | `requirements.txt` |
-| `requests` | `/api/analyze` → OpenRouter ([app.py:473](../backend/app.py#L473)) | `requirements.txt` |
+| `requests` | `/api/analyze` → OpenRouter ([app.py:493](../backend/app.py#L493)) | `requirements.txt` |
 | `pytest`, `rich`, `ruff`, `mypy`, `types-requests` | tests, the CLI's colours, lint, types | [requirements-dev.txt](../backend/requirements-dev.txt), which starts with `-r requirements.txt` |
 
 A production install gets only the five runtime packages. On a developer machine
 `pip install -r requirements-dev.txt` installs both. The CLI still works without `rich`: it prints a
-plain-text report instead (lesson 09; lesson 15 notes that no test runs that branch).
+plain-text report instead (lesson 09; lesson 15 notes that only one test runs that branch, and it
+checks a single line).
 
 Every version is pinned exactly (`==`), so a fresh install today gets what the code was tested
 with. What is not pinned: the dependencies of these packages (Werkzeug, Jinja2, …; the dev server
@@ -144,7 +145,7 @@ platform which one to use.
 
 Every backend setting has a default in code:
 
-📍 [`backend/app.py:50-60`](../backend/app.py#L50-L60)
+📍 [`backend/app.py:51-64`](../backend/app.py#L51-L64)
 ```python
 # Settings and their defaults. create_app() reads each one from the environment when it is set,
 # and an explicit ``config`` argument overrides both (tests use that).
@@ -153,24 +154,32 @@ DEFAULT_CONFIG: Final[dict[str, Any]] = {
     "ANALYZE_RATE_LIMIT": "10 per minute",
     "RATELIMIT_STORAGE_URI": "memory://",
     "RATELIMIT_ENABLED": True,
+    # Number of reverse proxies in front of the app whose X-Forwarded-For header to trust (0 = none).
+    # Behind a hosting proxy, set it to 1 so the rate limit counts each visitor, not the proxy.
+    "PROXY_FIX_X_FOR": 0,
     "OPENROUTER_API_KEY": "",
     "OPENROUTER_MODEL": "meta-llama/llama-3.1-8b-instruct:free",
     "OPENROUTER_TIMEOUT": 15.0,
 }
 ```
 
-`_settings_from_env` ([app.py:147-160](../backend/app.py#L147-L160)) reads each of these names
+`_settings_from_env` ([app.py:159-175](../backend/app.py#L159-L175)) reads each of these names
 from the environment and converts it to the default's type: `"1"`, `"true"`, `"yes"` or `"on"` for a
-bool, `float()` for a number, the raw text otherwise. So there are three layers, each overriding
-the one before: the defaults, the environment, and `create_app(config=…)`, which is what tests use.
+bool, `int()` or `float()` for a number, the raw text otherwise. A number that doesn't parse stops
+start-up with a message naming the variable, for example
+`ValueError: Environment variable OPENROUTER_TIMEOUT must be a number, got 'abc'.` (it used to be
+`float()`'s bare `could not convert string to float: 'abc'`). So there are three layers, each
+overriding the one before: the defaults, the environment, and `create_app(config=…)`, which is what
+tests use.
 
 | Variable | Read at | When | Default |
 |----------|---------|------|---------|
-| `PORT` | [Procfile:1](../backend/Procfile#L1), [app.py:579](../backend/app.py#L579) | server start | 5000 for `python app.py`; gunicorn needs it set |
-| `HOST` | [app.py:579](../backend/app.py#L579) | `python app.py` only | `127.0.0.1` |
+| `PORT` | [Procfile:1](../backend/Procfile#L1), [app.py:599](../backend/app.py#L599) | server start | 5000 for `python app.py`; gunicorn needs it set |
+| `HOST` | [app.py:599](../backend/app.py#L599) | `python app.py` only | `127.0.0.1` |
 | `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, `OPENROUTER_TIMEOUT` | `create_app` | **start-up** | empty (→ rule-based text, lesson 10), Llama 3.1 8B, 15 s |
 | `CORS_ORIGINS` | `create_app` | start-up | the two Vite dev origins |
 | `ANALYZE_RATE_LIMIT`, `RATELIMIT_STORAGE_URI`, `RATELIMIT_ENABLED` | `create_app` | start-up | `10 per minute`, `memory://`, on |
+| `PROXY_FIX_X_FOR` | `create_app` ([app.py:132-133](../backend/app.py#L132-L133)) | start-up | 0: trust no `X-Forwarded-For` (section 6) |
 | `VITE_API_URL` | [App.jsx:8](../frontend/src/App.jsx#L8) | **`npm run build`** | empty: `/api` on the page's own origin |
 
 All backend settings are read **once, when the app is created**. With `--preload` that is the
@@ -190,11 +199,20 @@ comment each. Note what git ignores:
 
 `git check-ignore` confirms that `.env`, `backend/.env`, `frontend/.env`, `frontend/.env.production`
 and `frontend/.env.local` are all ignored, and `backend/.env.example` is not: the `!` line un-ignores
-it. But nothing in the backend *reads* a `.env` file (there is no `python-dotenv`), although the
-example's first line says "Copy to backend/.env for local use". Its values reach the app only if
-you export them, for example `set -a; . ./.env; set +a` before `python app.py` (weak spot 3). Vite,
-on the other hand, automatically reads `frontend/.env` and `frontend/.env.production` during a build
-if they exist; the repo has none.
+it. Nothing in the backend *reads* a `.env` file (there is no `python-dotenv`), and the example's
+header now says so and shows how to export it
+([.env.example:1-5](../backend/.env.example#L1-L5)):
+
+```bash
+set -a; . ./.env; set +a; python app.py
+```
+
+`set -a` marks every variable the shell sets from then on for export, `.` runs the file in the
+current shell, and `set +a` turns the marking off again. That is why values with spaces are quoted
+now (`ANALYZE_RATE_LIMIT="10 per minute"`): unquoted, the shell sets `ANALYZE_RATE_LIMIT=10` for a
+command called `per`, and prints `per: command not found`. On a platform you type the same names
+into its settings instead. Vite, on the other hand, automatically reads `frontend/.env` and
+`frontend/.env.production` during a build if they exist; the repo has none.
 
 ### 5. `VITE_API_URL` is baked into the bundle
 
@@ -241,8 +259,10 @@ Neither bundle contains the string `VITE_API_URL`. Three consequences:
 3. **Without the variable, the page calls `/api/solve` on its own host.** That is right when
    something on that host routes `/api` to Flask (a reverse proxy, or a platform rewrite rule). On a
    plain static host the request reaches the file server instead, which typically answers 404 or 405
-   with an HTML page, and the UI says "Check your inputs: HTTP 404" (lesson 13, weak spot 1). The old
-   default, `http://127.0.0.1:5000`, pointed every visitor at their own computer.
+   with an HTML page. That answer has no API `code`, so the UI says "Can't reach the solver. Start
+   the backend on port 5000 and try again." (it used to say "Check your inputs: HTTP 404"; lesson 13,
+   weak spot 3 explains why the port hint is still wrong here). The old default,
+   `http://127.0.0.1:5000`, pointed every visitor at their own computer.
 
 The proxy in [vite.config.js:7-14](../frontend/vite.config.js#L7-L14) (forward `/api` to
 `127.0.0.1:5000`) exists only in Vite's own servers: `npm run dev`, and `npm run preview`, whose
@@ -253,7 +273,7 @@ The proxy in [vite.config.js:7-14](../frontend/vite.config.js#L7-L14) (forward `
 If the page and the API live on different origins (the usual split: static host + Python host),
 the browser reads an API answer only if it carries `Access-Control-Allow-Origin` for the page's
 origin. Flask-CORS sends it only for the origins in `CORS_ORIGINS`
-([app.py:130-131](../backend/app.py#L130-L131)), so in production you set it to your frontend's URL.
+([app.py:141-142](../backend/app.py#L141-L142)), so in production you set it to your frontend's URL.
 Measured on a local gunicorn started with `CORS_ORIGINS=http://localhost:4180`:
 
 ```
@@ -264,21 +284,36 @@ OPTIONS /api/solve, Origin http://localhost:5173 → 200, no Access-Control-Allo
 Forget to set it, and the browser blocks every response from a perfectly healthy API. `fetch`
 rejects, and the page shows "Can't reach the solver. Start the backend on port 5000 and try again."
 (checked in headless Chromium against the same gunicorn, started with the default `CORS_ORIGINS`):
-a development hint for a production configuration problem (weak spot 4).
+a development hint for a production configuration problem (weak spot 2).
 
 CORS only stops *browsers on other sites* from reading answers. It does not stop a script calling
 the API directly, so `/api/analyze`, the one endpoint that can spend money, also has a rate limit:
 Flask-Limiter allows `ANALYZE_RATE_LIMIT` (10 per minute) per client, on that blueprint only
-([app.py:133-139](../backend/app.py#L133-L139)). Two details matter once it runs under gunicorn:
+([app.py:144-151](../backend/app.py#L144-L151)). A refused request says what the limit is
+([app.py:213](../backend/app.py#L213)), and `headers_enabled=True` adds headers that tell a client
+when to come back. The third request under a 2-per-minute limit:
+
+```
+429 {"code": "rate_limited", "error": "Too many analysis requests (limit: 2 per 1 minute). Wait a moment, then try again."}
+Retry-After: 60    X-RateLimit-Limit: 2    X-RateLimit-Remaining: 0    X-RateLimit-Reset: <a Unix time>
+```
+
+Two details matter once it runs under gunicorn:
 
 - **`memory://` counts per worker.** Each worker process keeps its own counters. 25 requests from
   one client within a minute, against the two-worker gunicorn: 18 answered 200 and 7 answered 429
-  (plus one more 200 from the page load just before), not 10. README says so; a shared store such
-  as `RATELIMIT_STORAGE_URI=redis://…` makes it one limit.
+  (plus one more 200 from the page load just before), not 10. README and `.env.example` say so; a
+  shared store such as `RATELIMIT_STORAGE_URI=redis://…` makes it one limit.
 - **"Per client" means "per connecting address"** (`get_remote_address`). Behind a platform's
-  router every request arrives from the router, so all visitors share one bucket. With a 2-per-minute
-  limit, three visitors with different `X-Forwarded-For` headers from the same `REMOTE_ADDR` got
-  `200, 200, 429` (weak spot 1, exercise 6).
+  router every request arrives from the router, so all visitors share one bucket, unless you set
+  `PROXY_FIX_X_FOR` to the number of proxies in front of the app. Then Werkzeug's `ProxyFix`
+  ([app.py:132-133](../backend/app.py#L132-L133)) replaces the connecting address with the client
+  address from `X-Forwarded-For` before the limiter sees it. With a 2-per-minute limit, three
+  visitors with different `X-Forwarded-For` headers from the same `REMOTE_ADDR` got `200, 200, 429`
+  with the default 0 and `200, 200, 200` with 1 (🧪 below; pinned by
+  `test_proxy_fix_counts_each_forwarded_client`, [test_api.py:430-442](../backend/tests/test_api.py#L430-L442)).
+  Leave it at 0 when nothing sits in front of the app: `X-Forwarded-For` is just a header, and a
+  client could send a new value with every request to get a fresh bucket each time.
 
 ### 7. What is (and is not) in the repository
 
@@ -389,8 +424,8 @@ Fixed since the first version of this course:
 - ✅ **Fixed: slow LLM calls blocked solves.** Threaded workers (`--worker-class gthread --threads 4`)
   and a 15-second OpenRouter timeout instead of 20 (section 2).
 - ✅ **Fixed: CORS `"*"` with a paid key.** Origins come from `CORS_ORIGINS`
-  ([app.py:130-131](../backend/app.py#L130-L131)) and `/api/analyze` is rate-limited
-  ([app.py:133-139](../backend/app.py#L133-L139)). Pinned by `test_cors_allows_only_configured_origins`
+  ([app.py:141-142](../backend/app.py#L141-L142)) and `/api/analyze` is rate-limited
+  ([app.py:144-151](../backend/app.py#L144-L151)). Pinned by `test_cors_allows_only_configured_origins`
   and `test_analyze_is_rate_limited` ([test_api.py:363-380](../backend/tests/test_api.py#L363-L380)).
 - ✅ **Fixed: a silent localhost fallback.** A build without `VITE_API_URL` now calls `/api` on its
   own origin ([App.jsx:8](../frontend/src/App.jsx#L8)) instead of each visitor's `127.0.0.1:5000`.
@@ -399,30 +434,45 @@ Fixed since the first version of this course:
 - ✅ **Fixed: no CI.** [ci.yml](../.github/workflows/ci.yml) (lesson 15).
 - ✅ **Fixed: an unused proxy.** The dev proxy is now how development reaches Flask (lesson 12).
 - ✅ **Fixed: the development server listened everywhere.** `python app.py` binds `127.0.0.1` unless
-  `HOST` is set ([app.py:577-579](../backend/app.py#L577-L579)).
+  `HOST` is set ([app.py:597-599](../backend/app.py#L597-L599)).
 - ✅ **Fixed: unused files shipped.** `public/` was deleted, so `dist/` holds only the page, one
   JS and one CSS file.
+- ✅ **Fixed: the rate limit couldn't see clients behind a proxy.** `get_remote_address`
+  ([app.py:145](../backend/app.py#L145)) keys on the connecting address, which on most platforms is
+  the router's. The opt-in `PROXY_FIX_X_FOR` wraps the app in Werkzeug's `ProxyFix`
+  ([app.py:132-133](../backend/app.py#L132-L133)), so each visitor gets their own bucket (section 6).
+  Pinned by `test_proxy_fix_counts_each_forwarded_client`
+  ([test_api.py:430-442](../backend/tests/test_api.py#L430-L442)), both with 0 and with 1.
+- ✅ **Fixed: a 429 didn't say when to retry.** `headers_enabled=True`
+  ([app.py:149](../backend/app.py#L149)) adds `Retry-After` and `X-RateLimit-*`, and the message
+  names the limit ([app.py:213](../backend/app.py#L213)). Pinned by
+  `test_rate_limit_response_says_when_to_retry` ([test_api.py:399-408](../backend/tests/test_api.py#L399-L408)).
+- ✅ **Fixed: `backend/.env` looked as if it were loaded.** The example used to say only "Copy to
+  backend/.env for local use". Its header now says that nothing loads the file and how to export it
+  ([.env.example:1-5](../backend/.env.example#L1-L5)), and values with spaces are quoted so the file
+  can be sourced (section 4). Documentation only, so no test.
+- ✅ **Fixed: one setting was undocumented.** `RATELIMIT_ENABLED` ([app.py:57](../backend/app.py#L57))
+  is now in `.env.example`, together with the new `PROXY_FIX_X_FOR`, so the drift test of exercise 4
+  passes.
+- ✅ **Fixed: a typo in a numeric setting gave a bare error.** `OPENROUTER_TIMEOUT=abc` now fails
+  with a message naming the variable ([app.py:168-172](../backend/app.py#L168-L172)). Pinned by
+  `test_non_numeric_setting_in_the_environment_is_a_clear_error`
+  ([test_api.py:423-427](../backend/tests/test_api.py#L423-L427)).
 
 Still open:
 
-1. **The rate limit can't see clients behind a proxy.** `get_remote_address`
-   ([app.py:134](../backend/app.py#L134)) keys on the connecting address, which on most platforms is
-   the router's, so all visitors share one bucket (section 6). *Fix:* wrap the app in Werkzeug's
-   `ProxyFix` with the number of trusted proxies, and only then (exercise 6).
-2. **The limit is per worker.** With `memory://`, two workers allow about twice the configured rate
-   (18 of 25 in one minute, section 6). README mentions it. *Fix:* `RATELIMIT_STORAGE_URI` pointing at
-   a shared store such as Redis.
-3. **`backend/.env` is never loaded.** [.env.example:1](../backend/.env.example#L1) says to copy it to
-   `backend/.env`, but nothing reads that file. *Fix:* reword the comment ("export these, or set them
-   on your platform"), or load the file in development with `python-dotenv`.
-4. **A CORS mistake looks like an outage.** With the page's origin missing from `CORS_ORIGINS`, the UI
+1. **The limit is per worker.** With `memory://`, two workers allow about twice the configured rate
+   (18 of 25 in one minute, section 6). README and `.env.example` mention it. *Fix:*
+   `RATELIMIT_STORAGE_URI` pointing at a shared store such as Redis.
+2. **A CORS mistake looks like an outage.** With the page's origin missing from `CORS_ORIGINS`, the UI
    says "Can't reach the solver. Start the backend on port 5000…" while the backend is healthy.
    *Fix:* a production-specific hint in the offline message, or a startup log line listing the
    allowed origins.
-5. **One setting is undocumented.** `RATELIMIT_ENABLED` is read from the environment like the
-   others ([app.py:56](../backend/app.py#L56)), but neither `.env.example` nor README lists it, so
-   `RATELIMIT_ENABLED=0` on a platform would silently switch the limit off (exercise 4).
-6. **No platform files, no runtime pins** (section 7). A platform may pick a different Python or
+3. **A bad proxy count is accepted or misreported.** `PROXY_FIX_X_FOR=-1` silently means "no
+   proxy" (only `> 0` is checked, [app.py:132](../backend/app.py#L132)), and `PROXY_FIX_X_FOR=1.5`
+   stops start-up with "must be a number, got '1.5'", although 1.5 is a number; it just isn't a
+   whole one. *Fix:* exercise 6.
+4. **No platform files, no runtime pins** (section 7). A platform may pick a different Python or
    Node than the one CI tests.
 
 ---
@@ -481,23 +531,37 @@ frontend/.gitignore:13:*.local	frontend/.env.local
 
 Every file is listed except `backend/.env.example`, the one meant to be committed.
 
-See the rate limit share one bucket behind a proxy (from `backend/`):
+Export the example file the way its header says, and check that the quoted value survives (from
+`backend/`; the parentheses keep the variables in a subshell):
+
+```bash
+(set -a; . ./.env.example; set +a; python -c 'import os; print(repr(os.environ["ANALYZE_RATE_LIMIT"]), os.environ["PROXY_FIX_X_FOR"])')
+```
+
+```
+'10 per minute' 0
+```
+
+See the rate limit share one bucket behind a proxy, and `PROXY_FIX_X_FOR` split it (from
+`backend/`; a `TESTING` app ignores any key in your shell, so this never calls OpenRouter):
 
 ```bash
 python -c '
 from app import create_app
-app = create_app(config={"TESTING": True, "RATELIMIT_ENABLED": True, "ANALYZE_RATE_LIMIT": "2 per minute", "OPENROUTER_API_KEY": ""})
-c = app.test_client()
-for user in ["203.0.113.1", "203.0.113.2", "203.0.113.3"]:
-    r = c.post("/api/analyze", json={"hand": "As Kh Qd"}, headers={"X-Forwarded-For": user}, environ_base={"REMOTE_ADDR": "10.0.0.5"})
-    print(user, r.status_code)
+for hops in [0, 1]:
+    app = create_app(config={"TESTING": True, "RATELIMIT_ENABLED": True, "ANALYZE_RATE_LIMIT": "2 per minute", "PROXY_FIX_X_FOR": hops})
+    c = app.test_client()
+    statuses = [
+        c.post("/api/analyze", json={"hand": "As Kh Qd"}, headers={"X-Forwarded-For": user}, environ_base={"REMOTE_ADDR": "10.0.0.5"}).status_code
+        for user in ["203.0.113.1", "203.0.113.2", "203.0.113.3"]
+    ]
+    print("PROXY_FIX_X_FOR", hops, statuses)
 '
 ```
 
 ```
-203.0.113.1 200
-203.0.113.2 200
-203.0.113.3 429
+PROXY_FIX_X_FOR 0 [200, 200, 429]
+PROXY_FIX_X_FOR 1 [200, 200, 200]
 ```
 
 ---
@@ -514,7 +578,7 @@ does `/api/analyze` return? And after a restart?
 
 Without a restart: still the LLM's answer. `create_app` copied the key into `app.config` at start-up
 (with `--preload`, in the master before the fork), and `/api/analyze` reads `app.config`
-([app.py:467](../backend/app.py#L467)), not the environment. After a restart: the rule-based text,
+([app.py:487](../backend/app.py#L487)), not the environment. After a restart: the rule-based text,
 with `"model": "rule-based-solver-engine (OPENROUTER_API_KEY not configured)"`. (In the first version
 of this code the key was read on every request, so the change would have applied at once.)
 </details>
@@ -526,8 +590,9 @@ host, and only then set `VITE_API_URL` there. Does the page reach your API?
 
 No. The URL was fixed when the bundle was built, as an empty string, so the page posts to
 `/api/solve` on the static host. That host is not Flask: it typically answers 404 or 405 with an
-HTML page, and the UI shows "Check your inputs: HTTP 404" (or 405). Rebuild with the variable set,
-and add the page's origin to `CORS_ORIGINS` on the backend.
+HTML page, which has no API `code`, so the UI shows "Can't reach the solver. Start the backend on
+port 5000 and try again." Rebuild with the variable set, and add the page's origin to
+`CORS_ORIGINS` on the backend.
 </details>
 
 **🟢 3. Predict.** With the Procfile as it is, how many times is `CallingRangeModel()` built when
@@ -542,7 +607,8 @@ the fork). The memory table in section 2 shows it: without `--preload` the maste
 
 **🟡 4. Catch documentation drift.** Write a test that compares the settings the app reads
 (`DEFAULT_CONFIG` plus `HOST` and `PORT`) with the names in `backend/.env.example`. Predict whether
-it passes today.
+it passes today. Then add a made-up setting such as `"ANALYZE_LOG_PROMPTS": False` to
+`DEFAULT_CONFIG` and run it again.
 
 <details><summary>Solution</summary>
 
@@ -558,10 +624,12 @@ def test_env_example_lists_every_setting() -> None:
     assert documented == set(DEFAULT_CONFIG) | {"HOST", "PORT"}
 ```
 
-It fails: `RATELIMIT_ENABLED` is read but not documented (weak spot 5). Add it to `.env.example`
-(`RATELIMIT_ENABLED=true`, with a comment saying `false` turns the limit off) and the test passes.
-From then on, a new setting without documentation fails the suite. Undo with
-`git checkout -- backend/.env.example` and delete the test.
+It passes today: `.env.example` lists all ten names, `RATELIMIT_ENABLED` and `PROXY_FIX_X_FOR`
+included. (Before phase 8 it failed, because `RATELIMIT_ENABLED` was read but not documented.) The
+quoted `ANALYZE_RATE_LIMIT="10 per minute"` doesn't matter, because only the part before `=` is
+compared. With the made-up setting it fails with `Extra items in the right set: 'ANALYZE_LOG_PROMPTS'`:
+from now on a new setting without documentation fails the suite. Undo with
+`git checkout -- backend/app.py` and delete the test.
 </details>
 
 **🟡 5. Break CORS on purpose.** Repeat the rehearsal of section 8, but start gunicorn **without**
@@ -577,29 +645,51 @@ reports a CORS error; the `POST` is never sent. `fetch` rejects with a `TypeErro
 and the page works. Nothing to undo.
 </details>
 
-**🔴 6. Trust the proxy, carefully.** Add a `TRUSTED_PROXIES` setting (default `"0"`) and, when it is
-above 0, wrap the app in Werkzeug's `ProxyFix` so the rate limit sees the client address from
-`X-Forwarded-For`. Check with the 🧪 script, extended to five requests (users 1, 2, 3, 1, 1): with
-`TRUSTED_PROXIES` 0 you get `[200, 200, 429, 429, 429]`, with 1 `[200, 200, 200, 200, 429]`.
+**🔴 6. Reject a bad proxy count.** Weak spot 3: `PROXY_FIX_X_FOR=-1` is quietly treated as 0,
+and `1.5` is reported as "not a number". Write the test first, at the end of `tests/test_api.py`:
+both values in the environment must stop `create_app` with a `ValueError` matching
+`"PROXY_FIX_X_FOR must be a whole number"`. See both cases fail, then fix `app.py`. Check: the whole
+suite, `ruff check .` and `mypy` pass.
 
 <details><summary>Solution</summary>
 
-In `DEFAULT_CONFIG` add `"TRUSTED_PROXIES": "0",`. In `create_app`, right after
-`app.config.update(overrides)`:
-
 ```python
-    proxies = int(app.config["TRUSTED_PROXIES"])
-    if proxies:
-        # Behind a platform's router, take the client address from X-Forwarded-For (that many hops).
-        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=proxies)  # type: ignore[method-assign]
+@pytest.mark.parametrize("raw", ["-1", "1.5"])
+def test_proxy_count_must_be_a_whole_number(shared_services, monkeypatch, raw):
+    db, model = shared_services
+    monkeypatch.setenv("PROXY_FIX_X_FOR", raw)
+    with pytest.raises(ValueError, match="PROXY_FIX_X_FOR must be a whole number"):
+        create_app(db=db, calling_model=model, config={"TESTING": True})
 ```
 
-and `from werkzeug.middleware.proxy_fix import ProxyFix` next to the other `werkzeug` import (ruff
-sorts imports). The 40 API tests, ruff and mypy still pass. Why "carefully": `X-Forwarded-For` is
-just a header. Without a proxy in front, any client can send a different value on each request and
-get a fresh bucket every time, which is why the default stays 0 and you set it to the number of
-proxies your platform documents. Add `TRUSTED_PROXIES` to `.env.example` too (exercise 4 will remind
-you). Undo with `git checkout -- backend/app.py backend/.env.example`.
+Before the fix: `2 failed, 46 passed`. `-1` gives `Failed: DID NOT RAISE ValueError`; `1.5` gives
+`Regex pattern did not match`, with the actual message
+`"Environment variable PROXY_FIX_X_FOR must be a number, got '1.5'."`. Two changes fix it. In
+`_settings_from_env`, name the kind of number the default has:
+
+```python
+        elif isinstance(default, int | float):
+            kind = "a whole number" if isinstance(default, int) else "a number"
+            try:
+                settings[key] = type(default)(raw)
+            except ValueError as err:
+                raise ValueError(f"Environment variable {key} must be {kind}, got {raw!r}.") from err
+```
+
+and in `create_app`, check the sign before wrapping the app:
+
+```python
+    hops = int(app.config["PROXY_FIX_X_FOR"])
+    if hops < 0:
+        raise ValueError(f"PROXY_FIX_X_FOR must be a whole number of proxies (0 or more), got {hops}.")
+    if hops > 0:
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=hops)  # type: ignore[method-assign]
+```
+
+`174 passed`; ruff and mypy stay clean. The existing `OPENROUTER_TIMEOUT=abc` test still passes,
+because a float setting keeps "must be a number". Failing at start-up is the point: a platform shows
+the crash in its deploy log at once, while a silently ignored proxy count only shows up later as
+visitors sharing one rate limit. Undo with `git checkout -- backend/app.py backend/tests/test_api.py`.
 </details>
 
 **🔴 7. Pin the runtimes.** Add `backend/.python-version` and `frontend/.nvmrc`, and make CI read
@@ -631,7 +721,7 @@ use `runtime.txt`. Undo by deleting the two files and `git checkout -- .github/w
 <details><summary>Answers</summary>
 
 1. The first is the module `app.py`; the second is the variable `app` inside it, the Flask object
-   that `create_app()` returns ([app.py:574](../backend/app.py#L574)).
+   that `create_app()` returns ([app.py:594](../backend/app.py#L594)).
 2. gunicorn imports the module, so `__name__` is `"app"`, not `"__main__"`. It then serves the `app`
    object itself. `HOST` is read only in that block; gunicorn takes its address from `--bind`.
 3. Vite writes its value into the JavaScript bundle at build time, and every visitor downloads that
@@ -651,13 +741,13 @@ use `runtime.txt`. Undo by deleting the two files and `git checkout -- .github/w
 - Production is two pieces: static files from `npm run build`, and gunicorn running `app:app` with
   two threaded workers on `$PORT`, the tables built once in the master (`--preload`).
 - Every backend setting has a default in `DEFAULT_CONFIG`, can be overridden by the environment at
-  start-up, and by `create_app(config=…)` in tests. `.env.example` documents them, though nothing
-  loads a `.env` file.
+  start-up, and by `create_app(config=…)` in tests. `.env.example` documents them and shows how to
+  export them; nothing loads a `.env` file automatically.
 - `VITE_API_URL` is written into the public bundle at build time; without it the page calls `/api`
   on its own origin, which needs something on that host to route `/api` to Flask.
 - Cross-origin deployments need `CORS_ORIGINS`; a missing origin looks like an outage in the UI.
-- `/api/analyze` is rate-limited, but per worker and per connecting address, which behind a proxy is
-  everyone at once.
+- `/api/analyze` is rate-limited, with `Retry-After` on a 429, but per worker; behind a proxy, set
+  `PROXY_FIX_X_FOR` so it counts visitors instead of the proxy.
 - Runtime requirements are pinned and separate from the dev tools; CI runs everything on every push;
   the Python and Node versions are still not pinned for a platform.
 

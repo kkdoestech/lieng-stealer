@@ -36,11 +36,11 @@ committed to git, so a fresh clone works without running the generator at all.
 |---|----------|------------------|
 | 1 | [generator.py:1-7](../backend/src/generator.py#L1-L7) | The docstring: exact enumeration and Monte Carlo, both supported. |
 | 2 | [generator.py:32-106](../backend/src/generator.py#L32-L106) | `compute_hand_equity`: one hand class against its opponents. |
-| 3 | [generator.py:109-113](../backend/src/generator.py#L109-L113) | `_worker_task`: a tiny wrapper that exists for the process pool. |
-| 4 | [generator.py:116-161](../backend/src/generator.py#L116-L161) | `generate_winrates_database`: 455 tasks, in parallel, then one JSON file. |
-| 5 | [generator.py:164-228](../backend/src/generator.py#L164-L228) | The command line: `--exact` / `--monte-carlo` (one or the other), `--samples`, `--output`, `--workers`. |
+| 3 | [generator.py:118-122](../backend/src/generator.py#L118-L122) | `_worker_task`: a tiny wrapper that exists for the process pool. |
+| 4 | [generator.py:125-177](../backend/src/generator.py#L125-L177), [:109-115](../backend/src/generator.py#L109-L115) | `generate_winrates_database`: 455 tasks, in parallel, then one JSON file, written atomically; `_file_mode` picks its permissions. |
+| 5 | [generator.py:180-244](../backend/src/generator.py#L180-L244) | The command line: `--exact` / `--monte-carlo` (one or the other), `--samples`, `--output`, `--workers`. |
 | 6 | [winrates.json](../backend/data/winrates.json) | Open it and read the first two records. Don't edit it by hand. |
-| 7 | [test_generator.py](../backend/tests/test_generator.py) | 12 tests: exact values, invariants, the schema, the CLI defaults, and five safety tests. |
+| 7 | [test_generator.py](../backend/tests/test_generator.py) | 15 tests: exact values, invariants, the schema, the CLI defaults, five safety tests and three file-handling tests. |
 
 ---
 
@@ -243,7 +243,7 @@ lesson 05).
 
 ### 6. All 455 classes, in parallel
 
-📍 [`backend/src/generator.py:133-149`](../backend/src/generator.py#L133-L149)
+📍 [`backend/src/generator.py:142-158`](../backend/src/generator.py#L142-L158)
 ```python
     canonical_hands = generate_all_canonical_hands()
     num_workers = workers or os.cpu_count() or 1
@@ -277,7 +277,7 @@ lesson 05).
 
 Why does `_worker_task` exist at all, instead of passing `compute_hand_equity` with a `lambda`?
 
-📍 [`backend/src/generator.py:109-113`](../backend/src/generator.py#L109-L113)
+📍 [`backend/src/generator.py:118-122`](../backend/src/generator.py#L118-L122)
 ```python
 def _worker_task(args: tuple[CanonicalHand, bool, int, int | None]) -> tuple[str, dict[str, Any]]:
     """Worker task wrapper for ProcessPoolExecutor."""
@@ -294,7 +294,7 @@ also returns the canonical ID next to the result, so the parent knows which reco
 
 ### 7. Writing the file
 
-📍 [`backend/src/generator.py:151-161`](../backend/src/generator.py#L151-L161)
+📍 [`backend/src/generator.py:160-177`](../backend/src/generator.py#L160-L177)
 ```python
     # Write to a temporary file in the same folder, then rename it over the target: readers see
     # either the old file or the complete new one, never a half-written file.
@@ -303,7 +303,14 @@ also returns the canonical ID next to the result, so the parent knows which reco
     with tempfile.NamedTemporaryFile(
         "w", encoding="utf-8", dir=out_file.parent, suffix=".tmp", delete=False
     ) as tmp:
-        json.dump(results, tmp, indent=2)
+        try:
+            json.dump(results, tmp, indent=2)
+        except BaseException:
+            tmp.close()
+            os.unlink(tmp.name)
+            raise
+    # NamedTemporaryFile creates the file as owner-only (0600); give it normal permissions first.
+    os.chmod(tmp.name, _file_mode(out_file))
     os.replace(tmp.name, out_file)
 
     return results
@@ -316,10 +323,34 @@ it over the target in one step. A rename within one file system is atomic, so a 
 the old file or the complete new one. (`delete=False` keeps the temporary file after the `with`
 closes it, so it can be renamed.)
 
+Two details were added in `a9d9ce9` (weak spot 7). If `json.dump` fails half-way (a full disk, a
+Ctrl-C), the `except BaseException` closes and deletes the temporary file and re-raises, so the
+error still surfaces and no `….tmp` is left in `data/`. `BaseException` rather than `Exception` so
+that a `KeyboardInterrupt` cleans up too. And because `NamedTemporaryFile` always creates its file
+with mode `0600` (owner only), and `os.replace` keeps the mode of the file it moves, the code sets
+the permissions before the rename:
+
+📍 [`backend/src/generator.py:109-115`](../backend/src/generator.py#L109-L115)
+```python
+def _file_mode(path: Path) -> int:
+    """Permissions for the written file: keep the old file's mode, or use 0644 minus the umask."""
+    if path.exists():
+        return path.stat().st_mode & 0o777
+    umask = os.umask(0)
+    os.umask(umask)
+    return 0o644 & ~umask
+```
+
+Regenerating `data/winrates.json` keeps whatever mode it had. A brand-new file gets `0644`
+(`rw-r--r--`) minus your **umask**, the per-process setting that says which permission bits new
+files must *not* get; with the usual umask `002` or `022` that is `rw-r--r--`. Python can't read
+the umask without setting it, hence the set-and-restore pair. `& 0o777` keeps only the permission
+bits of `st_mode`, which also holds the file type.
+
 Where is `out_file`? By default `DEFAULT_DB_PATH` from [paths.py](../backend/src/paths.py), the
 absolute path `backend/data/winrates.json` worked out from the location of `paths.py` itself, not
-from your current directory ([generator.py:119](../backend/src/generator.py#L119),
-[:200](../backend/src/generator.py#L200)). Run the generator from anywhere and it writes where the
+from your current directory ([generator.py:128](../backend/src/generator.py#L128),
+[:216](../backend/src/generator.py#L216)). Run the generator from anywhere and it writes where the
 app reads.
 
 `indent=2` makes the file readable and diff-friendly: 455 records, 82,694 bytes. The order is the
@@ -336,7 +367,7 @@ generator still agree with the data the app serves.
 
 ### 8. The command line
 
-📍 [`backend/src/generator.py:183-196`](../backend/src/generator.py#L183-L196)
+📍 [`backend/src/generator.py:199-212`](../backend/src/generator.py#L199-L212)
 ```python
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument(
@@ -369,7 +400,7 @@ generator.py: error: argument --monte-carlo: not allowed with argument --exact
 ```
 
 `--samples` and `--workers` go through `_positive_int`
-([generator.py:164-169](../backend/src/generator.py#L164-L169)), so `--samples 0` is also a usage
+([generator.py:180-185](../backend/src/generator.py#L180-L185)), so `--samples 0` is also a usage
 error (exit code 2): `argument --samples: must be at least 1, got 0`. Run it as
 `python -m src.generator` from `backend/`: the `-m` form puts `backend/` on the import path, so
 `from src.evaluator import …` works.
@@ -388,6 +419,8 @@ error (exit code 2): `argument --samples: must be at least 1, got 0`. Run it as
 | [:132](../backend/tests/test_generator.py#L132) | the default output is the absolute `DEFAULT_DB_PATH` |
 | [:138](../backend/tests/test_generator.py#L138) | a seeded Monte Carlo run leaves the global `random` state alone |
 | [:147](../backend/tests/test_generator.py#L147) | a real write (Monte Carlo, 5 samples, one worker) leaves one complete file and no `.tmp` |
+| [:157](../backend/tests/test_generator.py#L157), [:168](../backend/tests/test_generator.py#L168) | a new file gets `0644` minus the umask; an existing `0640` file stays `0640` |
+| [:177](../backend/tests/test_generator.py#L177) | a `json.dump` that raises leaves the old file untouched and no `.tmp` |
 
 The schema test reads the real file, so it fails if someone commits a Monte Carlo file by mistake.
 `test_rate_invariants` lists six hands, and since October 2026 it asserts that each is a real
@@ -406,7 +439,7 @@ arguments into bytes, ships them through a pipe, and unpickles them on the other
   name, so it cannot be sent.
 - On Linux the default start method is `fork` (the worker starts as a copy of the parent). On
   Windows and macOS it is `spawn` (a fresh Python that re-imports your module). That is why
-  [generator.py:227](../backend/src/generator.py#L227) has an `if __name__ == "__main__":` guard:
+  [generator.py:243](../backend/src/generator.py#L243) has an `if __name__ == "__main__":` guard:
   without it, every spawned worker would start the generator again.
 
 ## 💡 Concept: how wrong is a Monte Carlo estimate?
@@ -435,18 +468,20 @@ For K-Q-3 that is 0.048 at 100 samples and 0.0048 at 10,000, as in the table in 
 - **Processes over threads.** It is CPU-bound Python, so only processes help. Tasks are big
   (18,424 evaluations each), so the cost of pickling them is negligible.
 - **Write to a temporary file, then rename.** The app may be reading `winrates.json` at any moment
-  (a restart, a test run); an atomic rename means it never sees half a file.
+  (a restart, a test run); an atomic rename means it never sees half a file. The price is two
+  details a plain `open(…, "w")` gets for free: the file's permissions and cleaning up on failure.
 
 ---
 
 ## ⚠️ Weak spots
 
 Eight weak spots were listed here when the course was written. Commit `bba5e63` ("fix(core)",
-October 2026) fixed six of them. Two small ones remain, and the atomic write brought a new one.
+October 2026) fixed six of them. Two small ones remain; the atomic write brought a new one, which
+commit `a9d9ce9` fixed.
 
 1. ✅ **Fixed: `--exact` did nothing, and the last flag won.** `--monte-carlo --exact` gave exact and
    `--exact --monte-carlo` gave Monte Carlo. Now both flags are in a mutually exclusive group
-   ([generator.py:183-196](../backend/src/generator.py#L183-L196)), so giving both is a usage error.
+   ([generator.py:199-212](../backend/src/generator.py#L199-L212)), so giving both is a usage error.
    Pinned by `test_exact_and_monte_carlo_are_mutually_exclusive`
    ([test_generator.py:124-126](../backend/tests/test_generator.py#L124-L126)).
 2. ✅ **Fixed: a hard-coded 18,424.** The count was typed out in the generator (and 22,100 in two
@@ -465,26 +500,38 @@ October 2026) fixed six of them. Two small ones remain, and the atomic write bro
    ([paths.py:8-9](../backend/src/paths.py#L8-L9)), shared with `db.py` and the CLI. Pinned by
    [test_generator.py:132-136](../backend/tests/test_generator.py#L132-L136).
 5. ✅ **Fixed: a non-atomic write**, which truncated the real file before writing it. Now it writes a
-   temporary file and renames it ([generator.py:151-159](../backend/src/generator.py#L151-L159)),
+   temporary file and renames it ([generator.py:160-175](../backend/src/generator.py#L160-L175)),
    pinned by [test_generator.py:147-153](../backend/tests/test_generator.py#L147-L153).
 6. ✅ **Fixed: a test that silently skipped a hand.** `test_rate_invariants` listed `"10-J-K"`, which
    is not a canonical id (it is `"K-J-10"`), and `continue`d past it. Now it uses `"K-J-10"` and
    asserts every key exists ([test_generator.py:66-68](../backend/tests/test_generator.py#L66-L68)).
    Exercise 3 puts the typo back.
-7. **The new file is private to its owner, and a failed write leaves litter.**
-   `NamedTemporaryFile` always creates its file with mode `0600`, and `os.replace` keeps that mode.
-   So a regenerated `winrates.json` is `-rw-------` (I checked: the committed file is `-rw-rw-r--`,
-   a fresh run gives `-rw-------`, whatever your umask). Harmless on your laptop; on a server where
-   the app runs as a different user than the one who regenerated the data, the app can no longer read
-   it. And if `json.dump` fails half-way, the `….tmp` file stays in `data/`. Git only records the
-   executable bit, so it won't show the change. *Fix:* `os.chmod(tmp.name, 0o644)` before the
-   rename, and delete the temporary file when the dump raises (exercise 6).
+7. ✅ **Fixed: the new file was private to its owner, and a failed write left litter.**
+   `NamedTemporaryFile` always creates its file with mode `0600`, and `os.replace` keeps that mode,
+   so a regenerated `winrates.json` was `-rw-------` whatever your umask: on a server where the app
+   runs as a different user than the one who regenerated the data, the app could no longer read it
+   (and git, which records only the executable bit, wouldn't show the change). If `json.dump` failed
+   half-way, the `….tmp` file stayed in `data/`. Now `os.chmod(tmp.name, _file_mode(out_file))`
+   ([generator.py:174](../backend/src/generator.py#L174)) keeps the old file's mode, or gives a new
+   file `0644` minus the umask ([:109-115](../backend/src/generator.py#L109-L115)), and the
+   `except BaseException` around the dump deletes the temporary file
+   ([:167-172](../backend/src/generator.py#L167-L172)). Pinned by `TestGeneratorFileHandling`
+   ([test_generator.py:156-190](../backend/tests/test_generator.py#L156-L190)): delete the `chmod`
+   line and `test_new_file_gets_normal_permissions` and `test_existing_file_keeps_its_permissions`
+   both fail, the second with `assert (33152 & 511) == 416` (33152 is a regular file with mode
+   `0600`, 416 is `0o640`);
+   delete the `try`/`except` and `test_failed_write_leaves_the_old_file_and_no_temp_file` finds a
+   `tmp….tmp` next to `winrates.json`. *Still open, and minor:* reading the umask means setting it to
+   0 for an instant, which would race with another thread creating files (the generator has none at
+   that point); and the cleanup covers only the dump, so a failing `chmod` or `os.replace` still
+   leaves the `.tmp` behind.
 8. **Rounded rates don't add up.** 151 records sum to 1.0001 (section 5). Harmless for the app,
    which only reads `equity`, and the database loader tolerates it, but surprising if you validate
    the file yourself. *Fix:* store the raw counts too, or round only `equity`.
 9. **Small things.** The unused `Card` import is gone (`ruff` now checks for unused imports), but
    `Any` still appears in three signatures and one variable although AGENTS.md §2.1 asks for a
-   justification. A `TypedDict` for the record would document the 7 fields in one place. And the
+   justification. A `TypedDict` for the record would document the 7 fields in one place (exercise 6).
+   And the
    `samples < 1` check raises a plain `ValueError` ([generator.py:53-54](../backend/src/generator.py#L53-L54)),
    not a `LiengError` (lesson 01).
 
@@ -501,8 +548,8 @@ python -m pytest tests/test_generator.py -q
 Expected output (the timing varies):
 
 ```
-............                                                             [100%]
-12 passed in 0.33s
+...............                                                          [100%]
+15 passed in 0.46s
 ```
 
 Peek at the file without dumping it:
@@ -569,10 +616,13 @@ ls -l data/winrates.json /tmp/winrates_check.json
 
 ```
 -rw-rw-r-- 1 you you 82694 … data/winrates.json
--rw------- 1 you you 82694 … /tmp/winrates_check.json
+-rw-r--r-- 1 you you 82694 … /tmp/winrates_check.json
 ```
 
-(The first line depends on your umask, e.g. `-rw-r--r--`; the second is always `-rw-------`.)
+The first line is whatever git gave the file when you cloned (it depends on your umask). The
+second is a new file, so it gets `0644` minus the umask: `-rw-r--r--` with the usual `002` or
+`022`, `-rw-------` only if your umask is `077`. Before `a9d9ce9` it was always `-rw-------`.
+Regenerating over an existing file keeps that file's mode instead.
 
 ---
 
@@ -609,7 +659,7 @@ the typo the test used to have. Predict what happens now, then run
 
 <details><summary>Solution</summary>
 
-`1 failed, 11 passed`, with `AssertionError: 10-J-K is not a canonical ID` from
+`1 failed, 14 passed`, with `AssertionError: 10-J-K is not a canonical ID` from
 [test_generator.py:68](../backend/tests/test_generator.py#L68). Before the fix, the same typo was
 skipped by an `if key not in canonical_map: continue`, and the test quietly checked five hands
 while claiming six. A test that can silently do less than it says is worse than no test, because it
@@ -622,7 +672,7 @@ what Q-K-A's record looks like, then run `python -m pytest -q` and `compute_hand
 
 <details><summary>Solution</summary>
 
-`5 failed, 154 passed`: the constant test in `test_hands.py`, three generator tests
+`5 failed, 167 passed`: the constant test in `test_hands.py`, three generator tests
 (`test_aaa_exact_equity`, `test_rate_invariants`, `test_monte_carlo_convergence`) and the
 calling-range test `test_card_removal_rows_sum_to_18424`, which compares against the same constant
 re-exported by `calling_range.py`. Q-K-A becomes
@@ -652,63 +702,61 @@ print(a == b)
 
 <details><summary>Solution</summary>
 
-`1 failed, 158 passed`: only `test_seeded_monte_carlo_leaves_global_random_untouched`, and the probe
+`1 failed, 171 passed`: only `test_seeded_monte_carlo_leaves_global_random_untouched`, and the probe
 prints `False` (with the real code it prints `True`). The Monte Carlo numbers themselves don't
 change, because `random.Random(7)` and `random.seed(7)` produce the same sequence: the convergence
 test still gets 0.9973. The bug is in what the function does to *other* code's random numbers.
 Undo with `git checkout -- backend/src/generator.py`.
 </details>
 
-**🔴 6. Keep the file readable, and clean up after a failed write (weak spot 7).** Write two tests
-first and watch them fail: one that a written file is readable by group and others, and one that a
-write whose `json.dump` raises leaves no file behind. Then fix `generate_winrates_database`.
+**🔴 6. Type the record (weak spot 9).** Replace the four `dict[str, Any]`s in `generator.py`
+([:37](../backend/src/generator.py#L37), [:118](../backend/src/generator.py#L118),
+[:130](../backend/src/generator.py#L130), [:150](../backend/src/generator.py#L150)) with a
+`TypedDict` that lists the seven fields of a record, and drop the `Any` import. Add a test that a
+computed record has exactly those fields. Then misspell one key in `compute_hand_equity`'s return
+value (say `"winrate"`) and run `python -m mypy` before any test.
 
 <details><summary>Solution</summary>
 
-The tests, added to `tests/test_generator.py`:
+Below the imports:
 
 ```python
-def test_written_file_is_readable_by_everyone(tmp_path: Path) -> None:
-    import stat
+class EquityRecord(TypedDict):
+    """One record of data/winrates.json: a class's results against all its opponents."""
 
-    from src.generator import generate_winrates_database
-
-    out = tmp_path / "winrates.json"
-    generate_winrates_database(exact=False, samples=5, output_path=out, workers=1)
-    assert stat.S_IMODE(out.stat().st_mode) & 0o044 == 0o044
-
-
-def test_failed_write_leaves_no_temp_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from src import generator
-
-    def broken_dump(*args: object, **kwargs: object) -> None:
-        raise OSError("disk full")
-
-    monkeypatch.setattr(generator.json, "dump", broken_dump)
-    with pytest.raises(OSError):
-        generator.generate_winrates_database(exact=False, samples=5, output_path=tmp_path / "w.json", workers=1)
-    assert list(tmp_path.iterdir()) == []
+    equity: float
+    win_rate: float
+    tie_rate: float
+    loss_rate: float
+    category: str
+    multiplicity: int
+    samples: int
 ```
 
-Before the fix: `2 failed, 12 passed` (`assert (384 & 36) == 36`, i.e. mode `0o600`, and a leftover
-`tmp….tmp`). The fix:
+with `from typing import TypedDict` instead of `Any`; then `compute_hand_equity` returns
+`EquityRecord`, `_worker_task` returns `tuple[str, EquityRecord]`, and `generate_winrates_database`
+and its `results` use `dict[str, EquityRecord]`. Nothing changes at run time: a `TypedDict` *is* a
+plain `dict`, so `json.dump` writes the same bytes. The test, in `tests/test_generator.py` (import
+`EquityRecord` next to `compute_hand_equity`):
 
 ```python
-    with tempfile.NamedTemporaryFile(
-        "w", encoding="utf-8", dir=out_file.parent, suffix=".tmp", delete=False
-    ) as tmp:
-        try:
-            json.dump(results, tmp, indent=2)
-        except BaseException:
-            tmp.close()
-            os.unlink(tmp.name)
-            raise
-    os.chmod(tmp.name, 0o644)  # NamedTemporaryFile creates the file as 0600
-    os.replace(tmp.name, out_file)
+def test_records_have_exactly_the_typed_fields(canonical_map: dict) -> None:
+    record = compute_hand_equity(canonical_map["Q-K-A"])
+    assert set(record) == set(EquityRecord.__annotations__)
 ```
 
-`161 passed`, and `ruff` and `mypy` stay clean. The test checks only the "readable by others" bits,
-so it also passes on Windows, where `chmod` can only toggle read-only. Undo with
+`173 passed`; `ruff check .` prints `All checks passed!` and mypy `Success: no issues found in 12
+source files`. With the misspelt key, mypy fails before anything runs:
+
+```
+src/generator.py:110: error: Missing key "win_rate" for TypedDict "EquityRecord"  [typeddict-item]
+src/generator.py:110: error: Extra key "winrate" for TypedDict "EquityRecord"  [typeddict-unknown-key]
+```
+
+(the line number is that of the `return {` once the class is added). With `dict[str, Any]` the same
+typo passes mypy and is caught only by the schema test, and only after you regenerate the file. The
+schema test could now use `EquityRecord.__annotations__` instead of its own copy of the field names,
+so the seven names live in one place. Undo with
 `git checkout -- backend/src/generator.py backend/tests/test_generator.py`.
 </details>
 
@@ -750,8 +798,8 @@ so it also passes on Windows, where `chmod` can only toggle read-only. Undo with
   module-level, because it is pickled by name.
 - `winrates.json` has 455 records with 7 fields, in multiset order. An exact rerun is byte-identical.
 - Fixed: exclusive `--exact`/`--monte-carlo`, `OPPONENT_COMBINATIONS` instead of 18,424, a private
-  `random.Random`, an absolute default output, an atomic write, a test that no longer skips a hand.
-  Still open: the new file is `0600` and a failed write leaves a `.tmp`, rates that sum to 1.0001,
+  `random.Random`, an absolute default output, an atomic write that keeps the file's permissions and
+  cleans up after itself, a test that no longer skips a hand. Still open: rates that sum to 1.0001,
   and a few `Any`s.
 
 **Next:** [05 — The win-rate database](05-win-rate-db.md)

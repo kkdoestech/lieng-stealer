@@ -29,7 +29,7 @@
 ```
 
 `app.py` is the web front door. It turns JSON into Python values, calls the engine, and turns the
-answer back into JSON. Most of its 579 lines are plumbing: building the app, validating input,
+answer back into JSON. Most of its 599 lines are plumbing: building the app, validating input,
 shaping responses, and a prompt for an LLM. The maths it uses was covered in lessons 05–08. Its EV
 helpers, `_evaluate_hand` and `_hand_payload`, were walked through in
 [lesson 07](07-expected-value.md#7-how-the-api-uses-all-of-this), and `_solve_range` in
@@ -43,17 +43,17 @@ plumbing, and about the few places where it still leaks.
 | # | Location | What to look for |
 |---|----------|------------------|
 | 1 | [app.py:1-10](../backend/app.py#L1-L10) | The two promises: one vocabulary, and every error is `{"error", "code"}`. |
-| 2 | [app.py:45-62](../backend/app.py#L45-L62) | Constants and `DEFAULT_CONFIG`: every setting and its default. |
-| 3 | [app.py:65-93](../backend/app.py#L65-L93) | Three frozen dataclasses (`GameParams`, `Services`, `HandResult`) and two blueprints. |
-| 4 | [app.py:99-165](../backend/app.py#L99-L165) | `create_app()`, `_settings_from_env()` and `_services()`. |
-| 5 | [app.py:171-202](../backend/app.py#L171-L202) | The error handlers: one JSON shape, one `code` per kind of failure. |
-| 6 | [app.py:208-276](../backend/app.py#L208-L276) | Request parsing: `_request_body`, `_number`, `_parse_game_params`, `_parse_hand`. |
-| 7 | [app.py:282-376](../backend/app.py#L282-L376) | The computation every endpoint shares (lessons 07 and 08). |
-| 8 | [app.py:382-401](../backend/app.py#L382-L401) | `GET /` and `GET /health`. |
-| 9 | [app.py:404-449](../backend/app.py#L404-L449) | `POST /api/solve`, `/api/evaluate`, `/api/range`: three thin views. |
-| 10 | [app.py:452-571](../backend/app.py#L452-L571) | `POST /api/analyze`: recompute, then the OpenRouter call or the offline fallback. |
-| 11 | [app.py:574-579](../backend/app.py#L574-L579) | The module-level `app` for gunicorn, and `python app.py`. |
-| 12 | [test_api.py](../backend/tests/test_api.py) | 40 tests, all through Flask's test client, none on the network. |
+| 2 | [app.py:46-66](../backend/app.py#L46-L66) | Constants and `DEFAULT_CONFIG`: every setting and its default. |
+| 3 | [app.py:69-97](../backend/app.py#L69-L97) | Three frozen dataclasses (`GameParams`, `Services`, `HandResult`) and two blueprints. |
+| 4 | [app.py:103-180](../backend/app.py#L103-L180) | `create_app()`, `_settings_from_env()` and `_services()`. |
+| 5 | [app.py:186-220](../backend/app.py#L186-L220) | The error handlers: one JSON shape, one `code` per kind of failure. |
+| 6 | [app.py:226-296](../backend/app.py#L226-L296) | Request parsing: `_request_body`, `_number`, `_parse_game_params`, `_parse_hand`. |
+| 7 | [app.py:302-396](../backend/app.py#L302-L396) | The computation every endpoint shares (lessons 07 and 08). |
+| 8 | [app.py:402-421](../backend/app.py#L402-L421) | `GET /` and `GET /health`. |
+| 9 | [app.py:424-469](../backend/app.py#L424-L469) | `POST /api/solve`, `/api/evaluate`, `/api/range`: three thin views. |
+| 10 | [app.py:472-591](../backend/app.py#L472-L591) | `POST /api/analyze`: recompute, then the OpenRouter call or the offline fallback. |
+| 11 | [app.py:594-599](../backend/app.py#L594-L599) | The module-level `app` for gunicorn, and `python app.py`. |
+| 12 | [test_api.py](../backend/tests/test_api.py) | 46 tests, all through Flask's test client, none on the network. |
 
 ---
 
@@ -61,15 +61,19 @@ plumbing, and about the few places where it still leaks.
 
 ### 1. `create_app()`: one app, its own services
 
-📍 [`backend/app.py:116-144`](../backend/app.py#L116-L144)
+📍 [`backend/app.py:123-156`](../backend/app.py#L123-L156)
 ```python
     app = Flask(__name__)
     app.config.update(DEFAULT_CONFIG)
     app.config.update(_settings_from_env())
     overrides = dict(config or {})
-    if overrides.get("TESTING") and "RATELIMIT_ENABLED" not in overrides:
-        overrides["RATELIMIT_ENABLED"] = False
+    if overrides.get("TESTING"):
+        overrides.setdefault("RATELIMIT_ENABLED", False)
+        overrides.setdefault("OPENROUTER_API_KEY", "")
     app.config.update(overrides)
+
+    if int(app.config["PROXY_FIX_X_FOR"]) > 0:
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=int(app.config["PROXY_FIX_X_FOR"]))  # type: ignore[method-assign]
 
     if db is None:
         db = WinRateDB(DEFAULT_DB_PATH)
@@ -85,6 +89,7 @@ plumbing, and about the few places where it still leaks.
         app=app,
         storage_uri=app.config["RATELIMIT_STORAGE_URI"],
         enabled=bool(app.config["RATELIMIT_ENABLED"]),
+        headers_enabled=True,  # Retry-After and X-RateLimit-* headers tell clients when to retry
     )
     limiter.limit(lambda: str(current_app.config["ANALYZE_RATE_LIMIT"]))(analysis)
 
@@ -96,26 +101,36 @@ plumbing, and about the few places where it still leaks.
 
 Read it top to bottom:
 
-- **Settings in three layers.** `DEFAULT_CONFIG` ([app.py:52-60](../backend/app.py#L52-L60)) first,
+- **Settings in three layers.** `DEFAULT_CONFIG` ([app.py:53-64](../backend/app.py#L53-L64)) first,
   then any of the same names found in the environment, then the `config` argument. Tests use the
-  last one. `_settings_from_env` ([app.py:147-160](../backend/app.py#L147-L160)) converts each
-  environment string to the type of its default: `"1"`, `"true"`, `"yes"` or `"on"` for a bool, a
-  `float()` for the timeout. `TESTING=True` also switches the rate limiter off unless a test asks
-  for it.
+  last one. `_settings_from_env` ([app.py:159-175](../backend/app.py#L159-L175)) converts each
+  environment string to the type of its default: `"1"`, `"true"`, `"yes"` or `"on"` for a bool,
+  `float()` for the timeout, `int()` for `PROXY_FIX_X_FOR`. A value that is not a number stops the
+  start-up with a message naming the variable:
+  `ValueError: Environment variable OPENROUTER_TIMEOUT must be a number, got 'abc'.`
+  `TESTING=True` also switches the rate limiter off and blanks `OPENROUTER_API_KEY`, unless the
+  `config` sets them itself, so a test app never calls the real service even when the key is
+  exported in your shell (weak spot 12).
+- **An opt-in proxy fix.** With `PROXY_FIX_X_FOR` set to N > 0, Werkzeug's `ProxyFix` wraps the
+  app and trusts the last N entries of `X-Forwarded-For`, so the rate limiter sees the visitor's
+  address instead of the proxy's. It is off by default: without a proxy in front, any client
+  could send the header and pick its own address (weak spot 10).
 - **Services, injected or built.** A caller can pass `db=` and `calling_model=`; otherwise the
   factory loads `DEFAULT_DB_PATH` and builds a `CallingRangeModel`. All three objects go into one
-  frozen `Services` ([app.py:74-79](../backend/app.py#L74-L79)) in `app.extensions["lieng"]`, the
+  frozen `Services` ([app.py:78-83](../backend/app.py#L78-L83)) in `app.extensions["lieng"]`, the
   place Flask reserves for extension data.
 - **CORS from a setting.** `CORS_ORIGINS` is a comma-separated list, by default the two addresses
   of the Vite dev server (see the concept box).
 - **A limiter for one blueprint.** `limiter.limit(...)(analysis)` applies `ANALYZE_RATE_LIMIT`
   (default `10 per minute`) to every route of the `analysis` blueprint, which holds only
   `/api/analyze`. The limit is a lambda, so it is read from the config of the app handling the
-  request.
-- **Routes and errors last.** The two blueprints ([app.py:92-93](../backend/app.py#L92-L93)) are
+  request. `headers_enabled=True` adds `X-RateLimit-Limit`, `X-RateLimit-Remaining`,
+  `X-RateLimit-Reset` and `Retry-After` to the analysis answers, so a client can tell when to try
+  again.
+- **Routes and errors last.** The two blueprints ([app.py:96-97](../backend/app.py#L96-L97)) are
   registered, then the error handlers.
 
-Views never touch a global. They call `_services()` ([app.py:163-165](../backend/app.py#L163-L165)),
+Views never touch a global. They call `_services()` ([app.py:178-180](../backend/app.py#L178-L180)),
 which reads `current_app.extensions["lieng"]`: the services of whichever app is handling this
 request. That is the dependency injection AGENTS.md §2.2 asks for. `test_api.py` builds the
 database and the model once per module and hands them to its own app
@@ -149,12 +164,14 @@ you will see. That is deliberate (fail fast), not a guard that forgot to work.
 
 Every POST view starts with `data = _request_body()` and `params = _parse_game_params(data)`.
 
-📍 [`backend/app.py:208-233`](../backend/app.py#L208-L233)
+📍 [`backend/app.py:226-253`](../backend/app.py#L226-L253)
 ```python
 def _request_body() -> Json:
-    """The JSON body as a dict. No body means "use the defaults"; any other JSON type is an error."""
+    """The JSON body as a dict. No body means "use the defaults"; anything else must be a JSON object."""
     data = request.get_json(silent=True)
     if data is None:
+        if request.get_data():
+            raise InvalidGameParamsError("The request body must be valid JSON (Content-Type: application/json).")
         return {}
     if not isinstance(data, dict):
         raise InvalidGameParamsError("The request body must be a JSON object.")
@@ -179,14 +196,16 @@ def _number(data: Json, name: str, default: float, *aliases: str) -> float:
     return number
 ```
 
-- **`_request_body`** accepts no body (or one that is not JSON) as "use the defaults", and rejects
-  any JSON that is not an object: `[1, 2, 3]`, `"text"` or `42` is a 400, not a crash.
+- **`_request_body`** accepts an empty body as "use the defaults". `get_json(silent=True)` gives
+  `None` both for no body and for a body that is not JSON (broken JSON, a form post), so
+  `request.get_data()` tells the two apart: a body that is there but unreadable is a 400. JSON
+  that is not an object, such as `[1, 2, 3]`, `"text"` or `42`, is a 400 too, not a crash.
 - **`_number`** looks up a field under its name or an alias, then insists on a real number. A bool
   is refused on purpose: `True` is an `int` in Python, so `float(True)` would quietly be `1.0`.
   A string is parsed (`"0.5"` works), and the result must be finite, which rules out `"nan"`,
   `"inf"` and `-inf`.
 
-📍 [`backend/app.py:244-259`](../backend/app.py#L244-L259)
+📍 [`backend/app.py:264-279`](../backend/app.py#L264-L279)
 ```python
     pot = _number(data, "pot", DEFAULT_POT)
     bet_size = _number(data, "bet_size", DEFAULT_BET_SIZE, "bet")
@@ -206,13 +225,13 @@ def _number(data: Json, name: str, default: float, *aliases: str) -> float:
     return GameParams(pot, bet_size, fold_equity, opponent_model)
 ```
 
-The result is a frozen `GameParams` ([app.py:65-71](../backend/app.py#L65-L71)): after this call
+The result is a frozen `GameParams` ([app.py:69-75](../backend/app.py#L69-L75)): after this call
 every value is a checked number or an enum member, and cannot change. Every field has a default,
 the same `DEFAULT_*` constants the CLI uses (lesson 07), so an empty body is a valid request. Note
 that the API's default model is `random`, while the web UI sends `range`. `bet` is still accepted
 as an alias of `bet_size`, for clients written before the rename.
 
-`_parse_hand` ([app.py:262-276](../backend/app.py#L262-L276)) handles the optional `hand` field: a
+`_parse_hand` ([app.py:282-296](../backend/app.py#L282-L296)) handles the optional `hand` field: a
 missing or blank hand is `None` (or a 400 if the endpoint requires one), anything that is not a
 string is a 400, and the text goes to `Hand.from_str`, whose errors become `invalid_hand` (next
 section).
@@ -233,7 +252,8 @@ What it does with real inputs (all verified with the test client):
 | `[1, 2, 3]` | 400 | `The request body must be a JSON object.` |
 | `{"hand": 12345}` | 400 | `Field 'hand' must be a string such as 'As Kh Qd'.` |
 | `{"hand": ""}` | 200 | A blank hand means "no hand": `hand_evaluation` is `null`. |
-| `not json` (as `application/json`) | 200 | `get_json(silent=True)` gives `None`, so all defaults (weak spot 7). |
+| `not json` (as `application/json`), or a form post | 400 | `The request body must be valid JSON (Content-Type: application/json).` |
+| no body at all | 200 | All defaults, like `{}`. |
 
 Every 400 above has `"code": "invalid_params"`. The NaN rows used to be the interesting ones: the
 old check `pot <= 0` let NaN through (every comparison with NaN is false) and the answer contained
@@ -241,7 +261,7 @@ old check `pot <= 0` let NaN through (every comparison with NaN is false) and th
 
 ### 3. Errors: one JSON shape everywhere
 
-📍 [`backend/app.py:179-202`](../backend/app.py#L179-L202)
+📍 [`backend/app.py:194-220`](../backend/app.py#L194-L220)
 ```python
 def _error(message: str, code: str, status: int) -> tuple[Response, int]:
     return jsonify({"error": message, "code": code}), status
@@ -260,7 +280,10 @@ def _register_error_handlers(app: Flask) -> None:
     @app.errorhandler(HTTPException)
     def handle_http_error(err: HTTPException) -> tuple[Response, int]:
         status = err.code or 500
-        return _error(err.description or err.name, _HTTP_CODES.get(status, "http_error"), status)
+        message = err.description or err.name
+        if status == 429:
+            message = f"Too many analysis requests (limit: {message}). Wait a moment, then try again."
+        return _error(message, _HTTP_CODES.get(status, "http_error"), status)
 
     @app.errorhandler(Exception)
     def handle_unexpected(err: Exception) -> tuple[Response, int]:
@@ -281,32 +304,34 @@ the parsers can simply `raise`. Every answer has the same two fields:
 | `invalid_hand` | 400 | `InvalidCardError` or `InvalidHandSizeError` (including `DuplicateCardError`) from `Hand.from_str` |
 | `not_found` | 404 | an unknown URL, such as `GET /api/nope` |
 | `method_not_allowed` | 405 | the wrong method, such as `GET /api/solve` |
-| `rate_limited` | 429 | too many `/api/analyze` calls (section 6) |
+| `rate_limited` | 429 | too many `/api/analyze` calls (section 6); the message names the limit |
 | `upstream_error` | 502 | OpenRouter failed (section 6), returned by the view with `_error` directly |
 | `internal_error` | 500 | anything else; the details go to the log, never to the client |
 
-The status-to-code table is `_HTTP_CODES` ([app.py:171-176](../backend/app.py#L171-L176)); other
+The status-to-code table is `_HTTP_CODES` ([app.py:186-191](../backend/app.py#L186-L191)); other
 HTTP errors get `http_error`. Hand errors are sent exactly as the evaluator words them:
 `{"hand": "As As Qd"}` gets `{"error": "A Liêng hand cannot have duplicate cards.", "code":
 "invalid_hand"}`, and `{"hand": "Xx Kh Qd"}` gets `Invalid card 'Xx': Invalid rank 'X'. Must be
 2-10, T, J, Q, K, or A.` with no extra "Invalid hand:" prefix
 ([test_api.py:108-110](../backend/tests/test_api.py#L108-L110)). The web UI picks its message from
-`code` alone (`solveErrorFor`, [App.jsx:41-45](../frontend/src/App.jsx#L41-L45); lesson 13).
+`code` alone (`solveErrorFor`, [App.jsx:41-46](../frontend/src/App.jsx#L41-L46); lesson 13), and an
+error without any `code` tells it the answer did not come from this API at all (a proxy's 502, a
+404 from the wrong server).
 
 ### 4. The six routes
 
 | Method and path | Request fields | Response (status 200) |
 |-----------------|----------------|------------------------|
-| `GET /` ([:382](../backend/app.py#L382)) | none | `{service, status, endpoints[5]}` |
-| `GET /health` ([:392](../backend/app.py#L392)) | none | `{status: "healthy", database_loaded, classes_loaded: 455, version: "1.1.0"}` |
-| `POST /api/solve` ([:404](../backend/app.py#L404)) | `pot`, `bet_size` (or `bet`), `fold_equity`, `opponent_model`, optional `hand` | `{summary{16 keys}, hand_evaluation{13 keys} or null, top_hands[30]{7 keys}}` |
-| `POST /api/evaluate` ([:425](../backend/app.py#L425)) | the same, `hand` **required** | flat, 17 keys: `pot, bet_size, fold_equity, opponent_model` + the 13 hand-evaluation keys |
-| `POST /api/range` ([:443](../backend/app.py#L443)) | the same, no hand | flat, 17 keys: the 16 summary keys + `top_hands[30]` |
-| `POST /api/analyze` ([:452](../backend/app.py#L452)) | the same as `/api/solve` | `{advice, model}`; errors 400, 429 or 502 |
+| `GET /` ([:402](../backend/app.py#L402)) | none | `{service, status, endpoints[5]}` |
+| `GET /health` ([:412](../backend/app.py#L412)) | none | `{status: "healthy", database_loaded, classes_loaded: 455, version: "1.1.0"}` |
+| `POST /api/solve` ([:424](../backend/app.py#L424)) | `pot`, `bet_size` (or `bet`), `fold_equity`, `opponent_model`, optional `hand` | `{summary{16 keys}, hand_evaluation{13 keys} or null, top_hands[30]{7 keys}}` |
+| `POST /api/evaluate` ([:445](../backend/app.py#L445)) | the same, `hand` **required** | flat, 17 keys: `pot, bet_size, fold_equity, opponent_model` + the 13 hand-evaluation keys |
+| `POST /api/range` ([:463](../backend/app.py#L463)) | the same, no hand | flat, 17 keys: the 16 summary keys + `top_hands[30]` |
+| `POST /api/analyze` ([:472](../backend/app.py#L472)) | the same as `/api/solve` | `{advice, model}`; errors 400, 429 or 502 |
 
 The views are short because the work is in the shared helpers:
 
-📍 [`backend/app.py:404-422`](../backend/app.py#L404-L422)
+📍 [`backend/app.py:424-442`](../backend/app.py#L424-L442)
 ```python
 @api.post("/api/solve")
 def solve_api() -> Response:
@@ -355,7 +380,7 @@ request through every module.
 
 The three solver endpoints were written at different times, and each used to have its own names.
 Now one helper builds each part of the answer: `_hand_payload` (lesson 07), `_solve_range`
-(lesson 08) and `_top_hands_payload` ([app.py:363-376](../backend/app.py#L363-L376)). The renames:
+(lesson 08) and `_top_hands_payload` ([app.py:383-396](../backend/app.py#L383-L396)). The renames:
 
 | Meaning | Before | Now, everywhere |
 |---------|--------|-----------------|
@@ -376,7 +401,7 @@ parser for all three.
 The web UI calls this endpoint right after `/api/solve`, with the *same* body, and shows the answer
 in the notes drawer.
 
-📍 [`backend/app.py:459-469`](../backend/app.py#L459-L469)
+📍 [`backend/app.py:479-489`](../backend/app.py#L479-L489)
 ```python
     services = _services()
     data = _request_body()
@@ -408,7 +433,7 @@ appear. `test_analyze_recomputes_instead_of_trusting_the_client`
 hand and checks that the advice shows the server's `+132,097 VND` instead.
 
 **No key** (`OPENROUTER_API_KEY` empty, the default): `_fallback_advice`
-([app.py:543-571](../backend/app.py#L543-L571)) assembles a rule-based Vietnamese text with
+([app.py:563-591](../backend/app.py#L563-L591)) assembles a rule-based Vietnamese text with
 f-strings, and the answer carries `"model": "rule-based-solver-engine (OPENROUTER_API_KEY not
 configured)"`. No prompt is built. The real fallback for the web UI's default click:
 
@@ -419,16 +444,18 @@ configured)"`. No prompt is built. The real fallback for the web UI's default cl
 
 2. **Hành động Khuyến nghị:** Hero cầm **As Kh Qd** (Liêng Q-K-A) với xác suất thắng đối đầu 99.5%. Kỳ vọng thu nhập (EV) đạt **+131,876 VND**. Khuyến nghị tối ưu: **RAISE**.
 
-3. **GTO Insight:** Bài có EV dương rõ rệt nhờ cả showdown equity lẫn fold equity. Tố lớn để tối đa hóa lợi nhuận.
+3. **Nhận định chiến thuật:** Bài có EV dương rõ rệt nhờ cả showdown equity lẫn fold equity. Tố lớn để tối đa hóa lợi nhuận.
 ```
 
 Every number in it is now the server's own: 99.5% is the recomputed `showdown_equity`, +131,876 the
-EV, 100.0% the coverage from `_solve_range`.
+EV, 100.0% the coverage from `_solve_range`. Point 3 is "Nhận định chiến thuật" (tactical notes);
+it used to be "GTO Insight", a claim of game-theory optimality that an EV calculation against an
+assumed fold rate cannot make (weak spot 11).
 
 **With a key**, the view POSTs to `OPENROUTER_URL` with `OPENROUTER_MODEL` (default
 `meta-llama/llama-3.1-8b-instruct:free`), `temperature` 0.7, `max_tokens` 500 and a timeout of
 `OPENROUTER_TIMEOUT` seconds (default 15). The prompt comes from `_build_prompt`
-([app.py:515-540](../backend/app.py#L515-L540)), which only sees `GameParams`, the coverage and the
+([app.py:535-560](../backend/app.py#L535-L560)), which only sees `GameParams`, the coverage and the
 `HandResult`, so only validated values reach the LLM. Its middle, for the default click:
 
 ```
@@ -445,7 +472,7 @@ EV, 100.0% the coverage from `_solve_range`.
 
 When OpenRouter fails, the client gets a fixed message and the operator gets the details:
 
-📍 [`backend/app.py:492-506`](../backend/app.py#L492-L506)
+📍 [`backend/app.py:512-526`](../backend/app.py#L512-L526)
 ```python
     except requests.RequestException:
         current_app.logger.exception("OpenRouter request failed")
@@ -474,9 +501,11 @@ Upstream text never reaches the client; it goes to `current_app.logger`, cut to 
 (`%.500s`). The four failure cases are one parametrised test
 ([test_api.py:338-358](../backend/tests/test_api.py#L338-L358)), and
 `test_analyze_uses_openrouter_when_a_key_is_set` ([test_api.py:324-335](../backend/tests/test_api.py#L324-L335))
-checks the happy path. Both replace `requests.post` with a fake, and every other test builds its app
-with `OPENROUTER_API_KEY: ""` ([test_api.py:24-27](../backend/tests/test_api.py#L24-L27)), so the
-suite never reaches the internet, even on a machine that has the key set.
+checks the happy path. Both replace `requests.post` with a fake. Every other test builds a
+`TESTING` app, which ignores an `OPENROUTER_API_KEY` from the environment
+([app.py:127-129](../backend/app.py#L127-L129)), and the module's app also sets it to `""`
+explicitly ([test_api.py:24-27](../backend/tests/test_api.py#L24-L27)), so the suite never reaches
+the internet, even on a machine that has the key set.
 
 **The rate limit.** Each call can cost an LLM request, so `/api/analyze` alone is limited per client
 address. With the limit lowered to 2 per minute for the demonstration:
@@ -488,22 +517,28 @@ c = create_app(config={"TESTING": True, "RATELIMIT_ENABLED": True, "ANALYZE_RATE
 for i in range(3):
     r = c.post("/api/analyze", json={})
     print(r.status_code, r.get_json().get("code"), r.get_json().get("error"))
+print(r.headers["Retry-After"], r.headers["X-RateLimit-Remaining"])
 '
 ```
 
 ```
 200 None None
 200 None None
-429 rate_limited 2 per 1 minute
+429 rate_limited Too many analysis requests (limit: 2 per 1 minute). Wait a moment, then try again.
+60 0
 ```
 
+The message comes from `handle_http_error`, which wraps Flask-Limiter's bare `2 per 1 minute` in
+a sentence for a 429, and `Retry-After: 60` says how many seconds to wait.
+
 `test_analyze_is_rate_limited` ([test_api.py:363-373](../backend/tests/test_api.py#L363-L373))
-pins this, and checks that `/api/solve` is not limited. The web UI shows its own
+pins this, and checks that `/api/solve` is not limited; `test_rate_limit_response_says_when_to_retry`
+([test_api.py:399-408](../backend/tests/test_api.py#L399-L408)) pins the message and the header. The web UI shows its own
 `aiRateLimited` message for a 429 (lesson 13).
 
 ### 7. Running it
 
-📍 [`backend/app.py:574-579`](../backend/app.py#L574-L579)
+📍 [`backend/app.py:594-599`](../backend/app.py#L594-L599)
 ```python
 app = create_app()
 
@@ -585,26 +620,26 @@ pins both lines.
 
 1. ✅ **Fixed: global state.** The app, the database, the calling-range model and the range finder
    used to be module-level globals that every route read, against AGENTS.md §2.2. Now
-   `create_app()` builds them per app ([app.py:99-144](../backend/app.py#L99-L144)) and views read
-   them through `_services()` ([app.py:163-165](../backend/app.py#L163-L165)). Pinned by
+   `create_app()` builds them per app ([app.py:103-156](../backend/app.py#L103-L156)) and views read
+   them through `_services()` ([app.py:178-180](../backend/app.py#L178-L180)). Pinned by
    `test_create_app_uses_the_injected_database` ([test_api.py:383-386](../backend/tests/test_api.py#L383-L386))
    and by every fixture in `test_api.py`, which injects its own services.
 2. ✅ **Fixed: a guard that guarded nothing.** An `if DB_PATH.is_file():` around the load looked
    defensive, but `RangeFinder` loaded the file anyway, so a missing file still failed at import.
    The guard is gone, and the factory loads the database itself
-   ([app.py:124-125](../backend/app.py#L124-L125)): a missing file is a `DatabaseError` at
+   ([app.py:135-136](../backend/app.py#L135-L136)): a missing file is a `DatabaseError` at
    start-up, on purpose. No API test starts an app without its file; the 🧪 Try it probe shows it.
 3. ✅ **Fixed: NaN got through.** `"pot": "nan"` (and `"inf"`) returned 200 with `NaN` in the body,
    which browsers cannot parse. Now `_number` requires a finite value
-   ([app.py:231-232](../backend/app.py#L231-L232)) and refuses bools. Pinned by
+   ([app.py:251-252](../backend/app.py#L251-L252)) and refuses bools. Pinned by
    `test_non_finite_or_non_numeric_values_are_rejected`
    ([test_api.py:216-224](../backend/tests/test_api.py#L216-L224)); exercise 4 removes the check.
 4. ✅ **Fixed: a list body was a 500.** `[1, 2, 3]` is valid JSON but not a dict, and `.get` raised
-   `AttributeError`. Now `_request_body` answers 400 ([app.py:208-215](../backend/app.py#L208-L215)).
+   `AttributeError`. Now `_request_body` answers 400 ([app.py:226-235](../backend/app.py#L226-L235)).
    Pinned by `test_body_must_be_a_json_object` ([test_api.py:227-231](../backend/tests/test_api.py#L227-L231)).
 5. ✅ **Fixed: HTML errors from a JSON API.** There was no handler for 404, 405 or 500, so those
    came back as Flask's HTML pages, and the web UI could only show `HTTP 500`. Now every error is
-   `{"error", "code"}` ([app.py:183-202](../backend/app.py#L183-L202)), and a 500 hides its
+   `{"error", "code"}` ([app.py:198-220](../backend/app.py#L198-L220)), and a 500 hides its
    details. Pinned by `test_unknown_url_and_wrong_method_are_json`
    ([test_api.py:240-244](../backend/tests/test_api.py#L240-L244)) and
    `test_unexpected_errors_are_json_without_details` ([test_api.py:247-257](../backend/tests/test_api.py#L247-L257));
@@ -612,50 +647,77 @@ pins both lines.
 6. ✅ **Fixed: inconsistent response shapes.** Section 5. Pinned by
    `test_endpoints_share_one_vocabulary` ([test_api.py:185-198](../backend/tests/test_api.py#L185-L198)).
    The version in `/health` went from `"1.0.0"` to `API_VERSION = "1.1.0"`
-   ([app.py:45](../backend/app.py#L45)); there is still no version in the URL, so an old client
+   ([app.py:46](../backend/app.py#L46)); there is still no version in the URL, so an old client
    simply gets the new names.
-7. **Silent defaults and ignored fields.** Still open. Misspelled keys are ignored
-   (`{"fold_eq": 0.9}` solves with 0.35), and `get_json(silent=True)`
-   ([app.py:210](../backend/app.py#L210)) turns a broken body, or a form post, into "all defaults"
-   with status 200. A wrongly typed hand is now a 400, at least. *Fix:* reject unknown keys and
-   unparseable bodies with 400 (exercise 6).
+7. **Ignored fields (half fixed).** ✅ The unreadable body is fixed: `get_json(silent=True)`
+   ([app.py:228](../backend/app.py#L228)) used to turn broken JSON, or a form post, into "all
+   defaults" with status 200. Now `_request_body` checks `request.get_data()` and answers 400
+   `invalid_params` when a body is there but is not JSON
+   ([app.py:229-232](../backend/app.py#L229-L232)); an empty body still means the defaults. Pinned
+   by `test_body_that_is_not_json_is_rejected`
+   ([test_api.py:391-396](../backend/tests/test_api.py#L391-L396)). **Still open:** misspelled
+   keys are ignored (`{"fold_eq": 0.9}` solves with 0.35). *Fix:* reject unknown keys with 400
+   (exercise 6).
 8. ✅ **Fixed: `/api/analyze` trusted the client.** It took `hand_evaluation` and
    `range_coverage_percent` from the body and put them into the prompt (a prompt-injection path),
    echoed OpenRouter's raw `resp.text`, turned an unexpected 200 body into a 500, built the prompt
    even without a key, and hard-coded the model name twice. Now it recomputes everything
-   ([app.py:459-465](../backend/app.py#L459-L465)), the prompt uses validated values only, every
-   upstream failure is a 502 with a fixed message ([app.py:492-505](../backend/app.py#L492-L505)),
+   ([app.py:479-485](../backend/app.py#L479-L485)), the prompt uses validated values only, every
+   upstream failure is a 502 with a fixed message ([app.py:512-525](../backend/app.py#L512-L525)),
    and the model is `OPENROUTER_MODEL`. Pinned by the analyze tests,
    [test_api.py:265-358](../backend/tests/test_api.py#L265-L358).
 9. ✅ **Fixed: copies and literals.** Hand parsing is `_parse_hand`, the range summary
    `_solve_range`, `22100` is `TOTAL_COMBINATIONS`, top 30 is `TOP_HANDS_LIMIT`
-   ([app.py:46](../backend/app.py#L46)), the version is `API_VERSION`, the defaults come from
+   ([app.py:47](../backend/app.py#L47)), the version is `API_VERSION`, the defaults come from
    `ev.py`, and the canonical ID is computed once per hand, in `_evaluate_hand`.
-10. **The rate limit counts per worker and per address.** Still open. The default storage,
-    `memory://`, lives inside one process, and the Procfile starts two workers, so a client can get
-    up to twice the limit (README says so and suggests Redis). The key is
+10. **The rate limit counts per worker (the proxy half is fixed).** The key is
     `get_remote_address`, the TCP peer: behind a hosting platform's proxy that is the proxy, so
-    every visitor may share one budget. *Fix:* a shared store, and `ProxyFix` when the app is known
-    to sit behind exactly one proxy (exercise 7).
-11. **Small leftovers.** The 429 message is Flask-Limiter's bare `2 per 1 minute` (or `10 per 1
-    minute`), with no `Retry-After` header. A bad `OPENROUTER_TIMEOUT` in the environment
-    (`"abc"`) is a `ValueError` from `float()` in `_settings_from_env`, at import. And the prompt
-    and the fallback still speak of "GTO" ([app.py:539](../backend/app.py#L539),
-    [:568](../backend/app.py#L568)), which README's Limitations section rules out.
+    every visitor used to share one budget. ✅ Now `PROXY_FIX_X_FOR=1` wraps the app in `ProxyFix`
+    ([app.py:132-133](../backend/app.py#L132-L133)) and the limiter counts the visitor named in
+    `X-Forwarded-For`. It is opt-in (default 0), because with no proxy in front any client could
+    send the header and get a fresh budget each time. Pinned by
+    `test_proxy_fix_counts_each_forwarded_client`
+    ([test_api.py:430-442](../backend/tests/test_api.py#L430-L442)), with the setting off and on.
+    **Still open:** the default storage, `memory://`, lives inside one process, and the Procfile
+    starts two workers, so a client can get up to twice the limit (README and `.env.example` say so
+    and suggest `redis://…`). *Fix:* a shared `RATELIMIT_STORAGE_URI` (exercise 7 shows both
+    halves).
+11. ✅ **Fixed: small leftovers.** The 429 message was Flask-Limiter's bare `2 per 1 minute`,
+    with no `Retry-After` header. Now `handle_http_error` says
+    `Too many analysis requests (limit: 2 per 1 minute). Wait a moment, then try again.`
+    ([app.py:212-213](../backend/app.py#L212-L213)) and `headers_enabled=True`
+    ([app.py:149](../backend/app.py#L149)) adds `Retry-After` and `X-RateLimit-*`; pinned by
+    `test_rate_limit_response_says_when_to_retry`
+    ([test_api.py:399-408](../backend/tests/test_api.py#L399-L408)). A bad `OPENROUTER_TIMEOUT`
+    (`"abc"`) was a bare `could not convert string to float` at import; now the message names the
+    variable ([app.py:168-172](../backend/app.py#L168-L172)), pinned by
+    `test_non_numeric_setting_in_the_environment_is_a_clear_error`
+    ([test_api.py:423-427](../backend/tests/test_api.py#L423-L427)). And the prompt and the
+    fallback no longer speak of "GTO", which README's Limitations section rules out: they say
+    "Lời khuyên chiến thuật" ([app.py:559](../backend/app.py#L559)) and "Nhận định chiến thuật"
+    ([:588](../backend/app.py#L588)). No test pins that wording.
+12. ✅ **Fixed: a key in the environment reached test apps.** Only the fixtures that passed
+    `OPENROUTER_API_KEY: ""` were offline; the rate-limit test did not, so with the key exported it
+    could call the real service. Now any `TESTING` app blanks the key unless its `config` sets one
+    ([app.py:127-129](../backend/app.py#L127-L129)). Pinned by
+    `test_testing_apps_ignore_a_key_in_the_environment`
+    ([test_api.py:411-420](../backend/tests/test_api.py#L411-L420)), which exports a fake key and
+    makes `requests.post` fail the test if it is ever called.
 
 ---
 
 ## 🧪 Try it
 
-Run from `backend/` with the virtual environment active. Keep `OPENROUTER_API_KEY` unset.
+Run from `backend/` with the virtual environment active. Every probe below builds a `TESTING` app,
+which ignores `OPENROUTER_API_KEY`, so they stay offline even if the key is exported.
 
 ```bash
 python -m pytest tests/test_api.py -q
 ```
 
 ```
-........................................                                 [100%]
-40 passed in 0.52s
+..............................................                           [100%]
+46 passed in 0.64s
 ```
 
 The validator and the error contract, without starting a server:
@@ -668,6 +730,8 @@ for body in ({"pot": "abc"}, {"fold_equity": 2.5}, {"opponent_model": "psychic"}
              {"pot": "nan"}, [1, 2, 3]):
     r = c.post("/api/solve", json=body)
     print(r.status_code, r.get_json())
+r = c.post("/api/solve", data="not json", content_type="application/json")
+print(r.status_code, r.get_json())
 r = c.get("/api/nope")
 print(r.status_code, r.content_type, r.get_json()["code"])
 '
@@ -680,6 +744,7 @@ print(r.status_code, r.content_type, r.get_json()["code"])
 400 {'code': 'invalid_hand', 'error': 'A Liêng hand cannot have duplicate cards.'}
 400 {'code': 'invalid_params', 'error': "pot must be a finite number, got 'nan'."}
 400 {'code': 'invalid_params', 'error': 'The request body must be a JSON object.'}
+400 {'code': 'invalid_params', 'error': 'The request body must be valid JSON (Content-Type: application/json).'}
 404 application/json not_found
 ```
 
@@ -766,7 +831,7 @@ string `"0.5"` is accepted on purpose and parsed by `float()`. The test that pin
 </details>
 
 **🟡 4. Break the NaN fix.** Delete the two `math.isfinite` lines
-([app.py:231-232](../backend/app.py#L231-L232)). Predict what `python -m pytest tests/test_api.py -q`
+([app.py:251-252](../backend/app.py#L251-L252)). Predict what `python -m pytest tests/test_api.py -q`
 and `ruff check app.py` say, and what `{"pot": "nan"}` returns now.
 
 <details><summary>Solution</summary>
@@ -775,7 +840,7 @@ and `ruff check app.py` say, and what `{"pot": "nan"}` returns now.
 FAILED tests/test_api.py::test_non_finite_or_non_numeric_values_are_rejected[body0]
 FAILED tests/test_api.py::test_non_finite_or_non_numeric_values_are_rejected[body1]
 FAILED tests/test_api.py::test_non_finite_or_non_numeric_values_are_rejected[body2]
-3 failed, 37 passed in 0.63s
+3 failed, 43 passed in 0.61s
 ```
 
 The three are `"nan"`, `"inf"` and `math.inf`; the bool and list cases still fail for their own
@@ -785,8 +850,8 @@ NaN. Undo it with `git checkout -- backend/app.py`.
 </details>
 
 **🟡 5. Remove one error handler.** Delete `handle_http_error`, the `HTTPException` handler
-([app.py:193-196](../backend/app.py#L193-L196)). Before you run the tests: what does
-`GET /api/nope` return now, 404 HTML or something else? Which two tests fail?
+([app.py:208-214](../backend/app.py#L208-L214)). Before you run the tests: what does
+`GET /api/nope` return now, 404 HTML or something else? Which tests fail?
 
 <details><summary>Solution</summary>
 
@@ -798,15 +863,18 @@ catch-all.
 ```
 FAILED tests/test_api.py::test_unknown_url_and_wrong_method_are_json - assert...
 FAILED tests/test_api.py::test_analyze_is_rate_limited - assert [200, 200, 50...
-2 failed, 38 passed in 0.59s
+FAILED tests/test_api.py::test_rate_limit_response_says_when_to_retry - asser...
+FAILED tests/test_api.py::test_proxy_fix_counts_each_forwarded_client[0-429]
+4 failed, 42 passed in 0.66s
 ```
 
-The rate-limit test fails because Flask-Limiter signals a 429 by raising `TooManyRequests`, another
-`HTTPException`: the third call became a 500. A catch-all handler is only safe next to a more
-specific one. Undo it with `git checkout -- backend/app.py`.
+The three rate-limit tests fail because Flask-Limiter signals a 429 by raising `TooManyRequests`,
+another `HTTPException`: every refused call became a 500. Only the proxy case that expects a 429
+fails; the one that expects two 200s never hits the limit. A catch-all handler is only safe next
+to a more specific one. Undo it with `git checkout -- backend/app.py`.
 </details>
 
-**🔴 6. Reject unknown fields.** Close half of weak spot 7: a body with a key that no endpoint
+**🔴 6. Reject unknown fields.** Close the open half of weak spot 7: a body with a key that no endpoint
 knows (`{"fold_eq": 0.9}`) should be a 400 `invalid_params` naming the key. Keep `bet` working,
 and keep the web UI working. Add a test.
 
@@ -839,7 +907,7 @@ claim it is safe:
 ```
 FAILED tests/test_api.py::test_analyze_recomputes_instead_of_trusting_the_client
 FAILED tests/test_api.py::test_analyze_uses_openrouter_when_a_key_is_set - As...
-2 failed, 39 passed in 0.57s
+2 failed, 45 passed in 0.64s
 ```
 
 Both send `hand_evaluation` (and one `range_coverage_percent`) on purpose, to prove those fields are
@@ -847,28 +915,40 @@ ignored; now they get a 400. Deciding whether old fields should be refused or to
 design choice (an old client would break), not a test fix.
 </details>
 
-**🔴 7. Count clients correctly behind a proxy.** Weak spot 10: add a setting `TRUST_PROXY`
-(default off). When it is on, wrap the app in Werkzeug's `ProxyFix` so `get_remote_address` sees
-the client's address from `X-Forwarded-For`. Write a test with a limit of `1 per minute`: two
-requests from two different forwarded addresses must both get 200 when the setting is on, and the
-second must get 429 when it is off.
+**🟢 7. Predict both halves of weak spot 10.** Two apps built from the same settings stand in for
+gunicorn's two workers: each has its own `memory://` counter. With a limit of `1 per minute`, what
+statuses do four `/api/analyze` calls get, sent to worker 1, worker 2, worker 1, worker 2? Then,
+with one app and `PROXY_FIX_X_FOR` at 0 and at 1, what do three calls get that each send a
+different `X-Forwarded-For`? Which result is the fix working, and which one is a client cheating?
 
-<details><summary>Hints</summary>
-
-In `create_app()`, after the config is final:
-
-```python
-    if app.config.get("TRUST_PROXY"):
-        from werkzeug.middleware.proxy_fix import ProxyFix
-        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)  # type: ignore[method-assign]
+```bash
+python -c '
+from app import create_app
+cfg = {"TESTING": True, "RATELIMIT_ENABLED": True, "ANALYZE_RATE_LIMIT": "1 per minute"}
+w1, w2 = create_app(config=cfg).test_client(), create_app(config=cfg).test_client()
+print([c.post("/api/analyze", json={}).status_code for c in (w1, w2, w1, w2)])
+for hops in (0, 1):
+    c = create_app(config={**cfg, "PROXY_FIX_X_FOR": hops}).test_client()
+    print(hops, [c.post("/api/analyze", json={}, headers={"X-Forwarded-For": ip}).status_code
+                 for ip in ("1.1.1.1", "2.2.2.2", "3.3.3.3")])
+'
 ```
 
-Add `"TRUST_PROXY": False` to `DEFAULT_CONFIG` so `_settings_from_env` reads it as a bool. mypy
-needs the `type: ignore`: it reports `Cannot assign to a method [method-assign]` without it. A probe
-of this change gave `[200, 429]` with the setting off and `[200, 200]` with it on, sending
-`headers={"X-Forwarded-For": ip}` for `1.1.1.1` and `2.2.2.2`. Turn it on only when there is
-exactly one proxy in front of the app: otherwise any client can pick its own address by sending
-the header itself. A shared `RATELIMIT_STORAGE_URI` (Redis) fixes the per-worker half.
+<details><summary>Solution</summary>
+
+```
+[200, 200, 429, 429]
+0 [200, 429, 429]
+1 [200, 200, 200]
+```
+
+The first line is the open half: each worker allows one call, so the same client gets two per
+minute. A shared `RATELIMIT_STORAGE_URI` such as `redis://…` gives both workers one counter. With
+`PROXY_FIX_X_FOR` at 0 the header is ignored and all three calls count against the test client's
+own address, which is right with no proxy in front. At 1 every call names a new visitor, so none is
+limited. Behind exactly one proxy that sets the header, that is the fix working: each real visitor
+gets a budget. With no proxy in front, it is a client writing its own header to get a fresh budget
+on every call, which is why the default is 0.
 </details>
 
 ---
@@ -905,14 +985,16 @@ the header itself. A shared `RATELIMIT_STORAGE_URI` (Redis) fixes the per-worker
 - `create_app()` builds an app with its own settings and services, stored in
   `app.extensions["lieng"]` and read through `_services()`. The module-level `app` is for gunicorn.
 - No database, no app: start-up fails fast.
-- Every POST view runs `_request_body` and `_parse_game_params` (finite numbers, no bools, defaults
-  from `ev.py`, `bet` as an alias), and `_parse_hand` when a hand matters.
+- Every POST view runs `_request_body` (a JSON object, or no body at all) and `_parse_game_params`
+  (finite numbers, no bools, defaults from `ev.py`, `bet` as an alias), and `_parse_hand` when a
+  hand matters.
 - Every error is `{"error", "code"}`, from four handlers and `_error`.
 - `/api/solve`, `/api/evaluate` and `/api/range` share one vocabulary: `bet_size`,
   `showdown_equity`, `decision`.
 - `/api/analyze` recomputes everything, answers with a rule-based Vietnamese text when
-  `OPENROUTER_API_KEY` is unset, maps upstream failures to 502, and is rate-limited per client.
-- CORS answers only `CORS_ORIGINS`. Still open: silently ignored fields and a per-worker,
-  per-address rate limit.
+  `OPENROUTER_API_KEY` is unset (and always in a `TESTING` app), maps upstream failures to 502, and
+  is rate-limited per client, with a 429 that names the limit and a `Retry-After` header.
+- CORS answers only `CORS_ORIGINS`; `PROXY_FIX_X_FOR` makes the limiter count visitors behind a
+  proxy. Still open: silently ignored fields and a per-worker rate limit with `memory://`.
 
 **Next:** [11 — Tracing one request end to end](11-request-trace.md)
