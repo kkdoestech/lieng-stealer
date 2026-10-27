@@ -40,11 +40,14 @@ from src.ev import (
 from src.evaluator import Hand
 from src.exceptions import InvalidCardError, InvalidGameParamsError, InvalidHandSizeError
 from src.hands import TOTAL_COMBINATIONS, CanonicalHand, to_canonical
+from src.opponent_model import calculate_calling_range_equities
 from src.paths import DEFAULT_DB_PATH
 from src.range_finder import HandEVRecord, RangeFinder, category_breakdown
 
 API_VERSION: Final[str] = "1.1.0"
 TOP_HANDS_LIMIT: Final[int] = 30
+FOLD_EQUITY_SENSITIVITY: Final[float] = 0.10
+CALL_RANGE_SENSITIVITY: Final[float] = 10.0
 OPENROUTER_URL: Final[str] = "https://openrouter.ai/api/v1/chat/completions"
 FALLBACK_MODEL_NAME: Final[str] = "rule-based-solver-engine (OPENROUTER_API_KEY not configured)"
 
@@ -73,6 +76,7 @@ class GameParams:
     bet_size: float
     fold_equity: float
     opponent_model: OpponentModel
+    call_range_percent: float | None
 
 
 @dataclass(frozen=True)
@@ -91,6 +95,8 @@ class HandResult:
     stats: HandStats
     ev: EVResult
     zones: list[tuple[float, float]]
+    call_range_percent: float | None
+    sensitivity: Json | None
 
 
 api = Blueprint("api", __name__)
@@ -257,6 +263,7 @@ def _parse_game_params(data: Json) -> GameParams:
     """Parse and validate pot, bet size, fold equity, and opponent model from a request body.
 
     Missing fields take the documented defaults; ``bet`` is still accepted for ``bet_size``.
+    ``call_range_percent`` is an optional strength-percentile caller model for hand evaluation.
 
     Raises:
         InvalidGameParamsError: If any parameter is not a valid value or out of bounds.
@@ -264,11 +271,20 @@ def _parse_game_params(data: Json) -> GameParams:
     pot = _number(data, "pot", DEFAULT_POT)
     bet_size = _number(data, "bet_size", DEFAULT_BET_SIZE, "bet")
     fold_equity = _number(data, "fold_equity", DEFAULT_FOLD_EQUITY)
+    call_range_percent = (
+        _number(data, "call_range_percent", 30.0)
+        if "call_range_percent" in data
+        else None
+    )
 
     if pot <= 0 or bet_size <= 0:
         raise InvalidGameParamsError("Pot and bet_size must be strictly greater than zero.")
     if not (0.0 <= fold_equity <= 1.0):
         raise InvalidGameParamsError("Fold equity must be between 0.0 and 1.0.")
+    if call_range_percent is not None and not (0.0 < call_range_percent <= 100.0):
+        raise InvalidGameParamsError(
+            "call_range_percent must be greater than 0 and at most 100."
+        )
 
     try:
         opponent_model = OpponentModel(data.get("opponent_model", OpponentModel.RANDOM.value))
@@ -276,7 +292,7 @@ def _parse_game_params(data: Json) -> GameParams:
         choices = ", ".join(m.value for m in OpponentModel)
         raise InvalidGameParamsError(f"opponent_model must be one of: {choices}.") from err
 
-    return GameParams(pot, bet_size, fold_equity, opponent_model)
+    return GameParams(pot, bet_size, fold_equity, opponent_model, call_range_percent)
 
 
 def _parse_hand(data: Json, *, required: bool) -> Hand | None:
@@ -296,6 +312,11 @@ def _parse_hand(data: Json, *, required: bool) -> Hand | None:
     return Hand.from_str(value.strip())
 
 
+def _validate_call_range_context(params: GameParams, hand: Hand | None) -> None:
+    if params.call_range_percent is not None and hand is None:
+        raise InvalidGameParamsError("call_range_percent requires a hand.")
+
+
 # --------------------------------------------------------------------------------------------
 # Computation shared by the endpoints
 # --------------------------------------------------------------------------------------------
@@ -312,10 +333,93 @@ def _evaluate_hand(services: Services, hand: Hand, params: GameParams) -> HandRe
     """Evaluate one hand: EV at the given fold rate and the zones where raising is +EV."""
     canonical = to_canonical(hand.cards)
     stats = services.db.get(canonical.canonical_id)
-    equity_at = _equity_function(services, canonical.canonical_id, stats.equity, params.opponent_model)
+    sensitivity = None
+    if params.call_range_percent is not None:
+        equity_at = _call_range_equity_function(hand, params.call_range_percent)
+        sensitivity = _build_hand_sensitivity(
+            hand,
+            params.pot,
+            params.bet_size,
+            params.fold_equity,
+            params.call_range_percent,
+        )
+    else:
+        equity_at = _equity_function(
+            services,
+            canonical.canonical_id,
+            stats.equity,
+            params.opponent_model,
+        )
     ev_res = evaluate_action(params.pot, params.bet_size, params.fold_equity, equity_at(params.fold_equity))
     zones = profitable_fold_zones(params.pot, params.bet_size, equity_at)
-    return HandResult(hand, canonical, stats, ev_res, zones)
+    return HandResult(
+        hand, canonical, stats, ev_res, zones, params.call_range_percent, sensitivity
+    )
+
+
+def _call_range_equity_function(
+    hand: Hand, call_range_percent: float
+) -> Callable[[float], float]:
+    """Return fixed showdown equity against the selected strength-percentile caller range."""
+    equity = calculate_calling_range_equities(
+        hand.cards,
+        [call_range_percent],
+    )[call_range_percent]
+    return lambda _: equity
+
+
+def _build_hand_sensitivity(
+    hand: Hand,
+    pot: float,
+    bet_size: float,
+    fold_equity: float,
+    call_range_percent: float,
+) -> Json:
+    """Evaluate EV across a 3-by-3 grid around the selected assumptions."""
+    fold_scenarios = sorted({
+        round(max(0.0, fold_equity - FOLD_EQUITY_SENSITIVITY), 10),
+        round(fold_equity, 10),
+        round(min(1.0, fold_equity + FOLD_EQUITY_SENSITIVITY), 10),
+    })
+    call_range_scenarios = sorted({
+        max(1.0, call_range_percent - CALL_RANGE_SENSITIVITY),
+        call_range_percent,
+        min(100.0, call_range_percent + CALL_RANGE_SENSITIVITY),
+    })
+    equities = calculate_calling_range_equities(hand.cards, call_range_scenarios)
+    scenarios = [
+        {
+            "fold_equity": fold_rate,
+            "call_range_percent": call_percent,
+            "equity_when_called": equities[call_percent],
+            "ev": evaluate_action(
+                pot,
+                bet_size,
+                fold_rate,
+                equities[call_percent],
+            ).ev,
+        }
+        for fold_rate in fold_scenarios
+        for call_percent in call_range_scenarios
+    ]
+    scenario_evs = [scenario["ev"] for scenario in scenarios]
+    if all(ev > 0.0 for ev in scenario_evs):
+        status = "ROBUST_BET"
+    elif all(ev <= 0.0 for ev in scenario_evs):
+        status = "ROBUST_NO_BET"
+    else:
+        status = "ASSUMPTION_SENSITIVE"
+
+    return {
+        "fold_equity_range": [fold_scenarios[0], fold_scenarios[-1]],
+        "call_range_percent_range": [
+            call_range_scenarios[0],
+            call_range_scenarios[-1],
+        ],
+        "central_equity_when_called": equities[call_range_percent],
+        "status": status,
+        "scenarios": scenarios,
+    }
 
 
 def _decision(is_profitable: bool) -> str:
@@ -338,12 +442,16 @@ def _hand_payload(result: HandResult, model: OpponentModel) -> Json:
         "canonical_id": result.canonical.canonical_id,
         "showdown_equity": result.ev.win_rate_when_called,
         "equity_vs_random": result.stats.equity,
+        "random_hand_equity": result.stats.equity,
+        "call_range_percent": result.call_range_percent,
+        "sensitivity": result.sensitivity,
         "ev": result.ev.ev,
         "break_even_fold_equity": result.ev.break_even_fold_equity if model is OpponentModel.RANDOM else None,
         "profitable_from_fold_equity": result.zones[-1][0],
         "profitable_fold_zones": [[start, end] for start, end in result.zones],
         "is_profitable": result.ev.is_profitable,
         "decision": _decision(result.ev.is_profitable),
+        "recommended_action": "BET" if result.ev.is_profitable else "NO BET",
     }
 
 
@@ -432,6 +540,7 @@ def solve_api() -> Response:
     data = _request_body()
     params = _parse_game_params(data)
     hand = _parse_hand(data, required=False)
+    _validate_call_range_context(params, hand)
 
     hand_evaluation = _hand_payload(_evaluate_hand(services, hand, params), params.opponent_model) if hand else None
     records, summary = _solve_range(services, params)
@@ -465,6 +574,7 @@ def range_api() -> Response:
     """The range summary and the best hands, without a specific hand."""
     services = _services()
     params = _parse_game_params(_request_body())
+    _validate_call_range_context(params, None)
     records, summary = _solve_range(services, params)
     return jsonify({**summary, "top_hands": _top_hands_payload(records)})
 
@@ -480,6 +590,7 @@ def analyze_api() -> Response | tuple[Response, int]:
     data = _request_body()
     params = _parse_game_params(data)
     hand = _parse_hand(data, required=False)
+    _validate_call_range_context(params, hand)
     result = _evaluate_hand(services, hand, params) if hand else None
     _, summary = _solve_range(services, params)
     coverage = float(summary["range_coverage_percent"])
@@ -541,7 +652,7 @@ def _build_prompt(params: GameParams, coverage: float, result: HandResult | None
         f"- Bet / Raise Size: {params.bet_size:,.0f} VND\n"
         f"- Opponent Fold Equity: {params.fold_equity * 100:.1f}%\n"
         f"- Opponent Model: {_model_line(params)}\n"
-        f"- Total Range Coverage (Hands with EV > 0): {coverage}%\n"
+        f"- Random-opponent range coverage (hands with EV > 0): {coverage}%\n"
     )
     if result is not None:
         prompt += (
@@ -550,6 +661,11 @@ def _build_prompt(params: GameParams, coverage: float, result: HandResult | None
             f"- Calculated EV: {result.ev.ev:+,.0f} VND\n"
             f"- Solver Decision: {_decision(result.ev.is_profitable)}\n"
         )
+        if result.call_range_percent is not None:
+            prompt += (
+                f"- Caller range: strongest {result.call_range_percent:.1f}% of legal hands\n"
+                f"- Assumption sensitivity: {result.sensitivity['status'] if result.sensitivity else 'unavailable'}\n"
+            )
     else:
         prompt += "- Hero's Hand: None (General Range Analysis)\n"
     return prompt + (
@@ -580,9 +696,14 @@ def _fallback_advice(params: GameParams, coverage: float, result: HandResult | N
             f"và các tổ hợp điểm cao (> 7 điểm). Cẩn trọng cược hù khi đối thủ có xu hướng theo cược dính."
         )
     ev = result.ev.ev
+    caller_model = (
+        f" Equity is versus the strongest {result.call_range_percent:.1f}% of legal hands."
+        if result.call_range_percent is not None
+        else ""
+    )
     return advice + (
         f"Hero cầm **{result.hand}** ({result.hand.score}) "
-        f"với xác suất thắng đối đầu {result.ev.win_rate_when_called*100:.1f}%. "
+        f"với xác suất thắng đối đầu {result.ev.win_rate_when_called*100:.1f}%.{caller_model} "
         f"Kỳ vọng thu nhập (EV) đạt **{ev:+,.0f} VND**. "
         f"Khuyến nghị tối ưu: **{_decision(result.ev.is_profitable)}**.\n\n"
         f"3. **Nhận định chiến thuật:** "

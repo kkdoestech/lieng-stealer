@@ -169,7 +169,7 @@ def render_single_hand_decision(
     )
 
     status_color = "green" if ev_result.is_profitable else "red"
-    action_text = "RAISE / ALL-IN RECOMMENDED" if ev_result.is_profitable else "CHECK / FOLD RECOMMENDED"
+    action_text = "BET +EV" if ev_result.is_profitable else "NO BET (+EV NOT ESTABLISHED)"
 
     if HAS_RICH:
         content = (

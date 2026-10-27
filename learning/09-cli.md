@@ -238,7 +238,7 @@ will differ): building `CallingRangeModel()` took 53–55 ms, loading and valida
     )
 
     status_color = "green" if ev_result.is_profitable else "red"
-    action_text = "RAISE / ALL-IN RECOMMENDED" if ev_result.is_profitable else "CHECK / FOLD RECOMMENDED"
+    action_text = "BET +EV" if ev_result.is_profitable else "NO BET (+EV NOT ESTABLISHED)"
 ```
 
 Line 164 is the CLI's version of `app.py`'s `_equity_function`
@@ -409,7 +409,7 @@ def _answer_prompts(monkeypatch, answers):
 def test_interactive_mode_asks_for_opponent_model(monkeypatch, capsys):
     _answer_prompts(monkeypatch, ["100000", "100000", "0.35", "range", "Ks Qh 3d"])
     main([])
-    assert "CHECK / FOLD RECOMMENDED" in capsys.readouterr().out
+    assert "ACTION: NO BET (+EV NOT ESTABLISHED)" in capsys.readouterr().out
 
 
 def test_interactive_mode_reports_invalid_hand(monkeypatch, capsys):

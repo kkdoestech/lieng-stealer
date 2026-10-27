@@ -145,7 +145,7 @@ platform which one to use.
 
 Every backend setting has a default in code:
 
-📍 [`backend/app.py:51-64`](../backend/app.py#L51-L64)
+📍 [`backend/app.py:54-67`](../backend/app.py#L54-L67)
 ```python
 # Settings and their defaults. create_app() reads each one from the environment when it is set,
 # and an explicit ``config`` argument overrides both (tests use that).

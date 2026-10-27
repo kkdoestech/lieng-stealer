@@ -130,6 +130,7 @@ export default function App() {
   const [betSize, setBetSize] = useState(50000);
   const [hand, setHand] = useState("As Kh Qd");
   const [foldEquity, setFoldEquity] = useState(0.35);
+  const [callRangePercent, setCallRangePercent] = useState(30);
   const [opponentModel, setOpponentModel] = useState("range");
 
   // Both start true: the first solve begins as soon as the page mounts.
@@ -160,6 +161,7 @@ export default function App() {
       pot: Number(pot),
       bet_size: Number(betSize),
       fold_equity: Number(foldEquity),
+      call_range_percent: Number(callRangePercent),
       hand: hand.trim(),
       opponent_model: opponentModel,
     });
@@ -327,6 +329,28 @@ export default function App() {
               </div>
             </div>
 
+            <div className="form-group">
+              <div className="slider-label-row">
+                <label className="form-label" htmlFor="call-range-input">{t.callRangeLabel}</label>
+                <span className="slider-value-badge">{callRangePercent}%</span>
+              </div>
+              <input
+                id="call-range-input"
+                type="range"
+                min="1"
+                max="100"
+                step="1"
+                value={callRangePercent}
+                onChange={(e) => setCallRangePercent(Number(e.target.value))}
+                className="radar-slider"
+              />
+              <div className="slider-calibrations">
+                <span>1%</span>
+                <span>{t.callRangeSub}</span>
+                <span>100%</span>
+              </div>
+            </div>
+
             {zones && (
               <div className="profit-map">
                 <span className="profit-map-label">{t.profitMap}</span>
@@ -429,6 +453,11 @@ export default function App() {
                 <div className="verdict-breakeven">
                   {t.profitableWhen} <span className="mono-green">{formatZones(zones)}</span>
                 </div>
+                {handEval.sensitivity && (
+                  <div className="verdict-breakeven">
+                    {t.assumptionSensitivity(handEval.sensitivity.status)}
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -451,11 +480,15 @@ export default function App() {
                 {handEval ? `${(handEval.showdown_equity * 100).toFixed(1)}%` : t.notAvailable}
               </div>
               <div className="hud-subtext">
-                {handEval && summary.opponent_model === "range"
-                  ? `${t.vsCallingRange(Math.round((1 - summary.fold_equity) * 100))} · ${t.vsRandomShort(
+                {handEval && handEval.call_range_percent != null
+                  ? `${t.vsCallingRange(Math.round(handEval.call_range_percent))} · ${t.vsRandomShort(
                       `${(handEval.equity_vs_random * 100).toFixed(1)}%`
                     )}`
-                  : t.showdownEquitySub}
+                  : handEval && summary.opponent_model === "range"
+                    ? `${t.vsCallingRange(Math.round((1 - summary.fold_equity) * 100))} · ${t.vsRandomShort(
+                      `${(handEval.equity_vs_random * 100).toFixed(1)}%`
+                    )}`
+                    : t.showdownEquitySub}
               </div>
             </div>
 

@@ -61,7 +61,7 @@ plumbing, and about the few places where it still leaks.
 
 ### 1. `create_app()`: one app, its own services
 
-📍 [`backend/app.py:123-156`](../backend/app.py#L123-L156)
+📍 [`backend/app.py:129-162`](../backend/app.py#L129-L162)
 ```python
     app = Flask(__name__)
     app.config.update(DEFAULT_CONFIG)
@@ -164,7 +164,7 @@ you will see. That is deliberate (fail fast), not a guard that forgot to work.
 
 Every POST view starts with `data = _request_body()` and `params = _parse_game_params(data)`.
 
-📍 [`backend/app.py:226-253`](../backend/app.py#L226-L253)
+📍 [`backend/app.py:232-259`](../backend/app.py#L232-L259)
 ```python
 def _request_body() -> Json:
     """The JSON body as a dict. No body means "use the defaults"; anything else must be a JSON object."""
@@ -205,24 +205,24 @@ def _number(data: Json, name: str, default: float, *aliases: str) -> float:
   A string is parsed (`"0.5"` works), and the result must be finite, which rules out `"nan"`,
   `"inf"` and `-inf`.
 
-📍 [`backend/app.py:264-279`](../backend/app.py#L264-L279)
+📍 [`backend/app.py:271-286`](../backend/app.py#L271-L286)
 ```python
     pot = _number(data, "pot", DEFAULT_POT)
     bet_size = _number(data, "bet_size", DEFAULT_BET_SIZE, "bet")
     fold_equity = _number(data, "fold_equity", DEFAULT_FOLD_EQUITY)
+    call_range_percent = (
+        _number(data, "call_range_percent", 30.0)
+        if "call_range_percent" in data
+        else None
+    )
 
     if pot <= 0 or bet_size <= 0:
         raise InvalidGameParamsError("Pot and bet_size must be strictly greater than zero.")
     if not (0.0 <= fold_equity <= 1.0):
         raise InvalidGameParamsError("Fold equity must be between 0.0 and 1.0.")
-
-    try:
-        opponent_model = OpponentModel(data.get("opponent_model", OpponentModel.RANDOM.value))
-    except ValueError as err:
-        choices = ", ".join(m.value for m in OpponentModel)
-        raise InvalidGameParamsError(f"opponent_model must be one of: {choices}.") from err
-
-    return GameParams(pot, bet_size, fold_equity, opponent_model)
+    if call_range_percent is not None and not (0.0 < call_range_percent <= 100.0):
+        raise InvalidGameParamsError(
+            "call_range_percent must be greater than 0 and at most 100."
 ```
 
 The result is a frozen `GameParams` ([app.py:69-75](../backend/app.py#L69-L75)): after this call
@@ -261,7 +261,7 @@ old check `pot <= 0` let NaN through (every comparison with NaN is false) and th
 
 ### 3. Errors: one JSON shape everywhere
 
-📍 [`backend/app.py:194-220`](../backend/app.py#L194-L220)
+📍 [`backend/app.py:200-226`](../backend/app.py#L200-L226)
 ```python
 def _error(message: str, code: str, status: int) -> tuple[Response, int]:
     return jsonify({"error": message, "code": code}), status
@@ -331,7 +331,7 @@ error without any `code` tells it the answer did not come from this API at all (
 
 The views are short because the work is in the shared helpers:
 
-📍 [`backend/app.py:424-442`](../backend/app.py#L424-L442)
+📍 [`backend/app.py:532-550`](../backend/app.py#L532-L550)
 ```python
 @api.post("/api/solve")
 def solve_api() -> Response:
@@ -344,6 +344,7 @@ def solve_api() -> Response:
     data = _request_body()
     params = _parse_game_params(data)
     hand = _parse_hand(data, required=False)
+    _validate_call_range_context(params, hand)
 
     hand_evaluation = _hand_payload(_evaluate_hand(services, hand, params), params.opponent_model) if hand else None
     records, summary = _solve_range(services, params)
@@ -351,7 +352,6 @@ def solve_api() -> Response:
         "summary": summary,
         "hand_evaluation": hand_evaluation,
         "top_hands": _top_hands_payload(records),
-    })
 ```
 
 Real answers, from the test client:
@@ -401,19 +401,19 @@ parser for all three.
 The web UI calls this endpoint right after `/api/solve`, with the *same* body, and shows the answer
 in the notes drawer.
 
-📍 [`backend/app.py:479-489`](../backend/app.py#L479-L489)
+📍 [`backend/app.py:539-549`](../backend/app.py#L539-L549)
 ```python
     services = _services()
     data = _request_body()
     params = _parse_game_params(data)
     hand = _parse_hand(data, required=False)
-    result = _evaluate_hand(services, hand, params) if hand else None
-    _, summary = _solve_range(services, params)
-    coverage = float(summary["range_coverage_percent"])
+    _validate_call_range_context(params, hand)
 
-    api_key = str(current_app.config["OPENROUTER_API_KEY"])
-    if not api_key:
-        return jsonify({"advice": _fallback_advice(params, coverage, result), "model": FALLBACK_MODEL_NAME})
+    hand_evaluation = _hand_payload(_evaluate_hand(services, hand, params), params.opponent_model) if hand else None
+    records, summary = _solve_range(services, params)
+    return jsonify({
+        "summary": summary,
+        "hand_evaluation": hand_evaluation,
 ```
 
 The server parses the inputs exactly like `/api/solve` and recomputes the hand and the range
@@ -472,7 +472,7 @@ assumed fold rate cannot make (weak spot 11).
 
 When OpenRouter fails, the client gets a fixed message and the operator gets the details:
 
-📍 [`backend/app.py:512-526`](../backend/app.py#L512-L526)
+📍 [`backend/app.py:623-637`](../backend/app.py#L623-L637)
 ```python
     except requests.RequestException:
         current_app.logger.exception("OpenRouter request failed")
@@ -538,7 +538,7 @@ pins this, and checks that `/api/solve` is not limited; `test_rate_limit_respons
 
 ### 7. Running it
 
-📍 [`backend/app.py:594-599`](../backend/app.py#L594-L599)
+📍 [`backend/app.py:715-720`](../backend/app.py#L715-L720)
 ```python
 app = create_app()
 

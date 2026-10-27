@@ -371,7 +371,7 @@ control sizes and focus (§4), the layout, breakpoints and the legacy class name
 (§6: all strings in `i18n.js`, one message per API error code, no "live" or "GTO" claims) and how to
 verify a change:
 
-📍 [`DESIGN.md:92-95`](../DESIGN.md#L92-L95)
+📍 [`DESIGN.md:93-96`](../DESIGN.md#L93-L96)
 ```markdown
 ## 7. Checking a UI Change
 - Run `npm run build`, `npm run lint` (any warning fails) and `npm test` in `frontend/`.

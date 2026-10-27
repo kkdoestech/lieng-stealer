@@ -247,7 +247,7 @@ Notice `if r.is_raise_profitable` inside the sum: the function filters again, so
 
 ### 7. How the callers use the records
 
-📍 [`backend/app.py:350-369`](../backend/app.py#L350-L369)
+📍 [`backend/app.py:458-477`](../backend/app.py#L458-L477)
 ```python
 def _solve_range(services: Services, params: GameParams) -> tuple[list[HandEVRecord], Json]:
     """Score all 455 classes; return the records (best first) and the summary payload."""

@@ -85,11 +85,53 @@ def test_solve_endpoint_with_hand(client):
     assert data["hand_evaluation"]["ev"] > 0
 
 
+def test_solve_uses_explicit_call_range_and_reports_sensitivity(client):
+    response = client.post("/api/solve", json={
+        "pot": 100000,
+        "bet_size": 50000,
+        "fold_equity": 0.35,
+        "call_range_percent": 30,
+        "hand": "2s 3h 5d",
+    })
+
+    assert response.status_code == 200
+    hand_eval = response.get_json()["hand_evaluation"]
+    assert hand_eval["call_range_percent"] == 30
+    assert hand_eval["showdown_equity"] == 0.0
+    assert hand_eval["random_hand_equity"] == hand_eval["equity_vs_random"]
+    assert hand_eval["sensitivity"]["status"] == "ASSUMPTION_SENSITIVE"
+    assert len(hand_eval["sensitivity"]["scenarios"]) == 9
+
+
+@pytest.mark.parametrize("call_range_percent", [0, -1, 100.1, "NaN", "Infinity"])
+def test_solve_rejects_invalid_call_range_percent(client, call_range_percent):
+    response = client.post("/api/solve", json={
+        "call_range_percent": call_range_percent,
+        "hand": "2s 3h 5d",
+    })
+
+    assert response.status_code == 400
+    assert "call_range_percent" in response.get_json()["error"].lower()
+
+
+@pytest.mark.parametrize("endpoint", ["/api/solve", "/api/range", "/api/analyze"])
+def test_call_range_percent_requires_a_hand(client, endpoint):
+    response = client.post(endpoint, json={"call_range_percent": 30})
+
+    assert response.status_code == 400
+    assert response.get_json()["code"] == "invalid_params"
+    assert "requires a hand" in response.get_json()["error"]
+
+
 def test_solve_default_ui_request_numbers(client):
     """The web UI's first request: Q-K-A against a calling range. Renames must not move numbers."""
     payload = {"pot": 100000, "bet_size": 50000, "fold_equity": 0.35, "hand": "As Kh Qd", "opponent_model": "range"}
     hand_eval = client.post("/api/solve", json=payload).get_json()["hand_evaluation"]
-    assert (hand_eval["ev"], hand_eval["showdown_equity"], hand_eval["equity_vs_random"]) == (131876.0, 0.9952, 0.9969)
+    assert (
+        hand_eval["ev"],
+        hand_eval["showdown_equity"],
+        hand_eval["equity_vs_random"],
+    ) == pytest.approx((131876.0, 0.9952, 0.9969), abs=0.00005)
 
 
 def test_solve_endpoint_invalid_inputs(client):
@@ -127,7 +169,7 @@ def test_solve_range_model_flips_medium_hand(client):
     data = client.post("/api/solve", json=payload).get_json()
     hand_eval = data["hand_evaluation"]
     assert data["summary"]["opponent_model"] == "range"
-    assert hand_eval["equity_vs_random"] == 0.36
+    assert hand_eval["equity_vs_random"] == pytest.approx(0.36, abs=0.00005)
     assert hand_eval["showdown_equity"] < 0.02
     assert hand_eval["decision"] == "CHECK/FOLD"
     assert len(hand_eval["profitable_fold_zones"]) == 2
@@ -164,8 +206,9 @@ def test_break_even_fields_random_model(client):
 
 HAND_KEYS = {
     "hand", "score_name", "category", "category_name", "canonical_id", "showdown_equity", "equity_vs_random",
-    "ev", "break_even_fold_equity", "profitable_from_fold_equity", "profitable_fold_zones", "is_profitable",
-    "decision",
+    "random_hand_equity", "call_range_percent", "sensitivity", "ev", "break_even_fold_equity",
+    "profitable_from_fold_equity", "profitable_fold_zones", "is_profitable", "decision",
+    "recommended_action",
 }
 TOP_HAND_KEYS = {"canonical_id", "category", "showdown_equity", "ev", "multiplicity", "is_profitable", "decision"}
 
@@ -278,7 +321,8 @@ def test_analyze_recomputes_instead_of_trusting_the_client(client):
         "range_coverage_percent": 1.0,
     }
     advice = client.post("/api/analyze", json=bogus).get_json()["advice"]
-    assert "+132,097 VND" in advice
+    expected_eval = client.post("/api/solve", json=ANALYZE_PAYLOAD).get_json()["hand_evaluation"]
+    assert f"{expected_eval['ev']:+,.0f} VND" in advice
     assert "999,999,999" not in advice and "IGNORE" not in advice
     assert "**100.0%**" in advice
 

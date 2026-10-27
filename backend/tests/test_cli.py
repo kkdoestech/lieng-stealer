@@ -20,12 +20,12 @@ MEDIUM_HAND = ["--pot", "100000", "--bet", "100000", "--fold-equity", "0.35", "-
 
 def test_default_model_is_random(capsys):
     main(MEDIUM_HAND)
-    assert "RAISE / ALL-IN RECOMMENDED" in capsys.readouterr().out
+    assert "ACTION: BET +EV" in capsys.readouterr().out
 
 
 def test_range_model_recommends_fold(capsys):
     main(MEDIUM_HAND + ["--opponent-model", "range"])
-    assert "CHECK / FOLD RECOMMENDED" in capsys.readouterr().out
+    assert "ACTION: NO BET (+EV NOT ESTABLISHED)" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize("argv", [["--hand", "Xx Kh Qd"], ["--pot", "-5"]])
@@ -45,7 +45,7 @@ def _answer_prompts(monkeypatch, answers):
 def test_interactive_mode_asks_for_opponent_model(monkeypatch, capsys):
     _answer_prompts(monkeypatch, ["100000", "100000", "0.35", "range", "Ks Qh 3d"])
     main([])
-    assert "CHECK / FOLD RECOMMENDED" in capsys.readouterr().out
+    assert "ACTION: NO BET (+EV NOT ESTABLISHED)" in capsys.readouterr().out
 
 
 def test_interactive_mode_reports_invalid_hand(monkeypatch, capsys):
@@ -83,7 +83,7 @@ def test_interactive_mode_ends_cleanly_at_end_of_input(monkeypatch, capsys):
 def test_interactive_mode_uses_the_opponent_model_flag_as_default(monkeypatch, capsys):
     _answer_prompts(monkeypatch, ["100000", "100000", "0.35", "", "Ks Qh 3d"])
     main(["--opponent-model", "range"])
-    assert "CHECK / FOLD RECOMMENDED" in capsys.readouterr().out
+    assert "ACTION: NO BET (+EV NOT ESTABLISHED)" in capsys.readouterr().out
 
 
 def test_plain_text_report_shows_the_sign_of_a_positive_ev(monkeypatch, capsys):
@@ -91,7 +91,9 @@ def test_plain_text_report_shows_the_sign_of_a_positive_ev(monkeypatch, capsys):
 
     monkeypatch.setattr(cli, "HAS_RICH", False)
     main(["--hand", "As Kh Qd"])
-    assert "Expected Value:     +132,097" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "Expected Value:     +132,101.34" in output
+    assert "ACTION: BET +EV" in output
 
 
 def test_a_broken_model_is_an_internal_error_not_invalid_input(monkeypatch, capsys):

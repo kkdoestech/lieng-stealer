@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from math import isfinite
 
 from src.exceptions import InvalidGameParamsError
 
@@ -61,6 +62,8 @@ def calculate_ev(
         InvalidGameParamsError: If any parameter violates physical/probability bounds
             (also a ValueError).
     """
+    if not all(isfinite(value) for value in (pot, bet_size, fold_equity, win_rate_when_called)):
+        raise ValueError("All EV parameters must be finite numbers.")
     if pot <= 0:
         raise InvalidGameParamsError(f"Pot must be strictly positive, got {pot}.")
     if bet_size <= 0:
@@ -75,7 +78,7 @@ def calculate_ev(
     showdown_value = (win_rate_when_called * final_pot(pot, bet_size)) - bet_size
 
     ev = (fold_equity * pot) + (1.0 - fold_equity) * showdown_value
-    return round(ev, 4)
+    return ev
 
 
 def calculate_break_even_fold_equity(
@@ -101,6 +104,8 @@ def calculate_break_even_fold_equity(
     Raises:
         InvalidGameParamsError: If any parameter violates its bounds (also a ValueError).
     """
+    if not all(isfinite(value) for value in (pot, bet_size, win_rate_when_called)):
+        raise ValueError("All break-even parameters must be finite numbers.")
     if pot <= 0:
         raise InvalidGameParamsError(f"Pot must be strictly positive, got {pot}.")
     if bet_size <= 0:
@@ -192,4 +197,3 @@ def profitable_fold_zones(
     if start is not None:
         zones.append((start, last))
     return zones
-

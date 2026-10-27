@@ -43,6 +43,7 @@ once at start-up; then every query is a few array lookups.
 | 6 | [calling_range.py:152-170](../backend/src/calling_range.py#L152-L170) | `_equity_at`: count what you beat and tie. |
 | 7 | [calling_range.py:107-140](../backend/src/calling_range.py#L107-L140) | The public API: `equity` and `equity_table`. |
 | 8 | [test_calling_range.py](../backend/tests/test_calling_range.py) | 12 tests, including an exact cross-check against `winrates.json` and the two invariant checks. |
+| 9 | [opponent_model.py](../backend/src/opponent_model.py) and [test_opponent_model.py](../backend/tests/test_opponent_model.py) | A manually selected caller-strength percentile, independent of fold frequency. |
 
 ---
 
@@ -387,6 +388,17 @@ The second invariant: **equity never increases with `f`**, because more folds dr
 callers, the ones you beat ([test_calling_range.py:49-53](../backend/tests/test_calling_range.py#L49-L53),
 21 values of `f`; I also checked all 101 grid values). Lesson 07 builds on this: since `w` falls as
 `f` rises, EV is no longer a straight line in `f`.
+
+### 9. A fixed caller-range percentile
+
+`CallingRangeModel` derives caller strength from fold frequency: if the opponent folds 35%, the
+strongest 65% call. The separate [`opponent_model.py`](../backend/src/opponent_model.py) function
+lets the user select a caller-range size directly, such as the strongest 30%, independently of the
+fold-frequency estimate. It removes the hero's cards before counting legal hands and returns exact
+win-plus-half-tie equity. The API accepts `call_range_percent` only for a request with a hand;
+its full-range coverage still follows `opponent_model`. The
+[`test_opponent_model.py`](../backend/tests/test_opponent_model.py) cases pin the selected-percent
+behavior and card removal.
 
 ---
 

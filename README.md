@@ -229,6 +229,7 @@ origins in `CORS_ORIGINS` (by default the Vite dev server; see [Configuration](#
 | `bet_size` (`bet` is still accepted) | number | 50000 | > 0 |
 | `fold_equity` | number | 0.35 | 0–1 |
 | `opponent_model` | `"random"` \| `"range"` | `"random"` | the web app sends `"range"` |
+| `call_range_percent` | number | — | optional, 0 < value ≤ 100; evaluates the entered hand against the strongest selected percentage of legal hands |
 | `hand` | string | — | optional for `/api/solve`, required for `/api/evaluate` |
 
 The body must be a JSON object, and numbers must be real, finite numbers (`"nan"`, `"inf"` and `true` are
@@ -248,7 +249,9 @@ rejected). Missing fields take the defaults above.
 
 **One vocabulary.** The three solver endpoints use the same field names with the same meanings:
 `bet_size`, `showdown_equity` (equity when called, under the chosen model), `decision` (`"RAISE"` or
-`"CHECK/FOLD"`), `is_profitable`.
+`"CHECK/FOLD"`), `is_profitable`. When `call_range_percent` is supplied, the single-hand result
+uses the exact strength-percentile caller range and includes a 3-by-3 sensitivity grid; range
+coverage and the top-hands table continue to use `opponent_model`.
 
 **When does raising pay?** Single-hand results contain:
 

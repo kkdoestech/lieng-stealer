@@ -56,6 +56,7 @@ The web UI of **LIÊNG SCOPE** is a plain tool page: inputs on the left, results
 - **Labels**: every input has a `<label htmlFor>`.
 - **Number inputs**: a `−` / `+` stepper (36px buttons) around the field. Browser spin arrows hidden. Step `10,000`, minimum `1,000`.
 - **Slider**: native `<input type="range">` with `accent-color`.
+- **Caller range**: an optional strength-percentile assumption for the entered hand, separate from fold frequency. Show its EV sensitivity across the nearby fold-rate and caller-range assumptions.
 - **Presets**: plain bordered buttons; the active one uses `--bg-active`.
 
 ---
@@ -64,8 +65,8 @@ The web UI of **LIÊNG SCOPE** is a plain tool page: inputs on the left, results
 - **Header**: `LIÊNG SCOPE` and the subtitle on the left, the EN / VI toggle on the right, 1px line below.
 - **Columns**: inputs `340px` on the left with a 1px divider, results `1fr` on the right. Max width `1360px`, 24px side padding.
 - **Results, in order**:
-  1. Verdict: recommended action (green or red), hand, canonical class, EV in VND, the fold-frequency range where raising is +EV.
-  2. Summary: four rows of label, value and note (range coverage, showdown equity, expected value, bluff break-even).
+  1. Verdict: recommended action (green or red), hand, canonical class, EV in VND, the fold-frequency range where raising is +EV, and caller-range sensitivity when selected.
+  2. Summary: four rows of label, value and note (random-opponent range coverage, showdown equity against the selected caller range, expected value, bluff break-even).
   3. Coverage by category table.
   4. Most profitable hands table.
   5. Analysis notes, collapsed by default.

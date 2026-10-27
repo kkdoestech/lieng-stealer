@@ -1,5 +1,5 @@
 import { StrictMode } from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import App from "./App.jsx";
@@ -68,6 +68,21 @@ describe("App", () => {
     render(<App />);
     expect(await screen.findByRole("heading", { name: "Raise / all-in" })).toBeInTheDocument();
     expect(screen.getAllByText(/\+131,876/).length).toBeGreaterThan(0);
+  });
+
+  test("sends the selected caller-range percentage to the solver", async () => {
+    const calls = mockFetch({ "/api/solve": reply(200, SOLVE_OK), "/api/analyze": reply(200, ANALYZE_OK) });
+    render(<App />);
+    await screen.findByRole("heading", { name: "Raise / all-in" });
+
+    const slider = screen.getByRole("slider", { name: "Estimated calling range" });
+    fireEvent.change(slider, { target: { value: "31" } });
+    fireEvent.click(screen.getByRole("button", { name: "Run solver" }));
+
+    await waitFor(() => {
+      const solveCalls = calls.filter((call) => call.path === "/api/solve");
+      expect(solveCalls.at(-1).body.call_range_percent).toBe(31);
+    });
   });
 
   test("the top-hands table reads showdown_equity", async () => {
@@ -144,7 +159,14 @@ describe("App", () => {
     render(<App />);
     await waitFor(() => expect(calls.some((c) => c.path === "/api/analyze")).toBe(true));
     const analyze = calls.find((c) => c.path === "/api/analyze");
-    expect(Object.keys(analyze.body).sort()).toEqual(["bet_size", "fold_equity", "hand", "opponent_model", "pot"]);
+    expect(Object.keys(analyze.body).sort()).toEqual([
+      "bet_size",
+      "call_range_percent",
+      "fold_equity",
+      "hand",
+      "opponent_model",
+      "pot",
+    ]);
     expect(calls.filter((c) => c.path === "/api/solve")).toHaveLength(1);
   });
 

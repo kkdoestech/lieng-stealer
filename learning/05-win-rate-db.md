@@ -325,7 +325,7 @@ Notice that these two methods do not check `_is_loaded`, while `get` and `all_it
 
 ### 8. Who creates the database
 
-📍 [`backend/app.py:135-139`](../backend/app.py#L135-L139)
+📍 [`backend/app.py:141-145`](../backend/app.py#L141-L145)
 ```python
     if db is None:
         db = WinRateDB(DEFAULT_DB_PATH)

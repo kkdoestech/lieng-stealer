@@ -241,7 +241,7 @@ def test_scenario_6_same_hand_both_models(client):
     # Invariants:
     # 1. Against a random caller, 36% equity makes the pot-sized bet profitable
     assert vs_random["decision"] == "RAISE"
-    assert vs_random["showdown_equity"] == 0.36
+    assert vs_random["showdown_equity"] == pytest.approx(0.36, abs=0.00005)
     # 2. An opponent who folds their weakest 35% calls only with hands that beat 3 points
     assert vs_range["decision"] == "CHECK/FOLD"
     assert vs_range["showdown_equity"] < 0.02

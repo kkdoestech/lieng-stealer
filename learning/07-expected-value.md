@@ -85,7 +85,7 @@ Two choices are built into this formula. Both matter later:
 - **The opponent calls exactly `B`.** There is no re-raise, so the final pot is always `P + 2B`.
   AGENTS.md §5.1 writes the general `P + B + C_opp`; the code fixes `C_opp = B`, in one helper:
 
-📍 [`backend/src/ev.py:34-36`](../backend/src/ev.py#L34-L36)
+📍 [`backend/src/ev.py:35-37`](../backend/src/ev.py#L35-L37)
 ```python
 def final_pot(pot: float, bet_size: float) -> float:
     """Pot after Hero bets and the opponent calls the same amount: P + 2B (AGENTS.md: C_opp = B)."""
@@ -98,7 +98,7 @@ If the call model ever changes, this is the line to change.
 
 ### 2. `calculate_ev`: two lines of maths behind four guards
 
-📍 [`backend/src/ev.py:64-78`](../backend/src/ev.py#L64-L78)
+📍 [`backend/src/ev.py:67-81`](../backend/src/ev.py#L67-L81)
 ```python
     if pot <= 0:
         raise InvalidGameParamsError(f"Pot must be strictly positive, got {pot}.")
@@ -114,7 +114,7 @@ If the call model ever changes, this is the line to change.
     showdown_value = (win_rate_when_called * final_pot(pot, bet_size)) - bet_size
 
     ev = (fold_equity * pot) + (1.0 - fold_equity) * showdown_value
-    return round(ev, 4)
+    return ev
 ```
 
 The guards raise `InvalidGameParamsError`, the project's error for bad numbers (lesson 01). It
@@ -161,7 +161,7 @@ Set `EV = 0` and solve for `f`. Write `S` for the showdown value:
 f · P + (1 − f) · S = 0   →   f = −S / (P − S)
 ```
 
-📍 [`backend/src/ev.py:113-121`](../backend/src/ev.py#L113-L121)
+📍 [`backend/src/ev.py:118-126`](../backend/src/ev.py#L118-L126)
 ```python
     showdown_value = (win_rate_when_called * final_pot(pot, bet_size)) - bet_size
 
@@ -229,7 +229,7 @@ There are two profitable stretches: against loose callers (f ≤ 8%) the hand wi
 showdowns, and above 50% it is a pure bluff that folds alone pay for. In between it loses. No single
 threshold can say that, so the code scans:
 
-📍 [`backend/src/ev.py:177-194`](../backend/src/ev.py#L177-L194)
+📍 [`backend/src/ev.py:182-199`](../backend/src/ev.py#L182-L199)
 ```python
     if steps < 1:
         raise ValueError(f"Steps must be at least 1, got {steps}.")
@@ -264,16 +264,16 @@ threshold can say that, so the code scans:
 
 ### 7. How the API uses all of this
 
-📍 [`backend/app.py:311-318`](../backend/app.py#L311-L318)
+📍 [`backend/app.py:332-339`](../backend/app.py#L332-L339)
 ```python
 def _evaluate_hand(services: Services, hand: Hand, params: GameParams) -> HandResult:
     """Evaluate one hand: EV at the given fold rate and the zones where raising is +EV."""
     canonical = to_canonical(hand.cards)
     stats = services.db.get(canonical.canonical_id)
-    equity_at = _equity_function(services, canonical.canonical_id, stats.equity, params.opponent_model)
-    ev_res = evaluate_action(params.pot, params.bet_size, params.fold_equity, equity_at(params.fold_equity))
-    zones = profitable_fold_zones(params.pot, params.bet_size, equity_at)
-    return HandResult(hand, canonical, stats, ev_res, zones)
+    sensitivity = None
+    if params.call_range_percent is not None:
+        equity_at = _call_range_equity_function(hand, params.call_range_percent)
+        sensitivity = _build_hand_sensitivity(
 ```
 
 `_equity_function` ([app.py:302-308](../backend/app.py#L302-L308)) returns either
@@ -286,7 +286,7 @@ and the zones. `services` is the app's own database and calling-range model (les
 `_hand_payload` then turns a `HandResult` into the JSON that both `/api/solve` and `/api/evaluate`
 send. The zones become two separate fields:
 
-📍 [`backend/app.py:325-347`](../backend/app.py#L325-L347)
+📍 [`backend/app.py:429-451`](../backend/app.py#L429-L451)
 ```python
 def _hand_payload(result: HandResult, model: OpponentModel) -> Json:
     """The hand-evaluation fields, identical in /api/solve and /api/evaluate.
@@ -304,13 +304,13 @@ def _hand_payload(result: HandResult, model: OpponentModel) -> Json:
         "canonical_id": result.canonical.canonical_id,
         "showdown_equity": result.ev.win_rate_when_called,
         "equity_vs_random": result.stats.equity,
+        "random_hand_equity": result.stats.equity,
+        "call_range_percent": result.call_range_percent,
+        "sensitivity": result.sensitivity,
         "ev": result.ev.ev,
         "break_even_fold_equity": result.ev.break_even_fold_equity if model is OpponentModel.RANDOM else None,
         "profitable_from_fold_equity": result.zones[-1][0],
         "profitable_fold_zones": [[start, end] for start, end in result.zones],
-        "is_profitable": result.ev.is_profitable,
-        "decision": _decision(result.ev.is_profitable),
-    }
 ```
 
 - `showdown_equity` is the `w` that went into the EV (it depends on the opponent model), while

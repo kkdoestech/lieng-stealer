@@ -219,7 +219,7 @@ spot 3).
 The component's side of a run is three small functions. `runSolve` builds the body and turns each
 callback into state changes:
 
-📍 [`frontend/src/App.jsx:156-185`](../frontend/src/App.jsx#L156-L185)
+📍 [`frontend/src/App.jsx:157-186`](../frontend/src/App.jsx#L157-L186)
 ```jsx
   // Start one run with the current inputs; every state change happens in a callback, after the
   // matching response has arrived.
@@ -228,6 +228,7 @@ callback into state changes:
       pot: Number(pot),
       bet_size: Number(betSize),
       fold_equity: Number(foldEquity),
+      call_range_percent: Number(callRangePercent),
       hand: hand.trim(),
       opponent_model: opponentModel,
     });
@@ -250,13 +251,12 @@ callback into state changes:
         setIsAiLoading(false);
       },
     });
-  };
 ```
 
 As soon as the numbers are in, `isLoading` goes false and the page renders them; the analysis is
 still on its way. `startSolve` is what the button calls:
 
-📍 [`frontend/src/App.jsx:187-196`](../frontend/src/App.jsx#L187-L196)
+📍 [`frontend/src/App.jsx:189-198`](../frontend/src/App.jsx#L189-L198)
 ```jsx
   // Start a run from a click: cancel any run still in flight, then show the loading state.
   const startSolve = () => {
@@ -278,7 +278,7 @@ run" never appears ([App.test.jsx:151-172](../frontend/src/App.test.jsx#L151-L17
 
 The first run starts on mount:
 
-📍 [`frontend/src/App.jsx:198-221`](../frontend/src/App.jsx#L198-L221)
+📍 [`frontend/src/App.jsx:200-223`](../frontend/src/App.jsx#L200-L223)
 ```jsx
   // The first run on mount. It reads the current inputs without making them effect dependencies.
   const startFirstRun = useEffectEvent((controller) => {
@@ -425,7 +425,7 @@ from `t.betPresetLabel(...)` with the multiple formatted for the locale: "0.5x p
 
 The profit map draws each zone with inline percentages:
 
-📍 [`frontend/src/App.jsx:330-344`](../frontend/src/App.jsx#L330-L344)
+📍 [`frontend/src/App.jsx:354-368`](../frontend/src/App.jsx#L354-L368)
 ```jsx
             {zones && (
               <div className="profit-map">
@@ -456,7 +456,7 @@ Twelve values are functions. Six take a parameter (`betPresetLabel`, `invalidHan
 (`solverOffline`, `serverError`, `badResponse`, `aiNoAdvice`, `aiUnreachable`, `aiRateLimited`).
 The solve errors sit together:
 
-📍 [`frontend/src/i18n.js:31-35`](../frontend/src/i18n.js#L31-L35)
+📍 [`frontend/src/i18n.js:34-38`](../frontend/src/i18n.js#L34-L38)
 ```js
     solverOffline: () => "Can't reach the solver. Start the backend on port 5000 and try again.",
     invalidHand: (detail) => `Check your hand: ${detail}`,
@@ -467,7 +467,7 @@ The solve errors sit together:
 
 The render calls every message the same way:
 
-📍 [`frontend/src/App.jsx:382-386`](../frontend/src/App.jsx#L382-L386)
+📍 [`frontend/src/App.jsx:406-410`](../frontend/src/App.jsx#L406-L410)
 ```jsx
           {solveError && (
             <div className="terminal-alert" role="alert">
