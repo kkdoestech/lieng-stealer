@@ -1,7 +1,6 @@
+# Runtime dependencies for the API server (installed in production).
 flask==3.0.3
 flask-cors==4.0.1
+flask-limiter==4.1.1
 gunicorn==22.0.0
 requests==2.31.0
-rich==13.7.1
-pytest==9.1.1
-

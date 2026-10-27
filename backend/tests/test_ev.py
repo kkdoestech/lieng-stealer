@@ -6,18 +6,21 @@ Verifies:
     P(Fold) = 0.0, P(Win) = 1.0 => EV = Pot + Bet
     P(Fold) = 0.0, P(Win) = 0.0 => EV = -Bet
 - Mathematical bluffing: junk hand (win_rate = 0.05) has EV > 0 when fold_equity = 0.8
-- Strict monotonicity with respect to fold equity and win rate
+- Monotonicity in win rate, and in fold equity for hands whose showdown value is below the pot
+  (for strong hands, more folds cost money: the slope of EV in fold equity is P - showdown value)
 - Break-even fold equity calculation correctness
 - Parameter bound validations and error handling
 """
 
 import pytest
 
+from src.calling_range import CallingRangeModel
 from src.ev import (
     calculate_break_even_fold_equity,
     calculate_ev,
     evaluate_action,
     is_profitable,
+    profitable_fold_zones,
 )
 
 
@@ -69,7 +72,7 @@ class TestEVEngine:
         assert is_profitable(ev) is True
 
     def test_monotonicity(self) -> None:
-        """Increasing fold equity or win rate must strictly increase EV."""
+        """At w = 0.5 more folds help, and higher equity always helps."""
         pot = 100000.0
         bet = 50000.0
 
@@ -139,3 +142,44 @@ class TestEVEngine:
         assert res.final_pot == 200000.0
         assert res.is_profitable is True
         assert res.ev > 0.0
+
+
+class TestProfitableFoldZones:
+    """Test suite for scanning fold frequencies where raising is +EV."""
+
+    def test_pure_bluff_starts_above_closed_form_threshold(self) -> None:
+        """Air needs f > B / (P + B) = 50%; the first grid point strictly above is 51%."""
+        zones = profitable_fold_zones(pot=100000.0, bet_size=100000.0, equity_at=lambda f: 0.0)
+        assert zones == [(0.51, 1.0)]
+
+    def test_nuts_profitable_everywhere(self) -> None:
+        zones = profitable_fold_zones(pot=100000.0, bet_size=100000.0, equity_at=lambda f: 1.0)
+        assert zones == [(0.0, 1.0)]
+
+    def test_medium_hand_has_two_zones_against_calling_range(self) -> None:
+        """K-Q-3 wins against loose callers and as a bluff, but loses in between."""
+        model = CallingRangeModel()
+        zones = profitable_fold_zones(
+            pot=100000.0,
+            bet_size=100000.0,
+            equity_at=lambda f: model.equity("K-Q-3", f),
+        )
+        assert len(zones) == 2
+        assert zones[0][0] == 0.0
+        assert zones[1] == (0.51, 1.0)
+
+    def test_invalid_steps(self) -> None:
+        with pytest.raises(ValueError):
+            profitable_fold_zones(pot=100.0, bet_size=50.0, equity_at=lambda f: 0.5, steps=0)
+
+
+class TestStrongHands:
+    def test_folds_hurt_unbeatable_hands(self) -> None:
+        """With w = 1 the showdown value P + B exceeds the pot, so every fold gives up a won showdown."""
+        evs = [calculate_ev(100000.0, 50000.0, f, 1.0) for f in (0.0, 0.5, 1.0)]
+        assert evs == [150000.0, 125000.0, 100000.0]
+
+    def test_final_pot_is_pot_plus_two_bets(self) -> None:
+        from src.ev import final_pot
+
+        assert final_pot(100000.0, 50000.0) == 200000.0

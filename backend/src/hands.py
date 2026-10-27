@@ -11,22 +11,30 @@ Total combinations sum: 52 + 3,744 + 18,304 = 22,100 hands.
 from __future__ import annotations
 
 import itertools
+import math
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Final, Sequence
+from functools import total_ordering
+from typing import Final
 
 from src.evaluator import (
     Card,
-    Hand,
     HandCategory,
     HandScore,
     Rank,
     Suit,
     evaluate_hand,
 )
-from src.exceptions import InvalidCardError, InvalidHandSizeError
+from src.exceptions import DuplicateCardError, InvalidHandSizeError
+
+# Size of the state space: every 3-card hand from 52 cards, and the opponent hands left once
+# yours is dealt. Computed rather than typed, so no module carries its own copy of 22100 / 18424.
+TOTAL_COMBINATIONS: Final[int] = math.comb(52, 3)
+OPPONENT_COMBINATIONS: Final[int] = math.comb(52 - 3, 3)
 
 
+@total_ordering
 @dataclass(frozen=True)
 class CanonicalHand:
     """Immutable representation of a canonical equivalence class.
@@ -59,11 +67,29 @@ class CanonicalHand:
             return NotImplemented
         return self.score == other.score
 
+    def __hash__(self) -> int:
+        # Must agree with __eq__, which compares strength.
+        return hash(self.score)
+
     def __str__(self) -> str:
         return self.canonical_id
 
     def __repr__(self) -> str:
         return f"CanonicalHand('{self.canonical_id}', cat={self.category.name}, mult={self.multiplicity})"
+
+
+def _canonical_ranks(cards: Sequence[Card]) -> tuple[Rank, Rank, Rank]:
+    """Return the three ranks in canonical-ID order.
+
+    Ranks are listed in descending order, except the two straights that contain an Ace, which
+    are written the way players say them: A-2-3 (lowest Liêng) and Q-K-A (highest Liêng).
+    """
+    low, mid, high = sorted(c.rank for c in cards)
+    if (low, mid, high) == (Rank.TWO, Rank.THREE, Rank.ACE):
+        return (Rank.ACE, Rank.TWO, Rank.THREE)
+    if (low, mid, high) == (Rank.QUEEN, Rank.KING, Rank.ACE):
+        return (Rank.QUEEN, Rank.KING, Rank.ACE)
+    return (high, mid, low)
 
 
 def get_canonical_id(cards: Sequence[Card]) -> str:
@@ -83,22 +109,13 @@ def get_canonical_id(cards: Sequence[Card]) -> str:
 
     Raises:
         InvalidHandSizeError: If len(cards) != 3.
+        DuplicateCardError: If the same card appears twice.
     """
     if len(cards) != 3:
         raise InvalidHandSizeError(f"Expected 3 cards to determine canonical ID, got {len(cards)}.")
-
-    rank_values = sorted([c.rank.value for c in cards])
-    sorted_triple = (rank_values[0], rank_values[1], rank_values[2])
-
-    # Special handling for sequence ordering in Liêng
-    if sorted_triple == (2, 3, 14):
-        return "A-2-3"
-    if sorted_triple == (12, 13, 14):
-        return "Q-K-A"
-
-    # For all other hands (including 9-8-7, A-A-A, K-K-Q, etc.), sort descending
-    sorted_ranks = sorted([c.rank for c in cards], reverse=True)
-    return f"{sorted_ranks[0].short_name}-{sorted_ranks[1].short_name}-{sorted_ranks[2].short_name}"
+    if len(set(cards)) != 3:
+        raise DuplicateCardError("A Liêng hand cannot contain duplicate cards.")
+    return "-".join(rank.short_name for rank in _canonical_ranks(cards))
 
 
 def _compute_multiplicity(ranks: tuple[Rank, Rank, Rank]) -> int:
@@ -155,16 +172,7 @@ def to_canonical(cards: Sequence[Card]) -> CanonicalHand:
 
     cid = get_canonical_id(cards)
     score = evaluate_hand(cards)
-
-    # Determine canonical rank tuple with sequence handling if applicable
-    rank_values = sorted([c.rank.value for c in cards])
-    if (rank_values[0], rank_values[1], rank_values[2]) == (2, 3, 14):
-        ranks_tuple = (Rank.ACE, Rank.TWO, Rank.THREE)
-    elif (rank_values[0], rank_values[1], rank_values[2]) == (12, 13, 14):
-        ranks_tuple = (Rank.QUEEN, Rank.KING, Rank.ACE)
-    else:
-        desc = sorted([c.rank for c in cards], reverse=True)
-        ranks_tuple = (desc[0], desc[1], desc[2])
+    ranks_tuple = _canonical_ranks(cards)
 
     mult = _compute_multiplicity((cards[0].rank, cards[1].rank, cards[2].rank))
     return CanonicalHand(

@@ -7,8 +7,16 @@ EV = [P(Fold) * Pot] + [1 - P(Fold)] * [(P(Win|Call) * FinalPot) - BetSize]
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from math import isfinite
+
+from src.exceptions import InvalidGameParamsError
+
+# Default game parameters, shared by the CLI and the API when the user doesn't give a value.
+DEFAULT_POT = 100000.0
+DEFAULT_BET_SIZE = 50000.0
+DEFAULT_FOLD_EQUITY = 0.35
 
 
 @dataclass(frozen=True)
@@ -22,6 +30,11 @@ class EVResult:
     final_pot: float
     break_even_fold_equity: float
     is_profitable: bool
+
+
+def final_pot(pot: float, bet_size: float) -> float:
+    """Pot after Hero bets and the opponent calls the same amount: P + 2B (AGENTS.md: C_opp = B)."""
+    return pot + 2.0 * bet_size
 
 
 def calculate_ev(
@@ -46,21 +59,23 @@ def calculate_ev(
         The expected value in units matching pot/bet currency.
 
     Raises:
-        ValueError: If any parameter violates physical/probability bounds.
+        InvalidGameParamsError: If any parameter violates physical/probability bounds
+            (also a ValueError).
     """
     if not all(isfinite(value) for value in (pot, bet_size, fold_equity, win_rate_when_called)):
         raise ValueError("All EV parameters must be finite numbers.")
     if pot <= 0:
-        raise ValueError(f"Pot must be strictly positive, got {pot}.")
+        raise InvalidGameParamsError(f"Pot must be strictly positive, got {pot}.")
     if bet_size <= 0:
-        raise ValueError(f"Bet size must be strictly positive, got {bet_size}.")
+        raise InvalidGameParamsError(f"Bet size must be strictly positive, got {bet_size}.")
     if not (0.0 <= fold_equity <= 1.0):
-        raise ValueError(f"Fold equity must be between 0.0 and 1.0, got {fold_equity}.")
+        raise InvalidGameParamsError(f"Fold equity must be between 0.0 and 1.0, got {fold_equity}.")
     if not (0.0 <= win_rate_when_called <= 1.0):
-        raise ValueError(f"Win rate when called must be between 0.0 and 1.0, got {win_rate_when_called}.")
+        raise InvalidGameParamsError(
+            f"Win rate when called must be between 0.0 and 1.0, got {win_rate_when_called}."
+        )
 
-    final_pot = pot + 2.0 * bet_size
-    showdown_value = (win_rate_when_called * final_pot) - bet_size
+    showdown_value = (win_rate_when_called * final_pot(pot, bet_size)) - bet_size
 
     ev = (fold_equity * pot) + (1.0 - fold_equity) * showdown_value
     return ev
@@ -85,28 +100,29 @@ def calculate_break_even_fold_equity(
 
     Returns:
         Required fold equity in [0.0, 1.0]. Returns 0.0 if already profitable.
+
+    Raises:
+        InvalidGameParamsError: If any parameter violates its bounds (also a ValueError).
     """
     if not all(isfinite(value) for value in (pot, bet_size, win_rate_when_called)):
         raise ValueError("All break-even parameters must be finite numbers.")
     if pot <= 0:
-        raise ValueError(f"Pot must be strictly positive, got {pot}.")
+        raise InvalidGameParamsError(f"Pot must be strictly positive, got {pot}.")
     if bet_size <= 0:
-        raise ValueError(f"Bet size must be strictly positive, got {bet_size}.")
+        raise InvalidGameParamsError(f"Bet size must be strictly positive, got {bet_size}.")
     if not (0.0 <= win_rate_when_called <= 1.0):
-        raise ValueError(f"Win rate when called must be between 0.0 and 1.0, got {win_rate_when_called}.")
+        raise InvalidGameParamsError(
+            f"Win rate when called must be between 0.0 and 1.0, got {win_rate_when_called}."
+        )
 
-    final_pot = pot + 2.0 * bet_size
-    showdown_value = (win_rate_when_called * final_pot) - bet_size
+    showdown_value = (win_rate_when_called * final_pot(pot, bet_size)) - bet_size
 
     # If showdown value is already non-negative, zero fold equity is needed
     if showdown_value >= 0.0:
         return 0.0
 
-    denominator = pot - showdown_value
-    if denominator <= 0.0:
-        return 0.0
-
-    req_fe = -showdown_value / denominator
+    # Here showdown_value < 0 and pot > 0, so the denominator pot - showdown_value is positive.
+    req_fe = -showdown_value / (pot - showdown_value)
     return round(min(1.0, max(0.0, req_fe)), 4)
 
 
@@ -124,14 +140,60 @@ def evaluate_action(
     """Perform complete financial evaluation and return an EVResult instance."""
     ev = calculate_ev(pot, bet_size, fold_equity, win_rate_when_called)
     be_fe = calculate_break_even_fold_equity(pot, bet_size, win_rate_when_called)
-    final_pot = pot + 2.0 * bet_size
     return EVResult(
         ev=ev,
         pot=pot,
         bet_size=bet_size,
         fold_equity=fold_equity,
         win_rate_when_called=win_rate_when_called,
-        final_pot=final_pot,
+        final_pot=final_pot(pot, bet_size),
         break_even_fold_equity=be_fe,
         is_profitable=is_profitable(ev),
     )
+
+
+def profitable_fold_zones(
+    pot: float,
+    bet_size: float,
+    equity_at: Callable[[float], float],
+    steps: int = 100,
+) -> list[tuple[float, float]]:
+    """Scan opponent fold frequencies and return the intervals where raising is +EV.
+
+    When the opponent folds their weakest hands, a higher fold frequency also means
+    a stronger calling range, so EV is not monotonic in fold equity: a medium hand
+    can be profitable against loose callers, lose in the middle, and become
+    profitable again once folds alone pay for the bet.
+
+    Args:
+        pot: Current pot (must be > 0).
+        bet_size: Hero bet amount (must be > 0).
+        equity_at: Maps a fold frequency in [0.0, 1.0] to Hero's equity when called.
+        steps: Number of grid intervals over [0.0, 1.0]; resolution is 1 / steps.
+
+    Returns:
+        Sorted, non-overlapping (start, end) fold-frequency intervals on the grid
+        where EV > 0. Empty if raising is never profitable.
+
+    Raises:
+        ValueError: If steps < 1.
+        InvalidGameParamsError: If pot/bet_size violate calculate_ev bounds (also a ValueError).
+    """
+    if steps < 1:
+        raise ValueError(f"Steps must be at least 1, got {steps}.")
+
+    zones: list[tuple[float, float]] = []
+    start: float | None = None
+    last = 0.0
+    for i in range(steps + 1):
+        f = i / steps
+        if is_profitable(calculate_ev(pot, bet_size, f, equity_at(f))):
+            if start is None:
+                start = f
+            last = f
+        elif start is not None:
+            zones.append((start, last))
+            start = None
+    if start is not None:
+        zones.append((start, last))
+    return zones

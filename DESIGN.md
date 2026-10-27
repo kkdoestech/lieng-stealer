@@ -1,90 +1,96 @@
-# DESIGN.MD: TACTICAL RADAR ANALYTICS TERMINAL SPECIFICATION
+# DESIGN.MD: WEB UI SPECIFICATION
 
-## 1. Design Persona & Visual Identity ("EPL SCOPE" Aesthetic)
-**LIÊNG SCOPE** is engineered as a high-precision, tactical radar analytics terminal for game-theoretic analysis in Vietnamese Liêng. The aesthetic directly mirrors elite sports radar and military telemetry systems (modeled on the visual discipline of *EPL SCOPE*).
+## 1. Look & Principles
+The web UI of **LIÊNG SCOPE** is a plain tool page: inputs on the left, results on the right. It uses the **Ayu Dark** color palette (as in the VS Code "Ayu Dark Bordered" theme): one dark background, with regions split by 1px lines. There is no visual concept beyond that. It should look like something a person built for their own use.
 
-### Strict Prohibitions (Zero Consumer AI Tropes)
-- **NO purple or violet gradients**: Eliminate all generic AI gradient blends.
-- **NO robot, sparkle, or emoji decorations**: No `🤖`, `✨`, `⚡`, `🔮`, or friendly chat avatars.
-- **NO conversational chat interfaces**: All outputs, including LLM analysis, must be formatted as raw mathematical telemetry, tactical intelligence drawers, and structured data tables.
-- **NO rounded "bubble" cards**: All UI containers must feature crisp, rectangular or micro-radius geometries (maximum 2px–4px border radius).
+### Prohibitions
+- **No concept or theme language**: no "terminal", "radar", "HUD", "telemetry" or "engine" styling or copy.
+- **No effects**: no glow, `text-shadow`, gradients, background grids, noise or blurred shapes.
+- **No motion**: no pulsing dots, spinners, entrance animations or hover lifts. Hover changes background color only.
+- **No decoration**: no emoji, robot or sparkle icons, no chat bubbles, no purple or violet.
+- **No cards by default**: sections are separated by spacing and 1px `--line` borders. Only controls, the error message and the open notes panel get a box.
+- **No pills**: radius is `3px` everywhere.
+- **No empty labels**: no kicker tags, section IDs (`SEC-01`) or badges that carry no information. No fake status (e.g. a "LIVE" indicator that checks nothing).
 
 ---
 
-## 2. Color Palette & CSS Variables
+## 2. Color Tokens (`frontend/src/index.css`)
 
-| Token | Hex / Value | Purpose |
+| Token | Value | Use |
 | :--- | :--- | :--- |
-| `--bg-canvas` | `#050705` | Pitch tactical black canvas background. |
-| `--bg-grid` | `rgba(34, 197, 94, 0.03)` | 24px subtle radar grid lines overlaying canvas. |
-| `--bg-surface` | `#101511` | Primary container surface (dark matte charcoal). |
-| `--bg-surface-hover`| `#151C17` | Hover state for interactive rows, panels, and chips. |
-| `--bg-surface-input`| `#0A0E0B` | Deep contrast inset background for data entry fields. |
-| `--border-base` | `#1C261F` | Default panel and table borders (tactical green-gray). |
-| `--border-highlight`| `#22C55E` | Active, focused, or positive threshold borders. |
-| `--border-subtle` | `#141C16` | Internal dividers and secondary table gridlines. |
-| `--accent-green` | `#22C55E` | Radar terminal green (brand highlight, live status, raise action). |
-| `--accent-green-muted` | `#153820` | Low-key tactical fill for badges, chips, and table highlights. |
-| `--accent-green-glow` | `rgba(34, 197, 94, 0.12)` | Subtle radar illumination for high-value targets and active inputs. |
-| `--accent-red` | `#EF4444` | Negative EV indicator and fold signal. |
-| `--accent-red-muted` | `#2A1215` | Low-key background for check/fold states. |
-| `--text-white` | `#FFFFFF` | Primary headers, values, and top-tier metrics. |
-| `--text-green` | `#22C55E` | Highlights, positive EV, and active indicators. |
-| `--text-muted` | `#85998B` | Monospaced labels, descriptions, and telemetry metadata. |
-| `--text-dim` | `#4B5E51` | Inactive markers, table headers, and footnote details. |
+| `--bg` | `#0B0E14` | Page background. |
+| `--bg-input` | `#0D1017` | Text and number inputs. |
+| `--bg-hover` | `#141922` | Hover on buttons and table rows. |
+| `--bg-active` | `#1F2530` | Selected preset / language. |
+| `--line` | `#232834` | Section dividers, table rows. |
+| `--line-control` | `#3D4452` | Borders of inputs and buttons. |
+| `--text` | `#BFBDB6` | Body text. |
+| `--text-strong` | `#E6E1CF` | Headings, values, input text. |
+| `--muted` | `#8A9199` | Secondary text (6:1 contrast on `--bg`). |
+| `--accent` | `#E6B450` | Focus ring, slider, "Run solver" button. Nothing else. |
+| `--accent-hover` | `#D9A63F` | Hover state of the "Run solver" button. |
+| `--good` | `#AAD94C` | Raise, +EV. |
+| `--bad` | `#F07178` | Fold, −EV, errors. |
+| `--zone-good` | `--good` at 45% (`color-mix`) | Profitable stretches of the profit map. |
+| `--zone-bad` | `--bad` at 20% (`color-mix`) | The rest of the profit map's track. |
+
+- Green and red appear only where they mean raise/fold or +/−EV.
+- `App.css` uses tokens only: no hex or `rgba()` literals outside `index.css`.
+- Selected presets use `--bg-active` with a `--muted` border, not the accent.
+- Don't use Ayu's darker UI greys (e.g. `#565B66`) for text: they fail contrast.
 
 ---
 
-## 3. Typography & Micro-Interactions
-
-### Monospaced Precision
-- **Primary Font**: `'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace`.
-- All labels, data readouts, table cells, metric values, preset tags, and action buttons must strictly render in monospace.
-- Uppercase text transformations applied to all structural headers and telemetry labels (`text-transform: uppercase`, `letter-spacing: 0.06em`).
-
-### Tactical Controls
-- **Action Buttons**: Solid rectangular blocks (`[ EXECUTE SOLVER ]`) with high-contrast `#22C55E` background or crisp bordered outlines, with instant hover transitions and no bouncy animations.
-- **Form Inputs**: Inset dark matte boxes (`#0A0E0B`) with subtle border `#1C261F`, transitioning on focus to solid `#22C55E` border and razor-thin glow (`0 0 0 1px #22C55E`).
-- **Preset Chips**: Compact monospaced badges (`50k`, `100k`, `0.5x Pot`, `1.0x Pot`) for instant tactical parameter switching.
+## 3. Typography
+- **One family**: the system UI stack (`system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, …`). No web fonts. Monospace only for real code.
+- **Sizes**: base `15px / 1.5`. Labels `0.93rem`. Smallest text `0.87rem` (13px), never smaller.
+- **Case**: sentence case, normal letter spacing. The product name `LIÊNG SCOPE` and game category names (`SÁP`, `LIÊNG`, `ĐĨ`, `ĐIỂM`) stay as written.
+- **Numbers**: `font-variant-numeric: tabular-nums`.
+- **Hierarchy**: section headings `1rem / 600`. The verdict and its EV are `1.25rem / 600`. Nothing bigger.
 
 ---
 
-## 4. UI Architecture & Structural Hierarchy
+## 4. Controls
+- **Sizes**: buttons and presets at least `32px` tall, inputs `36px`, the main button `40px`.
+- **Focus**: `2px solid var(--accent)` outline, offset `1px`, on every control (`:focus-visible` in `index.css`). Never remove an outline without a replacement.
+- **Labels**: every input has a `<label htmlFor>`.
+- **Number inputs**: a `−` / `+` stepper (36px buttons) around the field. Browser spin arrows hidden. Step `10,000`, minimum `1,000`.
+- **Slider**: native `<input type="range">` with `accent-color`.
+- **Caller range**: an optional strength-percentile assumption for the entered hand, separate from fold frequency. Show its EV sensitivity across the nearby fold-rate and caller-range assumptions.
+- **Presets**: plain bordered buttons; the active one uses `--bg-active`.
 
-### 4.1 Header & System Telemetry Status
-- **Title Block**: Dual-tone typographic logo:
-  - `LIÊNG` in bold crisp white (`#FFFFFF`).
-  - `SCOPE` in bold radar green (`#22C55E`).
-- **Telemetry Tag**: Right-aligned live solver status pill:
-  - Pulsing radar dot (`#22C55E`) with text `● LIVE SOLVER // 455 CLASSES LOADED`.
-- **System Subtitle**: `GTO SOLVER & COMBINATORIAL ENGINE`.
+---
 
-### 4.2 Left Panel: Control Telemetry
-- Dedicated control deck organized into distinct technical modules:
-  - `CURRENT POT (VND)` with preset chips (`50k`, `100k`, `200k`, `500k`).
-  - `BET / RAISE SIZING` with multiplier chips (`0.5x Pot`, `1.0x Pot`, `2.0x Pot`).
-  - `OPPONENT FOLD FREQUENCY` slider with real-time percentage readout and calibrated anchor points (`0% Calling Station`, `50% GTO Median`, `100% Extreme Fold`).
-  - `PLAYER HAND (3 CARDS)` with quick-select canonical holding presets.
-  - Action trigger: `[ EXECUTE SOLVER ]`.
+## 5. Layout
+- **Header**: `LIÊNG SCOPE` and the subtitle on the left, the EN / VI toggle on the right, 1px line below.
+- **Columns**: inputs `340px` on the left with a 1px divider, results `1fr` on the right. Max width `1360px`, 24px side padding.
+- **Results, in order**:
+  1. Verdict: recommended action (green or red), hand, canonical class, EV in VND, the fold-frequency range where raising is +EV, and caller-range sensitivity when selected.
+  2. Summary: four rows of label, value and note (random-opponent range coverage, showdown equity against the selected caller range, expected value, bluff break-even).
+  3. Coverage by category table.
+  4. Most profitable hands table.
+  5. Analysis notes, collapsed by default.
+- **Engine specs**: a small muted footnote under the "Run solver" button, not a box. It states what the data is (exact enumeration over 455 canonical classes); keep it true when the engine changes.
+- **Responsive**:
+  - `≤1024px`: one column, the divider moves below the inputs.
+  - `≤640px`: the verdict and summary stack.
+  - `≤480px`: 16px side padding.
+  - Tables scroll sideways; the page itself must not scroll sideways at 390px.
+- **Class names**: `terminal-*`, `tactical-*`, `hud-*` and `radar-slider` are leftovers from the earlier radar-terminal design and carry no meaning. Don't add new names in that vocabulary.
 
-### 4.3 Right Panel: Strategic HUD & Heatmap
-- **Decision Verdict Banner**:
-  - `ACTION: RAISE / ALL-IN` in radar green (`#22C55E`) or `ACTION: CHECK / FOLD` in tactical muted red.
-  - Accompanied by player holding evaluation, exact canonical class, and net EV readout.
-- **4-Card Metrics HUD**:
-  1. `RANGE COVERAGE`: Percentage of 22,100 combinations profitable to raise.
-  2. `SHOWDOWN EQUITY`: Mathematical win-rate vs. random holding distribution.
-  3. `EXPECTED VALUE`: Net gain/loss in VND across calling and folding branches.
-  4. `PURE BLUFF THRESHOLD`: Break-even fold equity required to profitably push air (0 points).
-- **Range Breakdown Matrix**:
-  - Structured matrix summarizing performance across the 4 core Liêng categories:
-    - `SÁP` (Three of a Kind, 13 classes / 52 combinations)
-    - `LIÊNG` (Straight / Sequence, 12 classes / 768 combinations)
-    - `ĐĨ` (Three Face Cards, 6 classes / 288 combinations)
-    - `ĐIỂM` (Point Totals Modulo 10, 424 classes / 20,992 combinations)
-- **Top Canonical Holdings Table**:
-  - High-density monospaced table displaying top playable holdings with equity, EV, and combo multiplicity.
-- **Mathematical Telemetry Notes (Collapsible Drawer)**:
-  - Replaces generic AI commentary with a tactical drawer titled `[ + MATHEMATICAL TELEMETRY NOTES ]`.
-  - When expanded, displays technical game-theoretic evaluation without conversational fluff.
+---
 
+## 6. Copy
+- Plain words that say what things do. Buttons start with a verb: "Run solver", "Show analysis notes".
+- No `//`, `[ ]`, `●` or `>` decorations.
+- Errors say what happened and what to do next.
+- All UI strings live in `frontend/src/i18n.js` (English and Vietnamese, same keys), including preset labels and the currency. Change the Vietnamese wording only when asked.
+- Each API error `code` has its own message (`invalidHand`, `invalidParams`, `serverError`, `solverOffline`, `badResponse`, `aiRateLimited`); the server's text is only the detail.
+- Never claim what the code doesn't do: no "live" indicators, no "GTO" (the tool computes EV, not an equilibrium).
+
+---
+
+## 7. Checking a UI Change
+- Run `npm run build`, `npm run lint` (any warning fails) and `npm test` in `frontend/`.
+- Screenshot at 1360px and 390px wide and check them against this file.
+- The numbers on screen (EV, equity, coverage, top hands) must not change from a styling change.

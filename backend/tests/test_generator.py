@@ -10,17 +10,15 @@ Verifies:
 
 import json
 from pathlib import Path
+
 import pytest
 
-from src.evaluator import HandCategory
 from src.generator import (
+    build_parser,
     compute_hand_equity,
-    generate_winrates_database,
 )
 from src.hands import (
     generate_all_canonical_hands,
-    to_canonical,
-    get_representative_cards,
 )
 
 
@@ -65,10 +63,9 @@ class TestGeneratorEngine:
 
     def test_rate_invariants(self, canonical_map: dict) -> None:
         """Check mathematical consistency across multiple sample hands."""
-        test_keys = ["A-A-A", "Q-K-A", "A-2-3", "9-8-7", "K-K-Q", "10-J-K"]
+        test_keys = ["A-A-A", "Q-K-A", "A-2-3", "9-8-7", "K-K-Q", "K-J-10"]
         for key in test_keys:
-            if key not in canonical_map:
-                continue
+            assert key in canonical_map, f"{key} is not a canonical ID"
             res = compute_hand_equity(canonical_map[key], exact=True)
             # Rates are stored to 8 decimal places.
             total_prob = res["win_rate"] + res["tie_rate"] + res["loss_rate"]
@@ -93,7 +90,7 @@ class TestGeneratorEngine:
             db_path = Path(__file__).resolve().parent.parent / "data" / "winrates.json"
         assert db_path.exists(), "data/winrates.json must exist"
 
-        with open(db_path, "r", encoding="utf-8") as f:
+        with open(db_path, encoding="utf-8") as f:
             data = json.load(f)
 
         assert len(data) == 455, f"Expected 455 canonical hands, got {len(data)}"
@@ -109,3 +106,85 @@ class TestGeneratorEngine:
             assert profile["samples"] == 18424
             assert profile["category"] in {"SAP", "LIENG", "DI", "DIEM"}
             assert profile["multiplicity"] in {4, 24, 64}
+
+
+class TestGeneratorCommandLine:
+    """The command line must produce the exact database by default (the tests above require it)."""
+
+    def test_defaults_to_exact_enumeration(self) -> None:
+        assert build_parser().parse_args([]).exact is True
+
+    def test_monte_carlo_is_opt_in(self) -> None:
+        args = build_parser().parse_args(["--monte-carlo", "--samples", "500"])
+        assert args.exact is False
+        assert args.samples == 500
+
+
+class TestGeneratorSafety:
+    def test_exact_and_monte_carlo_are_mutually_exclusive(self) -> None:
+        with pytest.raises(SystemExit):
+            build_parser().parse_args(["--exact", "--monte-carlo"])
+
+    def test_samples_must_be_positive(self) -> None:
+        with pytest.raises(SystemExit):
+            build_parser().parse_args(["--monte-carlo", "--samples", "0"])
+
+    def test_default_output_does_not_depend_on_the_current_directory(self) -> None:
+        from src.paths import DEFAULT_DB_PATH
+
+        assert build_parser().parse_args([]).output == DEFAULT_DB_PATH
+        assert DEFAULT_DB_PATH.is_absolute()
+
+    def test_seeded_monte_carlo_leaves_global_random_untouched(self, canonical_map: dict) -> None:
+        import random
+
+        random.seed(123)
+        expected = random.random()
+        random.seed(123)
+        compute_hand_equity(canonical_map["Q-K-A"], exact=False, samples=50, seed=1)
+        assert random.random() == expected
+
+    def test_write_is_complete_and_leaves_no_temp_file(self, tmp_path: Path) -> None:
+        from src.generator import generate_winrates_database
+
+        out = tmp_path / "nested" / "winrates.json"
+        generate_winrates_database(exact=False, samples=5, output_path=out, workers=1)
+        assert len(json.loads(out.read_text(encoding="utf-8"))) == 455
+        assert [p.name for p in out.parent.iterdir()] == ["winrates.json"]
+
+
+class TestGeneratorFileHandling:
+    def test_new_file_gets_normal_permissions(self, tmp_path: Path) -> None:
+        import os
+
+        from src.generator import generate_winrates_database
+
+        umask = os.umask(0)
+        os.umask(umask)
+        out = tmp_path / "winrates.json"
+        generate_winrates_database(exact=False, samples=2, output_path=out, workers=1)
+        assert out.stat().st_mode & 0o777 == 0o644 & ~umask
+
+    def test_existing_file_keeps_its_permissions(self, tmp_path: Path) -> None:
+        from src.generator import generate_winrates_database
+
+        out = tmp_path / "winrates.json"
+        out.write_text("{}", encoding="utf-8")
+        out.chmod(0o640)
+        generate_winrates_database(exact=False, samples=2, output_path=out, workers=1)
+        assert out.stat().st_mode & 0o777 == 0o640
+
+    def test_failed_write_leaves_the_old_file_and_no_temp_file(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from src import generator
+
+        out = tmp_path / "winrates.json"
+        out.write_text('{"old": true}', encoding="utf-8")
+
+        def broken_dump(*args, **kwargs):
+            raise OSError("disk full")
+
+        monkeypatch.setattr(generator.json, "dump", broken_dump)
+        with pytest.raises(OSError):
+            generator.generate_winrates_database(exact=False, samples=2, output_path=out, workers=1)
+        assert out.read_text(encoding="utf-8") == '{"old": true}'
+        assert [p.name for p in tmp_path.iterdir()] == ["winrates.json"]

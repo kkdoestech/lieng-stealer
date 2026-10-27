@@ -11,6 +11,8 @@ Verifies:
 - Strict error handling (invalid cards, duplicate cards, hand size != 3)
 """
 
+import timeit
+
 import pytest
 
 from src.evaluator import (
@@ -22,7 +24,8 @@ from src.evaluator import (
     calculate_points,
     evaluate_hand,
 )
-from src.exceptions import InvalidCardError, InvalidHandSizeError
+from src.exceptions import DuplicateCardError, InvalidCardError, InvalidHandSizeError
+from tests.perf import budget
 
 
 class TestCardAndRank:
@@ -246,3 +249,58 @@ class TestDiemModulo10:
         assert hand_8 > hand_0
         assert hand_9 > hand_0
 
+
+class TestTieBreakHouseRules:
+    """AGENTS.md leaves ties inside Đĩ and Điểm to "game configuration"; these pin what the code does."""
+
+    def test_di_order_highest_face_card_then_middle_then_rest(self) -> None:
+        hands = ["Qs Jh Jd", "Qs Qh Jd", "Ks Jh Jd", "Ks Qh Qd", "Ks Kh Jd", "Ks Kh Qd"]
+        ordered = sorted((Hand.from_str(h) for h in hands), reverse=True)
+        assert [str(h) for h in ordered] == ["Ks Kh Qd", "Ks Kh Jd", "Ks Qh Qd", "Ks Jh Jd", "Qs Qh Jd", "Qs Jh Jd"]
+
+    def test_diem_ties_broken_by_highest_rank_with_ace_high(self) -> None:
+        """A-K-8 and K-Q-9 are both 9 points; the Ace counts as the highest card (rank 14)."""
+        assert Hand.from_str("As Kd 8c") > Hand.from_str("Ks Qd 9c")
+
+    def test_same_ranks_tie_whatever_the_suits(self) -> None:
+        assert Hand.from_str("As 8d Kc") == Hand.from_str("Ah 8s Kd")
+
+
+class TestHashing:
+    """Equal objects must hash equally (weak spot H1)."""
+
+    def test_equal_hands_hash_equally_and_collapse_in_a_set(self) -> None:
+        a, b = Hand.from_str("As Kh Qd"), Hand.from_str("Ac Kd Qh")
+        assert a == b
+        assert hash(a) == hash(b)
+        assert len({a, b}) == 1
+
+    def test_hand_scores_hash_by_score_tuple(self) -> None:
+        a, b = Hand.from_str("As Kh Qd").score, Hand.from_str("Ac Kd Qh").score
+        assert a == b and hash(a) == hash(b)
+
+    def test_score_is_cached_on_the_hand(self) -> None:
+        """cached_property stores the score in the instance dict on first access (a plain
+        @property would not), so later comparisons don't evaluate the hand again."""
+        hand = Hand.from_str("As Kh Qd")
+        assert "score" not in hand.__dict__
+        first = hand.score
+        assert hand.__dict__["score"] is first
+
+
+class TestErrorsAndSpeed:
+    def test_duplicate_cards_raise_duplicate_card_error(self) -> None:
+        with pytest.raises(DuplicateCardError):
+            Hand.from_str("As As Kd")
+        with pytest.raises(DuplicateCardError):
+            evaluate_hand([Card.from_str("As")] * 3)
+
+    def test_card_error_names_the_whole_card(self) -> None:
+        with pytest.raises(InvalidCardError, match=r"Invalid card '11h'"):
+            Card.from_str("11h")
+
+    def test_evaluation_within_latency_budget(self) -> None:
+        """AGENTS.md section 6: one hand evaluation in under 1 microsecond."""
+        cards = Hand.from_str("As Kh Qd").cards
+        best = min(timeit.repeat(lambda: evaluate_hand(cards), number=20000, repeat=5)) / 20000
+        assert best * 1e6 < budget(1.0), f"evaluate_hand took {best * 1e6:.3f} us"

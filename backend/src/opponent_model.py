@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Sequence
 from itertools import combinations_with_replacement
 from math import ceil, comb, isfinite
-from typing import Sequence
 
 from src.evaluator import Card, Deck, evaluate_hand
 

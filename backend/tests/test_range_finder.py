@@ -5,18 +5,25 @@ Verifies:
 - When fold equity is 100%, all 22,100 combinations yield positive EV and coverage is 100.0%
 - When fold equity is 0%, only hands exceeding the required pot odds threshold are profitable
 - Monotonicity: Increasing fold equity strictly increases or maintains range coverage
+- Opponent models: get_profitable_range honours the model; equal-EV hands are ordered by strength
 """
 
 import pytest
 
+from src.calling_range import CallingRangeModel, OpponentModel
 from src.db import WinRateDB
-from src.range_finder import TOTAL_COMBINATIONS, RangeFinder
+from src.range_finder import RangeFinder
 
 
 @pytest.fixture(scope="module")
 def loaded_finder() -> RangeFinder:
     db = WinRateDB("data/winrates.json")
     return RangeFinder(db)
+
+
+@pytest.fixture(scope="module")
+def finder_with_model() -> RangeFinder:
+    return RangeFinder(WinRateDB("data/winrates.json"), CallingRangeModel())
 
 
 class TestRangeFinder:
@@ -88,3 +95,44 @@ class TestRangeFinder:
         assert cov_0 <= cov_25 <= cov_50 <= cov_100
         assert cov_100 == 100.0
 
+
+class TestOpponentModels:
+    """Test suite for the opponent-model parameter of RangeFinder."""
+
+    def test_profitable_range_respects_opponent_model(self, finder_with_model: RangeFinder) -> None:
+        """A pot-sized bet at 35% folds: 387 classes profit vs random callers, only 250 vs a calling range."""
+        random_range = finder_with_model.get_profitable_range(100000.0, 100000.0, 0.35)
+        calling_range = finder_with_model.get_profitable_range(
+            100000.0, 100000.0, 0.35, opponent_model=OpponentModel.RANGE
+        )
+        assert len(random_range) == 387
+        assert len(calling_range) == 250
+
+    def test_equal_ev_hands_are_ordered_strongest_first(self, finder_with_model: RangeFinder) -> None:
+        """At 35% folds every weak hand has 0 equity vs the calling range, so EV ties; strength must break them."""
+        records = finder_with_model.solve_range(100000.0, 50000.0, 0.35, OpponentModel.RANGE)
+        # The three weakest canonical hands, weakest last (chapter 6: 4-3-3 is the weakest of all 455)
+        assert [r.canonical_id for r in records[-3:]] == ["5-3-2", "4-4-2", "4-3-3"]
+
+
+class TestConstructionAndSummaries:
+    def test_requires_a_loaded_database(self) -> None:
+        from src.exceptions import DatabaseNotLoadedError
+
+        with pytest.raises(DatabaseNotLoadedError):
+            RangeFinder(WinRateDB())
+
+    def test_category_breakdown_totals(self, loaded_finder: RangeFinder) -> None:
+        from src.range_finder import category_breakdown
+
+        rows = category_breakdown(loaded_finder.solve_range(100000.0, 50000.0, 0.0))
+        assert [(r.category.name, r.classes, r.combos) for r in rows] == [
+            ("SAP", 13, 52), ("LIENG", 12, 768), ("DI", 6, 144), ("DIEM", 424, 21136),
+        ]
+
+
+def test_range_model_without_calling_model_is_a_model_error(loaded_finder: RangeFinder) -> None:
+    from src.exceptions import ModelError
+
+    with pytest.raises(ModelError):
+        loaded_finder.solve_range(100000.0, 50000.0, 0.35, OpponentModel.RANGE)

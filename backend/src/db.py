@@ -7,13 +7,18 @@ typed, immutable in-memory Hash Table for high-performance O(1) decision queries
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 from src.evaluator import Card, HandCategory
-from src.exceptions import DatabaseError, DatabaseNotLoadedError, InvalidHandSizeError
-from src.hands import get_canonical_id
+from src.exceptions import DatabaseError, DatabaseNotLoadedError, UnknownHandError
+from src.hands import generate_all_canonical_hands, get_canonical_id
+from src.paths import DEFAULT_DB_PATH
+
+# Rates are rounded to 4 decimals one by one, so win + tie + loss can be off by up to 1e-4.
+_RATE_TOLERANCE = 2e-4
 
 
 @dataclass(frozen=True)
@@ -28,7 +33,7 @@ class HandStats:
     samples: int
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "HandStats":
+    def from_dict(cls, data: dict[str, Any]) -> HandStats:
         """Construct a HandStats instance from a dictionary record."""
         return cls(
             equity=float(data["equity"]),
@@ -60,14 +65,19 @@ class WinRateDB:
         """Check whether the database has been loaded into memory."""
         return self._is_loaded
 
-    def load(self, filepath: str | Path = "data/winrates.json") -> None:
-        """Load and parse the win rates JSON into memory.
+    def load(self, filepath: str | Path = DEFAULT_DB_PATH) -> None:
+        """Load, parse and validate the win rates JSON into memory.
+
+        The new data replaces the old only after every record has parsed and passed validation,
+        so a failed load leaves a previously loaded database untouched.
 
         Args:
-            filepath: Path to precomputed winrates.json.
+            filepath: Path to a winrates.json file (default: backend/data/winrates.json). A relative
+                path is tried as given, then relative to the backend folder.
 
         Raises:
-            DatabaseError: If file is missing, cannot be read, or is malformed.
+            DatabaseError: If the file is missing, cannot be read, is malformed, or does not
+                describe exactly the 455 canonical hands with plausible rates.
         """
         path = Path(filepath)
         if not path.is_file():
@@ -79,7 +89,7 @@ class WinRateDB:
                 raise DatabaseError(f"Database file '{filepath}' does not exist.")
 
         try:
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 raw_data = json.load(f)
         except json.JSONDecodeError as err:
             raise DatabaseError(f"Malformed JSON in database file '{filepath}': {err}") from err
@@ -96,6 +106,7 @@ class WinRateDB:
         except (KeyError, ValueError, TypeError) as err:
             raise DatabaseError(f"Invalid record schema in '{filepath}': {err}") from err
 
+        _validate_records(parsed_cache, str(path))
         self._cache = parsed_cache
         self._is_loaded = True
 
@@ -110,13 +121,13 @@ class WinRateDB:
 
         Raises:
             DatabaseNotLoadedError: If queried before loading.
-            KeyError: If canonical_id is not present in database.
+            UnknownHandError: If canonical_id is not present (also a KeyError).
         """
         if not self._is_loaded:
             raise DatabaseNotLoadedError("WinRateDB is not loaded. Call load() first.")
 
         if canonical_id not in self._cache:
-            raise KeyError(f"Canonical hand '{canonical_id}' not found in database.")
+            raise UnknownHandError(f"Canonical hand '{canonical_id}' not found in database.")
 
         return self._cache[canonical_id]
 
@@ -148,3 +159,35 @@ class WinRateDB:
     def __contains__(self, canonical_id: str) -> bool:
         return canonical_id in self._cache
 
+
+def _validate_records(records: dict[str, HandStats], source: str) -> None:
+    """Check that parsed records describe exactly the 455 canonical hands with plausible rates.
+
+    Raises:
+        DatabaseError: Naming the first problem found.
+    """
+    expected = {hand.canonical_id: hand for hand in generate_all_canonical_hands()}
+    missing = sorted(expected.keys() - records.keys())
+    unknown = sorted(records.keys() - expected.keys())
+    if missing or unknown:
+        raise DatabaseError(
+            f"'{source}' must contain exactly the {len(expected)} canonical hands: "
+            f"{len(missing)} missing (e.g. {missing[:3]}), {len(unknown)} unknown (e.g. {unknown[:3]})."
+        )
+
+    for cid, stats in records.items():
+        canonical = expected[cid]
+        if stats.category is not canonical.category or stats.multiplicity != canonical.multiplicity:
+            raise DatabaseError(
+                f"'{source}': {cid} is recorded as {stats.category.name} x{stats.multiplicity}, "
+                f"expected {canonical.category.name} x{canonical.multiplicity}."
+            )
+        rates = (stats.equity, stats.win_rate, stats.tie_rate, stats.loss_rate)
+        if not all(0.0 <= rate <= 1.0 for rate in rates):
+            raise DatabaseError(f"'{source}': {cid} has a rate outside [0, 1]: {rates}.")
+        if abs(stats.win_rate + stats.tie_rate + stats.loss_rate - 1.0) > _RATE_TOLERANCE:
+            raise DatabaseError(f"'{source}': {cid} win + tie + loss rates do not sum to 1.")
+        if abs(stats.equity - (stats.win_rate + 0.5 * stats.tie_rate)) > _RATE_TOLERANCE:
+            raise DatabaseError(f"'{source}': {cid} equity does not equal win rate + half the tie rate.")
+        if stats.samples < 1:
+            raise DatabaseError(f"'{source}': {cid} has {stats.samples} samples.")

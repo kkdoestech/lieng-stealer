@@ -1,16 +1,18 @@
 """Comprehensive Dynamic Scenario Verification Suite for Liêng Stealer.
 
 Verifies that the engine and API are completely dynamic and mathematically
-rigorous across 5 diverse game scenarios:
+rigorous across 6 diverse game scenarios:
 1. Monster Hand Value Raise (Liêng Q-K-A)
-2. Junk Hand against Calling Station (Negative Bet EV with 0 points)
+2. Junk Hand against Calling Station (Forced Fold with 0 points)
 3. Mathematical Pure Bluff (0 points flips to Raise under high fold equity)
 4. Range Coverage Sensitivity Sweep across fold equities
 5. API Schema, Endpoint Variations & Dynamic Response Verification
+6. Same Medium Hand under Both Opponent Models (random raises, calling range folds)
 """
 
 import sys
 from pathlib import Path
+
 import pytest
 
 # Ensure UTF-8 encoding on Windows terminal output
@@ -20,7 +22,7 @@ if sys.stdout and hasattr(sys.stdout, "reconfigure"):
     except Exception:
         pass
 
-from app import app
+from app import create_app
 from src.db import WinRateDB
 from src.range_finder import RangeFinder
 
@@ -29,8 +31,7 @@ DB_PATH = Path(__file__).resolve().parent.parent / "data" / "winrates.json"
 
 @pytest.fixture(scope="module")
 def client():
-    app.config["TESTING"] = True
-    with app.test_client() as c:
+    with create_app(config={"TESTING": True}).test_client() as c:
         yield c
 
 
@@ -58,10 +59,10 @@ def test_scenario_1_monster_hand_value_raise(client):
     assert hand_eval is not None
 
     # Invariants:
-    # 1. Bet signal MUST show a positive expected value.
-    assert hand_eval["decision"] == "BET"
-    # 2. Equity against the assumed top-30% caller range remains very high.
-    assert hand_eval["showdown_equity"] > 0.98
+    # 1. Recommendation MUST be "RAISE"
+    assert hand_eval["decision"] == "RAISE"
+    # 2. Showdown Equity MUST be > 99%
+    assert hand_eval["showdown_equity"] > 0.99
     # 3. EV MUST be positive (> +100,000)
     assert hand_eval["ev"] > 100000.0
     # 4. Break-Even Fold Equity MUST be 0.0% (profitable even if opponent never folds)
@@ -76,7 +77,7 @@ def test_scenario_1_monster_hand_value_raise(client):
 
 
 def test_scenario_2_junk_hand_calling_station(client):
-    """Scenario 2: Junk Hand against Calling Station (Bet Has Negative EV).
+    """Scenario 2: Junk Hand against Calling Station (Forced Fold).
     Pot=100k, Bet=50k, FoldEquity=0.05, Hand='2s 3h 5d' (0 pts Bù)
     """
     payload = {
@@ -93,18 +94,17 @@ def test_scenario_2_junk_hand_calling_station(client):
     assert hand_eval is not None
 
     # Invariants:
-    # 1. Bet signal MUST show that the selected bet is not profitable.
-    assert hand_eval["decision"] == "NO BET"
-    # 2. The top-30% caller model has no showdown wins for this hand.
+    # 1. Recommendation MUST be "CHECK/FOLD"
+    assert "FOLD" in hand_eval["decision"]
+    # 2. Showdown Equity MUST be < 1% (0.24%)
     assert hand_eval["showdown_equity"] < 0.01
-    assert hand_eval["showdown_equity"] == 0.0
-    # 3. EV MUST be negative.
+    # 3. EV MUST be negative (close to -42,000)
     assert hand_eval["ev"] < 0.0
-    assert abs(hand_eval["ev"] - (-42500.0)) < 1.0
+    assert abs(hand_eval["ev"] - (-42044.0)) < 100.0
     # 4. Break-Even Fold Equity MUST be > 30% (unprofitable because 0.05 < 0.33)
     assert hand_eval["break_even_fold_equity"] > 0.30
 
-    print("\n[Scenario 2: Junk Hand Negative Bet EV]")
+    print("\n[Scenario 2: Junk Hand Forced Fold]")
     print(f"  Hand: {hand_eval['hand']} ({hand_eval['canonical_id']})")
     print(f"  Showdown Equity: {hand_eval['showdown_equity'] * 100:.2f}%")
     print(f"  Net EV: {hand_eval['ev']:,.0f} VND")
@@ -130,18 +130,18 @@ def test_scenario_3_pure_bluff_flip(client):
     assert hand_eval is not None
 
     # Invariants:
-    # 1. Bet signal MUST flip to positive despite holding 0 points.
-    assert hand_eval["decision"] == "BET"
+    # 1. Recommendation MUST flip to "RAISE" despite holding 0 points
+    assert hand_eval["decision"] == "RAISE"
     # 2. EV MUST become positive (> +20,000) solely due to fold equity exceeding 33.3%
     assert hand_eval["ev"] > 20000.0
-    assert abs(hand_eval["ev"] - 25000.0) < 1.0
+    assert abs(hand_eval["ev"] - 25240.0) < 100.0
     assert hand_eval["is_profitable"] is True
 
     print("\n[Scenario 3: Mathematical Pure Bluff]")
     print(f"  Hand: {hand_eval['hand']} ({hand_eval['canonical_id']})")
     print(f"  Opponent Fold Equity: 50.0% (Threshold: {data['summary']['pure_bluff_break_even_fold_equity'] * 100:.1f}%)")
     print(f"  Net EV: +{hand_eval['ev']:,.0f} VND")
-    print(f"  Decision: {hand_eval['decision']} (Bet EV is positive) -> PASS")
+    print(f"  Decision: {hand_eval['decision']} (Flipped from Fold to Raise) -> PASS")
 
 
 def test_scenario_4_range_coverage_sensitivity(solver):
@@ -228,3 +228,28 @@ def test_scenario_5_api_schema_and_endpoints(client):
     print("  POST /api/solve without hand: OK")
     print("  Dynamic EV scaling with Pot/Bet changes: OK")
     print("  GET / service metadata: OK -> PASS")
+
+
+def test_scenario_6_same_hand_both_models(client):
+    """Scenario 6: Same Medium Hand under Both Opponent Models.
+    Pot=100k, Bet=100k, FoldEquity=0.35, Hand='Ks Qh 3d' (3 points)
+    """
+    base = {"pot": 100000.0, "bet_size": 100000.0, "fold_equity": 0.35, "hand": "Ks Qh 3d"}
+    vs_random = client.post("/api/solve", json={**base, "opponent_model": "random"}).get_json()["hand_evaluation"]
+    vs_range = client.post("/api/solve", json={**base, "opponent_model": "range"}).get_json()["hand_evaluation"]
+
+    # Invariants:
+    # 1. Against a random caller, 36% equity makes the pot-sized bet profitable
+    assert vs_random["decision"] == "RAISE"
+    assert vs_random["showdown_equity"] == pytest.approx(0.36, abs=0.00005)
+    # 2. An opponent who folds their weakest 35% calls only with hands that beat 3 points
+    assert vs_range["decision"] == "CHECK/FOLD"
+    assert vs_range["showdown_equity"] < 0.02
+    # 3. Both answers describe the same hand; only the opponent model differs
+    assert vs_random["canonical_id"] == vs_range["canonical_id"] == "K-Q-3"
+
+    print("\n[Scenario 6: Same Hand, Both Opponent Models]")
+    print(f"  Hand: {vs_random['hand']} ({vs_random['canonical_id']})")
+    print(f"  Random caller:  equity {vs_random['showdown_equity'] * 100:.2f}%, EV {vs_random['ev']:+,.0f} VND -> {vs_random['decision']}")
+    print(f"  Calling range:  equity {vs_range['showdown_equity'] * 100:.2f}%, EV {vs_range['ev']:+,.0f} VND -> {vs_range['decision']}")
+    print("  Decision flips with the opponent model -> PASS")

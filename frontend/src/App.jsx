@@ -1,183 +1,264 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useEffectEvent, useRef } from 'react';
 import './App.css';
+import { STRINGS, LANGUAGES } from './i18n.js';
+import { formatMoney, formatZones } from './format.js';
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
+// Empty by default: requests go to /api on the page's own origin, which the Vite dev server
+// proxies to Flask (vite.config.js). Set VITE_API_URL at build time when the API lives elsewhere.
+const API_BASE = import.meta.env.VITE_API_URL ?? "";
+const LANG_STORAGE_KEY = "lieng-scope-lang";
 
-function formatMoney(num) {
-  if (num === undefined || num === null) return "0";
-  return new Intl.NumberFormat("vi-VN").format(Math.round(num));
+// Steppers move money fields by 10k and never go below 1k.
+const AMOUNT_STEP = 10000;
+const MIN_AMOUNT = 1000;
+
+const POT_PRESETS = [50000, 100000, 200000, 500000];
+const BET_PRESET_MULTIPLES = [0.5, 1, 2]; // bet = multiple × pot
+const HAND_PRESETS = [
+  { cards: "As Kh Qd", labelKey: "presetLiengQKA" },
+  { cards: "7s 7h 7d", labelKey: "presetSap7" },
+  { cards: "Js Qh Kd", labelKey: "presetLiengJQK" },
+  { cards: "9s 10h Kd", labelKey: "presetDiem9" },
+  { cards: "2s 3h 5d", labelKey: "presetDiem0" },
+];
+
+// Backend category enum -> display label and i18n description key
+const CATEGORY_LABELS = { SAP: "SÁP", LIENG: "LIÊNG", DI: "ĐĨ", DIEM: "ĐIỂM" };
+const CATEGORY_DESC_KEYS = { SAP: "descSap", LIENG: "descLieng", DI: "descDi", DIEM: "descDiem" };
+
+function loadSavedLang() {
+  try {
+    const saved = localStorage.getItem(LANG_STORAGE_KEY);
+    return LANGUAGES.includes(saved) ? saved : "en";
+  } catch {
+    return "en";
+  }
+}
+
+// Map a failed /api/solve response to the message shown under the button ({ key, detail }).
+// The API answers every error with { error, code }. A response without a code did not come from
+// Flask (e.g. the dev proxy's 502, or a 404 from the wrong server), so the solver isn't reachable.
+function solveErrorFor(body) {
+  if (!body.code) return { key: "solverOffline" };
+  if (body.code === "invalid_hand") return { key: "invalidHand", detail: body.error };
+  if (body.code === "invalid_params") return { key: "invalidParams", detail: body.error };
+  return { key: "serverError" };
+}
+
+// One solve + analysis round trip. It holds no state: it reports each step through the callbacks
+// and stops calling them as soon as `signal` is aborted (a newer run started, or the page unmounted).
+async function fetchSolveAndAnalysis(body, signal, { onSolved, onSolveFailed, onAnalysis }) {
+  const post = (path) =>
+    fetch(`${API_BASE}${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body, signal });
+
+  let solveJson;
+  try {
+    const solveRes = await post("/api/solve");
+    if (signal.aborted) return;
+    if (!solveRes.ok) {
+      const errorBody = await solveRes.json().catch(() => ({}));
+      if (!signal.aborted) onSolveFailed(solveErrorFor(errorBody));
+      return;
+    }
+    try {
+      solveJson = await solveRes.json();
+    } catch {
+      if (!signal.aborted) onSolveFailed({ key: "badResponse" });
+      return;
+    }
+  } catch {
+    if (!signal.aborted) onSolveFailed({ key: "solverOffline" });
+    return;
+  }
+  if (signal.aborted) return;
+  onSolved(solveJson);
+
+  // The server recomputes everything for the analysis from the same inputs.
+  let advice;
+  try {
+    const analyzeRes = await post("/api/analyze");
+    if (signal.aborted) return;
+    if (analyzeRes.ok) {
+      const analyzeJson = await analyzeRes.json();
+      advice = analyzeJson.advice ? { text: analyzeJson.advice, model: analyzeJson.model } : { key: "aiNoAdvice" };
+    } else {
+      advice = { key: analyzeRes.status === 429 ? "aiRateLimited" : "aiUnreachable" };
+    }
+  } catch (aiErr) {
+    advice = { key: "aiTransportFault", detail: aiErr.message };
+  }
+  if (!signal.aborted) onAnalysis(advice);
+}
+
+function Stepper({ id, label, value, onChange }) {
+  return (
+    <div className="input-wrapper stepper">
+      <button
+        type="button"
+        className="stepper-btn"
+        aria-label={`${label} −${AMOUNT_STEP / 1000}k`}
+        onClick={() => onChange(Math.max(MIN_AMOUNT, value - AMOUNT_STEP))}
+      >
+        −
+      </button>
+      <input
+        id={id}
+        type="number"
+        className="input-field"
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        step={AMOUNT_STEP}
+        min={MIN_AMOUNT}
+      />
+      <button
+        type="button"
+        className="stepper-btn"
+        aria-label={`${label} +${AMOUNT_STEP / 1000}k`}
+        onClick={() => onChange(value + AMOUNT_STEP)}
+      >
+        +
+      </button>
+    </div>
+  );
 }
 
 export default function App() {
+  const [lang, setLang] = useState(loadSavedLang);
+  const t = STRINGS[lang];
+
   const [pot, setPot] = useState(100000);
   const [betSize, setBetSize] = useState(50000);
   const [hand, setHand] = useState("As Kh Qd");
   const [foldEquity, setFoldEquity] = useState(0.35);
+  const [callRangePercent, setCallRangePercent] = useState(30);
+  const [opponentModel, setOpponentModel] = useState("range");
 
-  const [isLoading, setIsLoading] = useState(false);
-  const [isAiLoading, setIsAiLoading] = useState(false);
+  // Both start true: the first solve begins as soon as the page mounts.
+  const [isLoading, setIsLoading] = useState(true);
+  const [isAiLoading, setIsAiLoading] = useState(true);
   const [solveData, setSolveData] = useState(null);
-  const [aiAdvice, setAiAdvice] = useState("");
+  // { text, model } from the server, or { key, detail } for a client-side notice translated at render
+  const [aiAdvice, setAiAdvice] = useState(null);
   const [isNotesOpen, setIsNotesOpen] = useState(false);
-  const [error, setError] = useState("");
+  // { key, detail } translated at render, or null
+  const [solveError, setSolveError] = useState(null);
+  // The AbortController of the run in progress, so a newer run can cancel it
+  const currentRun = useRef(null);
 
-  const handleSolve = async () => {
-    setIsLoading(true);
-    setIsAiLoading(true);
-    setError("");
-
+  useEffect(() => {
+    document.documentElement.lang = lang;
     try {
-      // 1. Call solve endpoint
-      const solveRes = await fetch(`${API_BASE}/api/solve`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          pot: Number(pot),
-          bet_size: Number(betSize),
-          fold_equity: Number(foldEquity),
-          hand: hand.trim(),
-        }),
-      });
-
-      if (!solveRes.ok) {
-        const errJson = await solveRes.json();
-        throw new Error(errJson.error || `Server responded with ${solveRes.status}`);
-      }
-
-      const solveJson = await solveRes.json();
-      setSolveData(solveJson);
-      setIsLoading(false);
-
-      // 2. Call analyze endpoint for strategic AI telemetry
-      try {
-        const analyzeRes = await fetch(`${API_BASE}/api/analyze`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            pot: Number(pot),
-            bet_size: Number(betSize),
-            fold_equity: Number(foldEquity),
-            hand: hand.trim(),
-            hand_evaluation: solveJson.hand_evaluation,
-            range_coverage_percent: solveJson.summary?.range_coverage_percent,
-          }),
-        });
-
-        if (analyzeRes.ok) {
-          const analyzeJson = await analyzeRes.json();
-          setAiAdvice(analyzeJson.advice || "No telemetry analysis generated.");
-        } else {
-          setAiAdvice("AI telemetry gateway unreachable.");
-        }
-      } catch (aiErr) {
-        setAiAdvice(`Telemetry transmission fault: ${aiErr.message}`);
-      } finally {
-        setIsAiLoading(false);
-      }
-    } catch (err) {
-      setError("LOCAL SOLVER DAEMON OFFLINE. VERIFY BACKEND RUNNING ON PORT 5000.");
-      setIsLoading(false);
-      setIsAiLoading(false);
+      localStorage.setItem(LANG_STORAGE_KEY, lang);
+    } catch {
+      // Storage unavailable (e.g. private mode): the choice just won't persist.
     }
+  }, [lang]);
+
+  // Start one run with the current inputs; every state change happens in a callback, after the
+  // matching response has arrived.
+  const runSolve = (controller) => {
+    const body = JSON.stringify({
+      pot: Number(pot),
+      bet_size: Number(betSize),
+      fold_equity: Number(foldEquity),
+      call_range_percent: Number(callRangePercent),
+      hand: hand.trim(),
+      opponent_model: opponentModel,
+    });
+    fetchSolveAndAnalysis(body, controller.signal, {
+      onSolved: (data) => {
+        setSolveError(null);
+        setSolveData(data);
+        setIsLoading(false);
+      },
+      onSolveFailed: (error) => {
+        // Clear the old results: they belong to different inputs than the ones on screen now.
+        setSolveError(error);
+        setSolveData(null);
+        setAiAdvice(null);
+        setIsLoading(false);
+        setIsAiLoading(false);
+      },
+      onAnalysis: (advice) => {
+        setAiAdvice(advice);
+        setIsAiLoading(false);
+      },
+    });
   };
 
-  // Run initial solve on mount
+  // Start a run from a click: cancel any run still in flight, then show the loading state.
+  const startSolve = () => {
+    currentRun.current?.abort();
+    const controller = new AbortController();
+    currentRun.current = controller;
+    setIsLoading(true);
+    setIsAiLoading(true);
+    setSolveError(null);
+    runSolve(controller);
+  };
+
+  // The first run on mount. It reads the current inputs without making them effect dependencies.
+  const startFirstRun = useEffectEvent((controller) => {
+    currentRun.current = controller;
+    runSolve(controller);
+  });
+
   useEffect(() => {
-    handleSolve();
+    const controller = new AbortController();
+    startFirstRun(controller);
+    // In development StrictMode mounts twice; aborting here cancels the first, duplicate request.
+    return () => controller.abort();
   }, []);
 
   const handEval = solveData?.hand_evaluation;
   const summary = solveData?.summary;
   const isRaise = handEval?.decision === "RAISE";
 
-  // Category Matrix Statistics
-  const totalProfitableCombos = summary?.profitable_combinations || 0;
-  const sapProfitable = Math.min(52, Math.max(0, totalProfitableCombos));
-  const liengProfitable = Math.min(768, Math.max(0, totalProfitableCombos - 52));
-  const diProfitable = Math.min(288, Math.max(0, totalProfitableCombos - 820));
-  const diemProfitable = Math.min(20992, Math.max(0, totalProfitableCombos - 1108));
+  const zones = handEval?.profitable_fold_zones;
 
-  const categoryMatrix = [
-    {
-      name: "SÁP",
-      desc: "Three of a Kind",
-      classes: 13,
-      combos: 52,
-      profitable: sapProfitable,
-      pct: ((sapProfitable / 52) * 100).toFixed(1),
-      tier: "TIER 1 (NUTS)",
-    },
-    {
-      name: "LIÊNG",
-      desc: "Straight Sequence",
-      classes: 12,
-      combos: 768,
-      profitable: liengProfitable,
-      pct: ((liengProfitable / 768) * 100).toFixed(1),
-      tier: "TIER 2 (STRONG)",
-    },
-    {
-      name: "ĐĨ",
-      desc: "Three Face Cards",
-      classes: 6,
-      combos: 288,
-      profitable: diProfitable,
-      pct: ((diProfitable / 288) * 100).toFixed(1),
-      tier: "TIER 3 (MEDIUM)",
-    },
-    {
-      name: "ĐIỂM",
-      desc: "Points Modulo 10",
-      classes: 424,
-      combos: 20992,
-      profitable: diemProfitable,
-      pct: ((diemProfitable / 20992) * 100).toFixed(1),
-      tier: "TIER 4 (MARGINAL)",
-    },
-  ];
+  // Category Matrix Statistics (computed by the solver per category)
+  const categoryMatrix = (summary?.category_breakdown || []).map((row) => ({
+    ...row,
+    pct: ((row.profitable_combos / row.combos) * 100).toFixed(1),
+  }));
 
   return (
     <div className="terminal-container">
-      {/* Tactical Header & Telemetry Status */}
       <header className="terminal-header">
-        <div className="brand-group">
-          <h1 className="terminal-title">
-            <span className="brand-white">LIÊNG</span> <span className="brand-green">SCOPE</span>
-          </h1>
-          <p className="terminal-subtitle">GTO SOLVER & COMBINATORIAL ENGINE</p>
+        <div>
+          <h1 className="terminal-title">LIÊNG SCOPE</h1>
+          <p className="terminal-subtitle">{t.subtitle}</p>
         </div>
 
-        <div className="telemetry-status-tag">
-          <span className="radar-beacon"></span>
-          <span className="telemetry-status-text">LIVE SOLVER</span>
-          <span className="telemetry-separator">/</span>
-          <span className="telemetry-classes">455 CLASSES LOADED</span>
+        <div className="header-actions">
+          <button
+            type="button"
+            className="lang-toggle"
+            onClick={() => setLang((cur) => (cur === "en" ? "vi" : "en"))}
+            aria-label={t.langToggleLabel}
+            title={t.langToggleLabel}
+          >
+            {LANGUAGES.map((code) => (
+              <span key={code} className={`lang-option ${lang === code ? "active" : ""}`}>
+                {code.toUpperCase()}
+              </span>
+            ))}
+          </button>
         </div>
       </header>
 
-      {/* Main Tactical Grid */}
       <main className="terminal-grid">
-        {/* Left Column: Control Telemetry */}
-        <section className="terminal-card control-panel">
+        {/* Left column: inputs */}
+        <section className="control-panel">
           <div className="panel-header">
-            <span className="panel-tag">// TELEMETRY CONTROLS</span>
-            <span className="panel-id">SEC-01</span>
+            <h2 className="panel-tag">{t.controlsTag}</h2>
           </div>
 
           <div className="form-group">
-            <label className="form-label">CURRENT POT (VND)</label>
-            <div className="input-wrapper">
-              <input
-                type="number"
-                className="input-field"
-                value={pot}
-                onChange={(e) => setPot(Number(e.target.value))}
-                step="10000"
-                min="1000"
-              />
-            </div>
+            <label className="form-label" htmlFor="pot-input">{t.potLabel}</label>
+            <Stepper id="pot-input" label={t.potLabel} value={pot} onChange={setPot} />
             <div className="preset-chips">
-              {[50000, 100000, 200000, 500000].map((v) => (
+              {POT_PRESETS.map((v) => (
                 <button
                   key={v}
                   type="button"
@@ -191,48 +272,32 @@ export default function App() {
           </div>
 
           <div className="form-group">
-            <label className="form-label">BET / RAISE SIZING</label>
-            <div className="input-wrapper">
-              <input
-                type="number"
-                className="input-field"
-                value={betSize}
-                onChange={(e) => setBetSize(Number(e.target.value))}
-                step="10000"
-                min="1000"
-              />
-            </div>
+            <label className="form-label" htmlFor="bet-input">{t.betLabel}</label>
+            <Stepper id="bet-input" label={t.betLabel} value={betSize} onChange={setBetSize} />
             <div className="preset-chips">
-              <button
-                type="button"
-                className={`preset-chip ${betSize === Math.round(pot * 0.5) ? "active" : ""}`}
-                onClick={() => setBetSize(Math.round(pot * 0.5))}
-              >
-                0.5x Pot
-              </button>
-              <button
-                type="button"
-                className={`preset-chip ${betSize === pot ? "active" : ""}`}
-                onClick={() => setBetSize(pot)}
-              >
-                1.0x Pot
-              </button>
-              <button
-                type="button"
-                className={`preset-chip ${betSize === pot * 2 ? "active" : ""}`}
-                onClick={() => setBetSize(pot * 2)}
-              >
-                2.0x Pot
-              </button>
+              {BET_PRESET_MULTIPLES.map((multiple) => {
+                const amount = Math.round(pot * multiple);
+                return (
+                  <button
+                    key={multiple}
+                    type="button"
+                    className={`preset-chip ${betSize === amount ? "active" : ""}`}
+                    onClick={() => setBetSize(amount)}
+                  >
+                    {t.betPresetLabel(multiple.toLocaleString(t.locale, { minimumFractionDigits: 1 }))}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
           <div className="form-group">
             <div className="slider-label-row">
-              <label className="form-label">OPPONENT FOLD FREQUENCY</label>
+              <label className="form-label" htmlFor="fold-input">{t.foldLabel}</label>
               <span className="slider-value-badge">{Math.round(foldEquity * 100)}%</span>
             </div>
             <input
+              id="fold-input"
               type="range"
               min="0"
               max="1"
@@ -242,254 +307,280 @@ export default function App() {
               className="radar-slider"
             />
             <div className="slider-calibrations">
-              <span>0% (CALLING STATION)</span>
+              <span>{t.foldMin}</span>
               <span>50%</span>
-              <span>100% (EXTREME FOLD)</span>
+              <span>{t.foldMax}</span>
             </div>
+
+            <div className="model-row">
+              <span className="form-label model-label">{t.opponentFolds}</span>
+              <div className="preset-chips model-chips" role="group" aria-label={t.opponentFolds}>
+                {["range", "random"].map((model) => (
+                  <button
+                    key={model}
+                    type="button"
+                    className={`preset-chip ${opponentModel === model ? "active" : ""}`}
+                    aria-pressed={opponentModel === model}
+                    onClick={() => setOpponentModel(model)}
+                  >
+                    {model === "range" ? t.modelRange : t.modelRandom}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="form-group">
+              <div className="slider-label-row">
+                <label className="form-label" htmlFor="call-range-input">{t.callRangeLabel}</label>
+                <span className="slider-value-badge">{callRangePercent}%</span>
+              </div>
+              <input
+                id="call-range-input"
+                type="range"
+                min="1"
+                max="100"
+                step="1"
+                value={callRangePercent}
+                onChange={(e) => setCallRangePercent(Number(e.target.value))}
+                className="radar-slider"
+              />
+              <div className="slider-calibrations">
+                <span>1%</span>
+                <span>{t.callRangeSub}</span>
+                <span>100%</span>
+              </div>
+            </div>
+
+            {zones && (
+              <div className="profit-map">
+                <span className="profit-map-label">{t.profitMap}</span>
+                <div className="profit-map-bar">
+                  {zones.map(([start, end]) => (
+                    <span
+                      key={start}
+                      className="profit-zone"
+                      style={{ left: `${Math.min(start, 0.99) * 100}%`, width: `${Math.max(end - start, 0.01) * 100}%` }}
+                    />
+                  ))}
+                  <span className="profit-marker" style={{ left: `${foldEquity * 100}%` }} />
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="form-group">
-            <label className="form-label">PLAYER HAND (3 CARDS)</label>
+            <label className="form-label" htmlFor="hand-input">{t.handLabel}</label>
             <div className="input-wrapper">
               <input
+                id="hand-input"
                 type="text"
-                className="input-field mono-bold"
+                className="input-field"
                 value={hand}
                 onChange={(e) => setHand(e.target.value)}
-                placeholder="e.g. As Kh Qd"
+                placeholder={t.handPlaceholder}
               />
             </div>
             <div className="preset-chips">
-              <button
-                type="button"
-                className={`preset-chip ${hand === "As Kh Qd" ? "active" : ""}`}
-                onClick={() => setHand("As Kh Qd")}
-              >
-                Liêng Q-K-A
-              </button>
-              <button
-                type="button"
-                className={`preset-chip ${hand === "7s 7h 7d" ? "active" : ""}`}
-                onClick={() => setHand("7s 7h 7d")}
-              >
-                Sáp 7
-              </button>
-              <button
-                type="button"
-                className={`preset-chip ${hand === "Js Qh Kd" ? "active" : ""}`}
-                onClick={() => setHand("Js Qh Kd")}
-              >
-                Liêng J-Q-K
-              </button>
-              <button
-                type="button"
-                className={`preset-chip ${hand === "9s 10h Kd" ? "active" : ""}`}
-                onClick={() => setHand("9s 10h Kd")}
-              >
-                9 Điểm
-              </button>
-              <button
-                type="button"
-                className={`preset-chip ${hand === "2s 3h 5d" ? "active" : ""}`}
-                onClick={() => setHand("2s 3h 5d")}
-              >
-                0 Điểm (Bù)
-              </button>
+              {HAND_PRESETS.map(({ cards, labelKey }) => (
+                <button
+                  key={cards}
+                  type="button"
+                  className={`preset-chip ${hand === cards ? "active" : ""}`}
+                  onClick={() => setHand(cards)}
+                >
+                  {t[labelKey]}
+                </button>
+              ))}
             </div>
           </div>
 
           <button
             type="button"
             className="tactical-btn"
-            onClick={handleSolve}
+            onClick={startSolve}
             disabled={isLoading}
           >
-            {isLoading ? "[ COMPUTING RANGE... ]" : "[ EXECUTE SOLVER ]"}
+            {isLoading ? t.solveBusy : t.solveIdle}
           </button>
 
-          {error && (
-            <div className="terminal-alert">
-              <span className="alert-marker">!</span>
-              <span>{error}</span>
+          {solveError && (
+            <div className="terminal-alert" role="alert">
+              {t[solveError.key](solveError.detail)}
             </div>
           )}
 
-          {/* Engine Specs Sub-Card */}
+          {/* Engine specs footnote */}
           <div className="specs-subcard">
             <div className="spec-row">
-              <span className="spec-label">SOLVER ARCHITECTURE</span>
-              <span className="spec-val">MONTE CARLO / CANONICAL</span>
+              <span>{t.specArchitecture}</span>
+              <span className="spec-val">{t.specArchitectureVal}</span>
             </div>
             <div className="spec-row">
-              <span className="spec-label">COMBINATORIAL SPACE</span>
-              <span className="spec-val">22,100 COMBOS (455 CLS)</span>
+              <span>{t.specSpace}</span>
+              <span className="spec-val">{t.specSpaceVal}</span>
             </div>
             <div className="spec-row">
-              <span className="spec-label">ONLINE QUERY COMPLEXITY</span>
-              <span className="spec-val">O(1) CACHED LOOKUP</span>
+              <span>{t.specQuery}</span>
+              <span className="spec-val">{t.specQueryVal}</span>
             </div>
           </div>
         </section>
 
-        {/* Right Column: Strategic HUD & Matrix */}
+        {/* Right column: results */}
         <section className="results-container">
-          {/* Verdict Banner */}
+          {/* Verdict */}
           {handEval && (
             <div className={`verdict-banner ${isRaise ? "verdict-raise" : "verdict-fold"}`}>
-              <div className="verdict-col-left">
-                <span className="verdict-label">// RECOMMENDED ACTION</span>
+              <div>
+                <span className="verdict-label">{t.recommendedAction}</span>
                 <h2 className="verdict-title">
-                  {isRaise ? "ACTION: RAISE / ALL-IN" : "ACTION: CHECK / FOLD"}
+                  {isRaise ? t.actionRaise : t.actionFold}
                 </h2>
                 <div className="verdict-meta">
                   <span className="holding-tag">{handEval.hand}</span>
-                  <span className="holding-sep">•</span>
-                  <span className="holding-class">[{handEval.canonical_id}]</span>
-                  <span className="holding-sep">•</span>
-                  <span className="holding-score">{handEval.score_name.toUpperCase()}</span>
+                  <span className="holding-sep">·</span>
+                  <span>{handEval.canonical_id}</span>
+                  <span className="holding-sep">·</span>
+                  <span className="holding-score">{handEval.score_name}</span>
                 </div>
               </div>
 
               <div className="verdict-col-right">
-                <span className="verdict-label">// EXPECTED VALUE</span>
+                <span className="verdict-label">{t.expectedValueTag}</span>
                 <div className="verdict-ev">
-                  {handEval.ev > 0 ? "+" : ""}{formatMoney(handEval.ev)} <span className="ev-currency">VND</span>
+                  {handEval.ev > 0 ? "+" : ""}{formatMoney(handEval.ev, t.locale)} <span className="ev-currency">{t.currency}</span>
                 </div>
                 <div className="verdict-breakeven">
-                  BREAK-EVEN FOLD EQ: <span className="mono-green">{Math.round(handEval.break_even_fold_equity * 100)}%</span>
+                  {t.profitableWhen} <span className="mono-green">{formatZones(zones)}</span>
                 </div>
+                {handEval.sensitivity && (
+                  <div className="verdict-breakeven">
+                    {t.assumptionSensitivity(handEval.sensitivity.status)}
+                  </div>
+                )}
               </div>
             </div>
           )}
 
-          {/* 4-Card Metrics HUD */}
+          {/* Summary figures */}
           <div className="hud-metrics-grid">
             <div className="hud-card">
-              <div className="hud-label">RANGE COVERAGE</div>
-              <div className="hud-value green-glow">
+              <div>{t.rangeCoverage}</div>
+              <div className="hud-value">
                 {summary?.range_coverage_percent?.toFixed(1) || "0.0"}%
               </div>
               <div className="hud-subtext">
-                {summary?.profitable_combinations?.toLocaleString() || "0"} / 22,100 COMBOS
+                {summary?.profitable_combinations?.toLocaleString(t.locale) || "0"} {t.combosOfTotal}
               </div>
             </div>
 
             <div className="hud-card">
-              <div className="hud-label">SHOWDOWN EQUITY</div>
-              <div className="hud-value white-metric">
-                {handEval ? `${(handEval.showdown_equity * 100).toFixed(1)}%` : "N/A"}
+              <div>{t.showdownEquity}</div>
+              <div className="hud-value">
+                {handEval ? `${(handEval.showdown_equity * 100).toFixed(1)}%` : t.notAvailable}
               </div>
-              <div className="hud-subtext">VS UNKNOWN 49-CARD SPECTRUM</div>
+              <div className="hud-subtext">
+                {handEval && handEval.call_range_percent != null
+                  ? `${t.vsCallingRange(Math.round(handEval.call_range_percent))} · ${t.vsRandomShort(
+                      `${(handEval.equity_vs_random * 100).toFixed(1)}%`
+                    )}`
+                  : handEval && summary.opponent_model === "range"
+                    ? `${t.vsCallingRange(Math.round((1 - summary.fold_equity) * 100))} · ${t.vsRandomShort(
+                      `${(handEval.equity_vs_random * 100).toFixed(1)}%`
+                    )}`
+                    : t.showdownEquitySub}
+              </div>
             </div>
 
             <div className="hud-card">
-              <div className="hud-label">EXPECTED VALUE</div>
-              <div className={`hud-value ${handEval?.ev > 0 ? "green-metric" : "dim-metric"}`}>
-                {handEval ? `${handEval.ev > 0 ? "+" : ""}${formatMoney(handEval.ev)}` : "0"}
+              <div>{t.expectedValue}</div>
+              <div className={`hud-value ${handEval?.ev > 0 ? "green-metric" : ""}`}>
+                {handEval ? `${handEval.ev > 0 ? "+" : ""}${formatMoney(handEval.ev, t.locale)}` : "0"}
               </div>
-              <div className="hud-subtext">NET VND GAIN PER DECISION</div>
+              <div className="hud-subtext">{t.expectedValueSub}</div>
             </div>
 
             <div className="hud-card">
-              <div className="hud-label">PURE BLUFF THRESHOLD</div>
-              <div className="hud-value amber-metric">
-                {summary ? `${(summary.pure_bluff_break_even_fold_equity * 100).toFixed(1)}%` : "N/A"}
+              <div>{t.bluffThreshold}</div>
+              <div className="hud-value">
+                {summary ? `${(summary.pure_bluff_break_even_fold_equity * 100).toFixed(1)}%` : t.notAvailable}
               </div>
-              <div className="hud-subtext">MIN FOLD EQ FOR 0-PT AIR</div>
+              <div className="hud-subtext">{t.bluffThresholdSub}</div>
             </div>
           </div>
 
-          {/* Range Breakdown Matrix Table */}
-          <div className="terminal-card table-panel">
+          {/* Coverage by category */}
+          <div>
             <div className="panel-header">
-              <span className="panel-tag">// CATEGORY COVERAGE MATRIX</span>
-              <span className="panel-id">4 CORE HIERARCHIES</span>
+              <h2 className="panel-tag">{t.matrixTag}</h2>
             </div>
 
             <div className="table-wrapper">
               <table className="tactical-table">
                 <thead>
                   <tr>
-                    <th>CATEGORY</th>
-                    <th>DESCRIPTION</th>
-                    <th>CLASSES</th>
-                    <th>COMBOS</th>
-                    <th>PROFITABLE</th>
-                    <th>COVERAGE</th>
-                    <th>RADAR STATUS</th>
+                    <th>{t.colCategory}</th>
+                    <th>{t.colDescription}</th>
+                    <th>{t.colClasses}</th>
+                    <th>{t.colCombos}</th>
+                    <th>{t.colProfitable}</th>
+                    <th>{t.colCoverage}</th>
+                    <th>{t.colStatus}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {categoryMatrix.map((cat) => (
-                    <tr key={cat.name}>
-                      <td>
-                        <span className={`cat-pill cat-${cat.name}`}>{cat.name}</span>
-                      </td>
-                      <td className="desc-cell">{cat.desc}</td>
-                      <td className="mono-num">{cat.classes}</td>
-                      <td className="mono-num">{cat.combos.toLocaleString()}</td>
-                      <td className="mono-num">{cat.profitable.toLocaleString()}</td>
-                      <td className="mono-num highlight-val">{cat.pct}%</td>
-                      <td>
-                        <span
-                          className={`status-chip ${
-                            Number(cat.pct) === 100
-                              ? "chip-full"
-                              : Number(cat.pct) > 0
-                              ? "chip-partial"
-                              : "chip-zero"
-                          }`}
-                        >
-                          {Number(cat.pct) === 100
-                            ? "100% PUSH"
-                            : Number(cat.pct) > 0
-                            ? "PARTIAL"
-                            : "FOLD"}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
+                  {categoryMatrix.map((cat) => {
+                    const pct = Number(cat.pct);
+                    return (
+                      <tr key={cat.category}>
+                        <td>{CATEGORY_LABELS[cat.category]}</td>
+                        <td className="desc-cell">{t[CATEGORY_DESC_KEYS[cat.category]]}</td>
+                        <td className="mono-num">{cat.classes}</td>
+                        <td className="mono-num">{cat.combos.toLocaleString(t.locale)}</td>
+                        <td className="mono-num">{cat.profitable_combos.toLocaleString(t.locale)}</td>
+                        <td className="mono-num">{cat.pct}%</td>
+                        <td className={pct === 100 ? "chip-full" : pct > 0 ? "" : "chip-zero"}>
+                          {pct === 100 ? t.statusFull : pct > 0 ? t.statusPartial : t.statusZero}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           </div>
 
-          {/* Top Canonical Holdings Table */}
+          {/* Most profitable hands */}
           {solveData?.top_hands && (
-            <div className="terminal-card table-panel">
+            <div>
               <div className="panel-header">
-                <span className="panel-tag">// TOP PROFITABLE HOLDINGS</span>
-                <span className="panel-id">SAMPLE EQUIVALENCE CLASSES</span>
+                <h2 className="panel-tag">{t.topHandsTag}</h2>
               </div>
 
               <div className="table-wrapper">
                 <table className="tactical-table">
                   <thead>
                     <tr>
-                      <th>CANONICAL ID</th>
-                      <th>CATEGORY</th>
-                      <th>SHOWDOWN EQUITY</th>
-                      <th>EXPECTED VALUE (EV)</th>
-                      <th>MULTIPLICITY</th>
-                      <th>ACTION</th>
+                      <th>{t.colCanonicalId}</th>
+                      <th>{t.colCategory}</th>
+                      <th>{t.colEquity}</th>
+                      <th>{t.colEv}</th>
+                      <th>{t.colMultiplicity}</th>
+                      <th>{t.colAction}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {solveData.top_hands.slice(0, 10).map((item) => (
                       <tr key={item.canonical_id}>
                         <td className="mono-canonical">{item.canonical_id}</td>
-                        <td>
-                          <span className={`cat-pill cat-${item.category}`}>{item.category}</span>
-                        </td>
-                        <td className="mono-num">{(item.equity * 100).toFixed(1)}%</td>
+                        <td>{CATEGORY_LABELS[item.category]}</td>
+                        <td className="mono-num">{(item.showdown_equity * 100).toFixed(1)}%</td>
                         <td className={`mono-num bold-num ${item.ev > 0 ? "positive-ev" : "negative-ev"}`}>
-                          {item.ev > 0 ? "+" : ""}{formatMoney(item.ev)} VND
+                          {item.ev > 0 ? "+" : ""}{formatMoney(item.ev, t.locale)} {t.currency}
                         </td>
-                        <td className="dim-cell">{item.multiplicity} combos</td>
-                        <td>
-                          <span className={`action-badge ${item.is_profitable ? "act-raise" : "act-fold"}`}>
-                            {item.is_profitable ? "RAISE" : "FOLD"}
-                          </span>
+                        <td className="dim-cell">{item.multiplicity} {t.combosSuffix}</td>
+                        <td className={item.is_profitable ? "act-raise" : "act-fold"}>
+                          {item.is_profitable ? t.raise : t.fold}
                         </td>
                       </tr>
                     ))}
@@ -499,32 +590,29 @@ export default function App() {
             </div>
           )}
 
-          {/* Collapsible Mathematical Telemetry Notes Drawer */}
+          {/* Analysis notes (collapsed by default) */}
           <div className="notes-drawer-container">
             <button
               type="button"
               className="drawer-toggle-btn"
               onClick={() => setIsNotesOpen(!isNotesOpen)}
             >
-              <span>{isNotesOpen ? "[ − COLLAPSE TELEMETRY NOTES ]" : "[ + MATHEMATICAL TELEMETRY NOTES ]"}</span>
+              <span>{isNotesOpen ? t.notesCollapse : t.notesExpand}</span>
               <span className="drawer-indicator">{isNotesOpen ? "▲" : "▼"}</span>
             </button>
 
             {isNotesOpen && (
               <div className="drawer-content">
                 <div className="drawer-header">
-                  <span className="drawer-title">// GAME-THEORETIC TELEMETRY ADVISORY</span>
-                  <span className="drawer-sub">OPENROUTER / LLAMA 3.1 8B INSTRUCT</span>
+                  <span className="drawer-title">{t.notesTitle}</span>
+                  {aiAdvice?.model && <span className="drawer-sub">{aiAdvice.model}</span>}
                 </div>
 
                 {isAiLoading ? (
-                  <div className="telemetry-loading">
-                    <span className="radar-spinner"></span>
-                    <span>&gt; TRANSMITTING GAME-THEORETIC TELEMETRY QUERY...</span>
-                  </div>
+                  <div className="telemetry-loading">{t.notesLoading}</div>
                 ) : (
                   <div className="telemetry-body">
-                    {aiAdvice || "No active telemetry payload recorded for this game state."}
+                    {!aiAdvice ? t.notesEmpty : aiAdvice.text ?? t[aiAdvice.key](aiAdvice.detail)}
                   </div>
                 )}
               </div>

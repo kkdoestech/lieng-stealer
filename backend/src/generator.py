@@ -13,16 +13,20 @@ import itertools
 import json
 import os
 import random
+import tempfile
+from collections.abc import Sequence
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
-from src.evaluator import Card, Deck, evaluate_hand
+from src.evaluator import Deck, evaluate_hand
 from src.hands import (
+    OPPONENT_COMBINATIONS,
     CanonicalHand,
     generate_all_canonical_hands,
     get_representative_cards,
 )
+from src.paths import DEFAULT_DB_PATH
 
 
 def compute_hand_equity(
@@ -37,13 +41,18 @@ def compute_hand_equity(
         canonical_hand: The CanonicalHand to evaluate.
         exact: If True, iterates all C(49, 3) = 18,424 opponent combinations.
         samples: If not exact, number of random opponent hands to sample.
-        seed: Optional RNG seed for deterministic Monte Carlo sampling.
+        seed: Optional RNG seed for deterministic Monte Carlo sampling. It seeds a private
+            generator, so the global ``random`` state is never touched.
 
     Returns:
         Dictionary conforming to data/winrates.json schema.
+
+    Raises:
+        ValueError: If Monte Carlo mode is asked for fewer than 1 sample.
     """
-    if seed is not None:
-        random.seed(seed)
+    if not exact and samples < 1:
+        raise ValueError(f"Monte Carlo needs at least 1 sample, got {samples}.")
+    rng = random.Random(seed)
 
     hero_cards = get_representative_cards(canonical_hand.canonical_id)
     hero_score = canonical_hand.score
@@ -59,7 +68,7 @@ def compute_hand_equity(
     if exact:
         # Full combinatorial enumeration: C(49, 3) = 18,424 opponent hands
         opponent_combinations = itertools.combinations(remaining_deck, 3)
-        total_showdowns = 18424
+        total_showdowns = OPPONENT_COMBINATIONS
         for opp_cards in opponent_combinations:
             opp_score = evaluate_hand(opp_cards)
             if hero_score > opp_score:
@@ -72,8 +81,8 @@ def compute_hand_equity(
         # Monte Carlo random sampling
         total_showdowns = samples
         for _ in range(samples):
-            opp_cards = random.sample(remaining_deck, 3)
-            opp_score = evaluate_hand(opp_cards)
+            sampled = rng.sample(remaining_deck, 3)
+            opp_score = evaluate_hand(sampled)
             if hero_score > opp_score:
                 wins += 1
             elif hero_score == opp_score:
@@ -97,6 +106,15 @@ def compute_hand_equity(
     }
 
 
+def _file_mode(path: Path) -> int:
+    """Permissions for the written file: keep the old file's mode, or use 0644 minus the umask."""
+    if path.exists():
+        return path.stat().st_mode & 0o777
+    umask = os.umask(0)
+    os.umask(umask)
+    return 0o644 & ~umask
+
+
 def _worker_task(args: tuple[CanonicalHand, bool, int, int | None]) -> tuple[str, dict[str, Any]]:
     """Worker task wrapper for ProcessPoolExecutor."""
     canonical_hand, exact, samples, seed = args
@@ -107,7 +125,7 @@ def _worker_task(args: tuple[CanonicalHand, bool, int, int | None]) -> tuple[str
 def generate_winrates_database(
     exact: bool = True,
     samples: int = 10000,
-    output_path: str | Path = "data/winrates.json",
+    output_path: str | Path = DEFAULT_DB_PATH,
     workers: int | None = None,
 ) -> dict[str, Any]:
     """Generate and write the winrates database for all 455 canonical hands.
@@ -115,7 +133,7 @@ def generate_winrates_database(
     Args:
         exact: If True, run complete combinatorial enumeration.
         samples: Number of samples per hand if exact is False.
-        output_path: Destination JSON filepath.
+        output_path: Destination JSON filepath (default: backend/data/winrates.json).
         workers: Number of parallel processes (defaults to cpu_count).
 
     Returns:
@@ -139,46 +157,77 @@ def generate_winrates_database(
             cid, data = _worker_task(task)
             results[cid] = data
 
-    # Ensure destination directory exists
+    # Write to a temporary file in the same folder, then rename it over the target: readers see
+    # either the old file or the complete new one, never a half-written file.
     out_file = Path(output_path)
     out_file.parent.mkdir(parents=True, exist_ok=True)
-
-    with open(out_file, "w", encoding="utf-8") as f:
-        json.dump(results, f, indent=2)
+    with tempfile.NamedTemporaryFile(
+        "w", encoding="utf-8", dir=out_file.parent, suffix=".tmp", delete=False
+    ) as tmp:
+        try:
+            json.dump(results, tmp, indent=2)
+        except BaseException:
+            tmp.close()
+            os.unlink(tmp.name)
+            raise
+    # NamedTemporaryFile creates the file as owner-only (0600); give it normal permissions first.
+    os.chmod(tmp.name, _file_mode(out_file))
+    os.replace(tmp.name, out_file)
 
     return results
 
 
-def main(args: Sequence[str] | None = None) -> None:
-    """CLI entry point for generator."""
+def _positive_int(text: str) -> int:
+    """argparse type for counts that must be at least 1."""
+    value = int(text)
+    if value < 1:
+        raise argparse.ArgumentTypeError(f"must be at least 1, got {value}")
+    return value
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """Build the generator's command-line parser (exact enumeration by default)."""
     parser = argparse.ArgumentParser(
         description="Liêng Stealer - Precompute Showdown Equities Database."
     )
     parser.add_argument(
         "--samples",
-        type=int,
+        type=_positive_int,
         default=10000,
-        help="Number of Monte Carlo samples per hand (default: 10000).",
+        help="Number of Monte Carlo samples per hand, with --monte-carlo (default: 10000).",
     )
-    parser.add_argument(
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
         "--exact",
+        dest="exact",
         action="store_true",
-        help="Run exact combinatorial enumeration over all C(49, 3) = 18,424 hands.",
+        default=True,
+        help="Run exact combinatorial enumeration over all C(49, 3) = 18,424 hands (default).",
+    )
+    mode.add_argument(
+        "--monte-carlo",
+        dest="exact",
+        action="store_false",
+        help="Estimate equities from --samples random opponent hands instead of exact enumeration.",
     )
     parser.add_argument(
         "--output",
-        type=str,
-        default="data/winrates.json",
-        help="Output filepath (default: data/winrates.json).",
+        type=Path,
+        default=DEFAULT_DB_PATH,
+        help="Output filepath (default: backend/data/winrates.json, wherever you run from).",
     )
     parser.add_argument(
         "--workers",
-        type=int,
+        type=_positive_int,
         default=os.cpu_count() or 1,
         help=f"Number of parallel worker processes (default: {os.cpu_count() or 1}).",
     )
+    return parser
 
-    parsed = parser.parse_args(args)
+
+def main(args: Sequence[str] | None = None) -> None:
+    """CLI entry point for generator."""
+    parsed = build_parser().parse_args(args)
     mode = "Exact Combinatorial Enumeration" if parsed.exact else f"Monte Carlo ({parsed.samples} samples)"
     print(f"Starting equity generation in {mode} across {parsed.workers} workers...")
 

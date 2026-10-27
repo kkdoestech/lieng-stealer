@@ -1,171 +1,138 @@
-/* ==========================================================================
-   LIÊNG SCOPE - TACTICAL RADAR ANALYTICS TERMINAL (EPL SCOPE AESTHETIC)
-   ========================================================================== */
+/* Liêng Scope - plain layout on the Ayu Dark palette (tokens in index.css) */
 
 .terminal-container {
   max-width: 1360px;
   margin: 0 auto;
-  padding: 1.5rem 1.5rem 4rem;
+  padding: 0 24px 48px;
 }
 
 /* --------------------------------------------------------------------------
-   TACTICAL HEADER & BRANDING
+   Header
    -------------------------------------------------------------------------- */
 .terminal-header {
   display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 2rem;
-  padding-bottom: 1.25rem;
-  border-bottom: 1px solid var(--border-base);
-}
-
-.brand-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line);
 }
 
 .terminal-title {
-  font-size: 2.2rem;
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  line-height: 1.1;
-  margin: 0;
-}
-
-.brand-white {
-  color: var(--text-white);
-}
-
-.brand-green {
-  color: var(--accent-green);
-  text-shadow: 0 0 12px var(--accent-green-glow);
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text-strong);
 }
 
 .terminal-subtitle {
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  margin: 0;
+  font-size: 0.93rem;
+  color: var(--muted);
 }
 
-/* Right-side status tag: ● LIVE SOLVER / 455 CLASSES LOADED */
-.telemetry-status-tag {
-  display: inline-flex;
+.header-actions {
+  display: flex;
   align-items: center;
-  gap: 0.65rem;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-base);
-  border-radius: 2px;
-  padding: 0.45rem 0.9rem;
-  font-size: 0.75rem;
-  letter-spacing: 0.08em;
-  font-weight: 600;
+  gap: 12px;
 }
 
-.radar-beacon {
-  width: 8px;
-  height: 8px;
-  background: var(--accent-green);
-  border-radius: 50%;
-  box-shadow: 0 0 8px var(--accent-green);
-  animation: pulse-beacon 2s infinite ease-in-out;
+.lang-toggle {
+  display: inline-flex;
+  background: transparent;
+  border: 1px solid var(--line-control);
+  border-radius: var(--radius);
+  padding: 2px;
 }
 
-@keyframes pulse-beacon {
-  0%, 100% {
-    opacity: 1;
-    transform: scale(1);
-    box-shadow: 0 0 8px var(--accent-green);
-  }
-  50% {
-    opacity: 0.4;
-    transform: scale(0.85);
-    box-shadow: 0 0 2px var(--accent-green);
-  }
+.lang-option {
+  padding: 4px 9px;
+  border-radius: var(--radius);
+  font-size: 0.87rem;
+  color: var(--muted);
 }
 
-.telemetry-status-text {
-  color: var(--accent-green);
-  font-weight: 700;
-}
-
-.telemetry-separator {
-  color: var(--text-dim);
-}
-
-.telemetry-classes {
-  color: var(--text-muted);
+.lang-option.active {
+  background: var(--bg-active);
+  color: var(--text-strong);
 }
 
 /* --------------------------------------------------------------------------
-   MAIN DASHBOARD GRID LAYOUT
+   Two columns: inputs on the left, results on the right
    -------------------------------------------------------------------------- */
 .terminal-grid {
   display: grid;
-  grid-template-columns: 380px 1fr;
-  gap: 1.5rem;
-  align-items: start;
+  grid-template-columns: 340px 1fr;
+}
+
+/* Let grid items shrink below their tables' min-content width (tables scroll instead) */
+.terminal-grid > * {
+  min-width: 0;
+}
+
+.control-panel {
+  padding: 20px 24px 24px 0;
+  border-right: 1px solid var(--line);
+}
+
+.results-container {
+  display: flex;
+  flex-direction: column;
+  padding: 20px 0 0 24px;
+}
+
+.results-container > * + * {
+  margin-top: 24px;
 }
 
 @media (max-width: 1024px) {
   .terminal-grid {
     grid-template-columns: 1fr;
   }
+
+  .control-panel {
+    padding-right: 0;
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .results-container {
+    padding-left: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .terminal-container {
+    padding: 0 16px 32px;
+  }
 }
 
 /* --------------------------------------------------------------------------
-   TACTICAL CARDS & PANELS
+   Section headings
    -------------------------------------------------------------------------- */
-.terminal-card {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-base);
-  border-radius: 2px;
-  padding: 1.25rem;
-  position: relative;
-}
-
 .panel-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid var(--border-subtle);
-  padding-bottom: 0.65rem;
-  margin-bottom: 1.25rem;
+  margin-bottom: 12px;
 }
 
 .panel-tag {
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  color: var(--accent-green);
-}
-
-.panel-id {
-  font-size: 0.68rem;
+  font-size: 1rem;
   font-weight: 600;
-  color: var(--text-dim);
-  letter-spacing: 0.05em;
+  color: var(--text-strong);
 }
 
 /* --------------------------------------------------------------------------
-   FORM CONTROLS & TELEMETRY INPUTS
+   Form controls
    -------------------------------------------------------------------------- */
 .form-group {
-  margin-bottom: 1.25rem;
+  margin-bottom: 20px;
 }
 
 .form-label {
   display: block;
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  margin-bottom: 0.4rem;
+  font-size: 0.93rem;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 6px;
 }
 
 .input-wrapper {
@@ -174,626 +141,456 @@
 
 .input-field {
   width: 100%;
-  background: var(--bg-surface-input);
-  border: 1px solid var(--border-base);
-  border-radius: 2px;
-  padding: 0.65rem 0.85rem;
-  color: var(--text-white);
-  font-size: 0.95rem;
-  font-family: inherit;
-  transition: all 0.15s ease;
-}
-
-.input-field.mono-bold {
-  font-weight: 700;
-  letter-spacing: 0.05em;
+  min-height: 36px;
+  background: var(--bg-input);
+  border: 1px solid var(--line-control);
+  border-radius: var(--radius);
+  padding: 6px 9px;
+  color: var(--text-strong);
 }
 
 .input-field:focus {
-  outline: none;
-  border-color: var(--border-highlight);
-  box-shadow: 0 0 0 1px var(--border-highlight), 0 0 10px var(--accent-green-glow);
+  border-color: var(--accent);
+}
+
+/* Number field with − / + buttons instead of the browser's spin arrows */
+.stepper {
+  display: flex;
+  gap: 4px;
+}
+
+.stepper .input-field {
+  flex: 1;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.stepper .input-field::-webkit-inner-spin-button,
+.stepper .input-field::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.stepper-btn {
+  width: 36px;
+  flex: none;
+  background: transparent;
+  border: 1px solid var(--line-control);
+  border-radius: var(--radius);
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.stepper-btn:hover {
+  background: var(--bg-hover);
 }
 
 .preset-chips {
   display: flex;
-  gap: 0.4rem;
-  margin-top: 0.45rem;
+  gap: 6px;
+  margin-top: 8px;
   flex-wrap: wrap;
 }
 
 .preset-chip {
+  min-height: 32px;
   background: transparent;
-  border: 1px solid var(--border-base);
-  color: var(--text-muted);
-  border-radius: 2px;
-  padding: 0.25rem 0.55rem;
-  font-size: 0.72rem;
-  font-family: inherit;
-  cursor: pointer;
-  transition: all 0.15s;
+  border: 1px solid var(--line-control);
+  border-radius: var(--radius);
+  padding: 4px 10px;
+  font-size: 0.87rem;
+  color: var(--text);
 }
 
 .preset-chip:hover {
-  background: var(--bg-surface-hover);
-  border-color: var(--accent-green);
-  color: var(--text-white);
+  background: var(--bg-hover);
 }
 
 .preset-chip.active {
-  background: var(--accent-green-muted);
-  border-color: var(--accent-green);
-  color: var(--accent-green);
-  font-weight: 600;
+  background: var(--bg-active);
+  border-color: var(--muted);
+  color: var(--text-strong);
 }
 
-/* Slider Controls */
+/* Fold frequency slider */
 .slider-label-row {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0.4rem;
+  align-items: baseline;
 }
 
 .slider-value-badge {
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: var(--accent-green);
-  letter-spacing: 0.05em;
+  font-weight: 600;
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
 }
 
 .radar-slider {
   width: 100%;
-  height: 4px;
-  background: var(--border-base);
-  outline: none;
+  accent-color: var(--accent);
   cursor: pointer;
-  -webkit-appearance: none;
-  appearance: none;
-  border-radius: 0;
-}
-
-.radar-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 14px;
-  height: 14px;
-  background: var(--accent-green);
-  border: 2px solid var(--bg-canvas);
-  border-radius: 0;
-  cursor: pointer;
-  box-shadow: 0 0 6px var(--accent-green);
-}
-
-.radar-slider::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
-  background: var(--accent-green);
-  border: 2px solid var(--bg-canvas);
-  border-radius: 0;
-  cursor: pointer;
-  box-shadow: 0 0 6px var(--accent-green);
 }
 
 .slider-calibrations {
   display: flex;
   justify-content: space-between;
-  font-size: 0.65rem;
-  color: var(--text-dim);
-  letter-spacing: 0.04em;
-  margin-top: 0.35rem;
+  gap: 8px;
+  font-size: 0.87rem;
+  color: var(--muted);
 }
 
-/* Solid Rectangular Green Action Button */
+/* Opponent model toggle */
+.model-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.model-label {
+  margin-bottom: 0;
+}
+
+.model-chips {
+  margin-top: 0;
+}
+
+/* Raise profit map: red track = -EV, green zones = +EV, light marker = current fold frequency */
+.profit-map {
+  margin-top: 14px;
+}
+
+.profit-map-label {
+  display: block;
+  font-size: 0.87rem;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.profit-map-bar {
+  position: relative;
+  height: 10px;
+  background: var(--zone-bad);
+  border-radius: var(--radius);
+}
+
+.profit-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--zone-good);
+}
+
+.profit-marker {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  background: var(--text-strong);
+  transform: translateX(-1px);
+}
+
+/* Main action */
 .tactical-btn {
   width: 100%;
-  padding: 0.85rem;
-  background: var(--accent-green);
-  color: #050705;
-  border: none;
-  border-radius: 2px;
-  font-size: 0.95rem;
-  font-weight: 800;
-  font-family: inherit;
-  letter-spacing: 0.08em;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  margin-top: 0.5rem;
-  box-shadow: 0 0 15px var(--accent-green-glow);
+  min-height: 40px;
+  padding: 8px 12px;
+  background: var(--accent);
+  color: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  font-weight: 600;
 }
 
 .tactical-btn:hover:not(:disabled) {
-  background: #1ea850;
-  box-shadow: 0 0 25px rgba(34, 197, 94, 0.3);
+  background: var(--accent-hover);
 }
 
 .tactical-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-  box-shadow: none;
+  opacity: 0.6;
+  cursor: progress;
 }
 
 .terminal-alert {
-  margin-top: 0.85rem;
-  padding: 0.6rem 0.85rem;
-  background: var(--accent-red-muted);
-  border: 1px solid var(--accent-red);
-  color: var(--accent-red);
-  font-size: 0.75rem;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  border-radius: 2px;
+  margin-top: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--bad);
+  border-radius: var(--radius);
+  color: var(--bad);
+  font-size: 0.93rem;
 }
 
-.alert-marker {
-  font-weight: 900;
-  padding: 0 0.3rem;
-  background: var(--accent-red);
-  color: #fff;
-  border-radius: 1px;
-}
-
-/* Specs Subcard */
+/* Engine specs footnote */
 .specs-subcard {
-  background: var(--bg-surface-input);
-  border: 1px solid var(--border-subtle);
-  border-radius: 2px;
-  padding: 0.75rem 0.85rem;
-  margin-top: 1.25rem;
+  margin-top: 24px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-size: 0.87rem;
+  color: var(--muted);
 }
 
 .spec-row {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  font-size: 0.68rem;
-  padding: 0.25rem 0;
-}
-
-.spec-label {
-  color: var(--text-dim);
-  letter-spacing: 0.04em;
+  gap: 12px;
+  padding: 2px 0;
 }
 
 .spec-val {
-  color: var(--text-muted);
-  font-weight: 600;
+  text-align: right;
 }
 
 /* --------------------------------------------------------------------------
-   RIGHT COLUMN: STRATEGIC HUD & VERDICT
+   Verdict
    -------------------------------------------------------------------------- */
-.results-container {
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-}
-
-/* Verdict Banner */
 .verdict-banner {
-  padding: 1.25rem 1.5rem;
-  border-radius: 2px;
   display: flex;
-  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 24px;
   justify-content: space-between;
-  transition: all 0.2s ease;
-}
-
-.verdict-raise {
-  background: rgba(34, 197, 94, 0.06);
-  border: 1px solid var(--accent-green);
-  box-shadow: 0 0 25px var(--accent-green-glow);
-}
-
-.verdict-fold {
-  background: rgba(239, 68, 68, 0.06);
-  border: 1px solid var(--accent-red);
-  box-shadow: 0 0 25px var(--accent-red-glow);
 }
 
 .verdict-label {
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  color: var(--text-muted);
   display: block;
+  font-size: 0.87rem;
+  color: var(--muted);
 }
 
 .verdict-title {
-  font-size: 1.75rem;
-  font-weight: 900;
-  letter-spacing: -0.02em;
-  margin: 0.25rem 0 0.4rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 2px 0 4px;
 }
 
 .verdict-raise .verdict-title {
-  color: var(--accent-green);
-  text-shadow: 0 0 10px var(--accent-green-glow);
+  color: var(--good);
 }
 
 .verdict-fold .verdict-title {
-  color: var(--accent-red);
-  text-shadow: 0 0 10px var(--accent-red-glow);
+  color: var(--bad);
 }
 
 .verdict-meta {
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.85rem;
+  flex-wrap: wrap;
+  gap: 4px 8px;
 }
 
 .holding-tag {
-  font-weight: 800;
-  color: var(--text-white);
+  font-weight: 600;
+  color: var(--text-strong);
 }
 
-.holding-sep {
-  color: var(--text-dim);
-}
-
-.holding-class {
-  color: var(--accent-green);
-  font-weight: 700;
-}
-
+.holding-sep,
 .holding-score {
-  color: var(--text-muted);
+  color: var(--muted);
 }
 
 .verdict-col-right {
   text-align: right;
 }
 
-.verdict-ev {
-  font-size: 1.75rem;
-  font-weight: 900;
-  color: var(--text-white);
-  letter-spacing: -0.02em;
-  margin: 0.25rem 0 0.2rem;
+@media (max-width: 640px) {
+  .verdict-col-right {
+    text-align: left;
+  }
 }
 
-.verdict-raise .verdict-ev {
-  color: var(--accent-green);
+.verdict-ev {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+  margin: 2px 0 4px;
 }
 
 .ev-currency {
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--text-muted);
+  font-size: 0.93rem;
+  font-weight: 400;
+  color: var(--muted);
 }
 
 .verdict-breakeven {
-  font-size: 0.72rem;
-  color: var(--text-muted);
-  letter-spacing: 0.05em;
+  font-size: 0.87rem;
+  color: var(--muted);
 }
 
 .mono-green {
-  color: var(--accent-green);
-  font-weight: 700;
+  color: var(--good);
 }
 
 /* --------------------------------------------------------------------------
-   4-CARD METRICS HUD
+   Summary figures: one row per figure
    -------------------------------------------------------------------------- */
 .hud-metrics-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 1rem;
-}
-
-@media (max-width: 840px) {
-  .hud-metrics-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 480px) {
-  .hud-metrics-grid {
-    grid-template-columns: 1fr;
-  }
+  border-top: 1px solid var(--line);
 }
 
 .hud-card {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-base);
-  border-radius: 2px;
-  padding: 1rem;
-}
-
-.hud-label {
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  color: var(--text-muted);
-  margin-bottom: 0.35rem;
+  display: grid;
+  grid-template-columns: 200px 110px 1fr;
+  gap: 4px 16px;
+  align-items: baseline;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
 }
 
 .hud-value {
-  font-size: 1.45rem;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-}
-
-.hud-value.green-glow {
-  color: var(--accent-green);
-  text-shadow: 0 0 10px var(--accent-green-glow);
-}
-
-.hud-value.white-metric {
-  color: var(--text-white);
+  font-weight: 600;
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 .hud-value.green-metric {
-  color: var(--accent-green);
-}
-
-.hud-value.amber-metric {
-  color: var(--accent-amber);
-}
-
-.hud-value.dim-metric {
-  color: var(--text-muted);
+  color: var(--good);
 }
 
 .hud-subtext {
-  font-size: 0.68rem;
-  color: var(--text-dim);
-  letter-spacing: 0.03em;
-  margin-top: 0.25rem;
+  font-size: 0.87rem;
+  color: var(--muted);
+}
+
+@media (max-width: 640px) {
+  .hud-card {
+    grid-template-columns: 1fr auto;
+  }
+
+  .hud-subtext {
+    grid-column: 1 / -1;
+  }
 }
 
 /* --------------------------------------------------------------------------
-   TACTICAL DATA TABLES (CATEGORY MATRIX & TOP HOLDINGS)
+   Tables
    -------------------------------------------------------------------------- */
-.table-panel {
-  padding: 1.25rem;
-}
-
 .table-wrapper {
   overflow-x: auto;
-  border: 1px solid var(--border-subtle);
-  border-radius: 2px;
 }
 
 .tactical-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.8rem;
+  font-size: 0.93rem;
   text-align: left;
 }
 
 .tactical-table th {
-  background: var(--bg-surface-input);
-  padding: 0.65rem 0.85rem;
-  font-weight: 700;
-  color: var(--text-dim);
-  border-bottom: 1px solid var(--border-base);
-  font-size: 0.68rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  padding: 6px 12px 6px 0;
+  font-size: 0.87rem;
+  font-weight: 500;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line-control);
+  white-space: nowrap;
 }
 
 .tactical-table td {
-  padding: 0.65rem 0.85rem;
-  border-bottom: 1px solid var(--border-subtle);
-  color: var(--text-white);
+  padding: 7px 12px 7px 0;
+  border-bottom: 1px solid var(--line);
 }
 
-.tactical-table tr:hover td {
-  background: var(--bg-surface-hover);
+.tactical-table tbody tr:hover td {
+  background: var(--bg-hover);
 }
 
-.desc-cell {
-  color: var(--text-muted);
-  font-size: 0.75rem;
-}
-
-.mono-num {
-  font-family: inherit;
-  font-variant-numeric: tabular-nums;
-}
-
-.mono-canonical {
-  font-weight: 700;
-  color: var(--text-white);
-}
-
-.bold-num {
-  font-weight: 700;
-}
-
-.highlight-val {
-  color: var(--accent-green);
-  font-weight: 700;
+.desc-cell,
+.dim-cell {
+  color: var(--muted);
 }
 
 .dim-cell {
-  color: var(--text-dim);
-  font-size: 0.75rem;
+  white-space: nowrap;
 }
 
-.positive-ev {
-  color: var(--accent-green);
+.mono-num {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
-.negative-ev {
-  color: var(--accent-red);
+.mono-canonical {
+  font-weight: 600;
+  color: var(--text-strong);
+  white-space: nowrap;
 }
 
-/* Category Badges */
-.cat-pill {
-  display: inline-block;
-  font-size: 0.68rem;
-  font-weight: 800;
-  padding: 0.15rem 0.45rem;
-  border-radius: 2px;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+.bold-num {
+  font-weight: 600;
 }
 
-.cat-SÁP, .cat-SAP {
-  background: rgba(245, 158, 11, 0.15);
-  color: #FBBF24;
-  border: 1px solid rgba(245, 158, 11, 0.35);
-}
-
-.cat-LIÊNG, .cat-LIENG {
-  background: rgba(34, 197, 94, 0.15);
-  color: #22C55E;
-  border: 1px solid rgba(34, 197, 94, 0.35);
-}
-
-.cat-ĐĨ, .cat-DI {
-  background: rgba(56, 189, 248, 0.15);
-  color: #38BDF8;
-  border: 1px solid rgba(56, 189, 248, 0.35);
-}
-
-.cat-ĐIỂM, .cat-DIEM {
-  background: rgba(133, 153, 139, 0.15);
-  color: #85998B;
-  border: 1px solid rgba(133, 153, 139, 0.3);
-}
-
-/* Status Chips */
-.status-chip {
-  display: inline-block;
-  font-size: 0.65rem;
-  font-weight: 800;
-  padding: 0.15rem 0.5rem;
-  border-radius: 2px;
-  letter-spacing: 0.05em;
-}
-
-.chip-full {
-  background: var(--accent-green-muted);
-  color: var(--accent-green);
-  border: 1px solid var(--accent-green);
-}
-
-.chip-partial {
-  background: rgba(245, 158, 11, 0.12);
-  color: var(--accent-amber);
-  border: 1px solid rgba(245, 158, 11, 0.35);
-}
-
-.chip-zero {
-  background: var(--accent-red-muted);
-  color: var(--accent-red);
-  border: 1px solid rgba(239, 68, 68, 0.35);
-}
-
-/* Action Badges */
-.action-badge {
-  font-size: 0.7rem;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-}
-
+.positive-ev,
+.chip-full,
 .act-raise {
-  color: var(--accent-green);
+  color: var(--good);
+}
+
+.negative-ev,
+.chip-zero {
+  color: var(--bad);
 }
 
 .act-fold {
-  color: var(--text-dim);
+  color: var(--muted);
 }
 
 /* --------------------------------------------------------------------------
-   COLLAPSIBLE MATHEMATICAL TELEMETRY NOTES DRAWER
+   Analysis notes
    -------------------------------------------------------------------------- */
 .notes-drawer-container {
-  margin-top: 0.25rem;
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
 }
 
 .drawer-toggle-btn {
-  width: 100%;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-base);
-  border-radius: 2px;
-  padding: 0.75rem 1rem;
-  display: flex;
-  justify-content: space-between;
+  display: inline-flex;
   align-items: center;
-  color: var(--accent-green);
-  font-family: inherit;
-  font-size: 0.8rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  cursor: pointer;
-  transition: all 0.15s ease;
+  gap: 8px;
+  min-height: 32px;
+  padding: 4px 12px;
+  background: transparent;
+  border: 1px solid var(--line-control);
+  border-radius: var(--radius);
 }
 
 .drawer-toggle-btn:hover {
-  background: var(--bg-surface-hover);
-  border-color: var(--accent-green);
+  background: var(--bg-hover);
 }
 
 .drawer-indicator {
-  font-size: 0.65rem;
-  color: var(--text-muted);
+  font-size: 0.87rem;
+  color: var(--muted);
 }
 
 .drawer-content {
-  background: var(--bg-surface-input);
-  border: 1px solid var(--border-base);
-  border-top: none;
-  border-radius: 0 0 2px 2px;
-  padding: 1.25rem;
+  margin-top: 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
 }
 
 .drawer-header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
-  align-items: center;
-  padding-bottom: 0.65rem;
-  margin-bottom: 0.85rem;
-  border-bottom: 1px solid var(--border-subtle);
+  gap: 4px 12px;
+  margin-bottom: 8px;
 }
 
 .drawer-title {
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  color: var(--accent-green);
+  font-weight: 600;
+  color: var(--text-strong);
 }
 
-.drawer-sub {
-  font-size: 0.65rem;
-  color: var(--text-dim);
-  letter-spacing: 0.05em;
-}
-
+.drawer-sub,
 .telemetry-loading {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  color: var(--text-muted);
-  font-size: 0.8rem;
-  letter-spacing: 0.05em;
-}
-
-.radar-spinner {
-  display: inline-block;
-  width: 14px;
-  height: 14px;
-  border: 2px solid var(--border-base);
-  border-top-color: var(--accent-green);
-  border-radius: 50%;
-  animation: spin-radar 0.75s linear infinite;
-}
-
-@keyframes spin-radar {
-  to {
-    transform: rotate(360deg);
-  }
+  font-size: 0.87rem;
+  color: var(--muted);
 }
 
 .telemetry-body {
-  font-size: 0.82rem;
-  line-height: 1.7;
-  color: var(--text-muted);
+  line-height: 1.6;
   white-space: pre-wrap;
 }

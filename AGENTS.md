@@ -1,12 +1,12 @@
 # AGENTS.MD: ARCHITECTURAL GUARDRAILS & SYSTEM SPECIFICATION
 
 ## 1. System Overview & Philosophy
-**Liêng Stealer** is a high-performance decision-support engine and game-theoretic solver for the Vietnamese card game **Liêng** (a 3-card imperfect information game). The core problem is evaluating whether to **Raise (Tố)** or **Go All-In (Tất tay)** by calculating **Expected Value (EV)** across all canonical hand combinations given pot odds, bet sizing, and opponent fold equity.
+**Liêng Stealer** is a high-performance decision-support engine for the Vietnamese card game **Liêng** (a 3-card imperfect information game). The core problem is evaluating whether to **Raise (Tố)** or **Go All-In (Tất tay)** by calculating **Expected Value (EV)** across all canonical hand combinations given pot odds, bet sizing, and opponent fold equity. It computes EV under stated assumptions (one betting round, a chosen opponent model); it does not solve for a game-theoretic equilibrium.
 
 The system strictly adheres to:
 - **Separation of Concerns (SoC)**: Independent domain modules (game rules, simulation, finance/EV, data access, presentation).
 - **Zero Global Mutable State**: All state transformations are pure, functional, or encapsulated within immutable data models.
-- **Offline Computation + $O(1)$ Online Query**: Precomputed Monte Carlo / combinatorial win rates stored on disk and cached in-memory.
+- **Offline Computation + $O(1)$ Online Query**: Win rates precomputed by exact enumeration (every one of the $C(49, 3) = 18{,}424$ opponent hands per class; Monte Carlo remains available for experiments), stored on disk and cached in-memory.
 
 ---
 
@@ -14,15 +14,15 @@ The system strictly adheres to:
 
 ### 2.1 Runtime & Environment
 - **Python Version**: `3.11+` (Leveraging enhanced tracebacks, `typing.Self`, and performance optimizations).
-- **Typing**: Strict type annotations (`mypy` compliant). No untyped functions or use of `Any` without explicit justification.
+- **Typing**: Strict type annotations, enforced by `mypy --strict` and `ruff` (configured in `backend/pyproject.toml`, run in CI). No untyped functions or use of `Any` without explicit justification.
 - **Data Structures**: Prefer `@dataclass(frozen=True)` or `typing.NamedTuple` for domain entities (`Card`, `Hand`, `HandScore`, `EVResult`).
 - **Docstrings**: Google style with explicit `Args`, `Returns`, and `Raises` sections for all public classes and functions.
-- **Error Handling**: Explicit custom exception hierarchy inherited from `LiengError` (e.g., `InvalidCardError`, `InvalidHandSizeError`, `DatabaseNotLoadedError`). Never silently swallow exceptions.
+- **Error Handling**: Explicit custom exception hierarchy inherited from `LiengError` (e.g., `InvalidCardError`, `InvalidHandSizeError`, `DuplicateCardError`, `DatabaseNotLoadedError`, and `ModelError` for a missing or inconsistent model, which is a bug rather than bad input). `InvalidGameParamsError` is also a `ValueError` and `UnknownHandError` also a `KeyError`, so code written against the built-ins keeps working; `tests/test_exceptions.py` pins the hierarchy. Never silently swallow exceptions.
 
 ### 2.2 Functional & Architectural Constraints
 - **Pure Functions**: `evaluator.py` and `ev.py` must be completely deterministic and free of side effects or external I/O.
-- **No Global Mutable State**: Do not use global variables to store game state or cached databases. State must be injected via constructors or parameters (Dependency Injection).
-- **Immutability**: Card and Hand instances must be hashable and immutable so they can serve as dictionary keys and set members.
+- **No Global Mutable State**: Do not use global variables to store game state or cached databases. State must be injected via constructors or parameters (Dependency Injection). The Flask app is built by `create_app(db=..., calling_model=..., config=...)`, which keeps its services in `app.extensions`; the module-level `app` object exists only as the entry point for gunicorn and `python app.py`.
+- **Immutability**: Card and Hand instances must be hashable and immutable so they can serve as dictionary keys and set members. `Hand` equality means equal strength (the hands would tie), and its hash agrees with it.
 
 ---
 
@@ -58,7 +58,7 @@ Category values assigned for tuple comparison:
     - Liêng (i.e., `J-Q-K` $\rightarrow$ evaluated as Liêng, Category 3).
   - Valid Đĩ examples: `J-Q-Q`, `J-K-K`, `J-J-Q`, `J-J-K`, `Q-Q-K`, `Q-K-K`.
   - **Crucial Rule**: Any Đĩ strictly beats any point-based hand (Category 1), including $9$ points!
-  - **Tie-Breaker**: Hands within Đĩ are considered equal (Tie) or compared by highest face card ($K > Q > J$) based on game configuration.
+  - **Tie-Breaker** (house rule, as implemented; there is no configuration switch): compared by highest face card ($K > Q > J$), then the middle card, then the last card, so `K-K-Q` > `K-K-J` > `K-Q-Q` > `K-J-J` > `Q-Q-J` > `Q-J-J`. Making Đĩ hands tie would also require changing `calling_range.py`, which assumes all 455 classes have distinct strengths (and checks it at start-up).
 
 - **Category 1: Điểm (Points modulo 10)**
   - Any 3-card hand that is not Sáp, Liêng, or Đĩ.
@@ -69,17 +69,18 @@ Category values assigned for tuple comparison:
   - Hand Score calculation:
     $$\text{Score} = \left(\sum_{i=1}^3 \text{CardValue}_i\right) \pmod{10}$$
   - Possible scores range from $0$ (Bù / Tịt) to $9$ (Chín điểm).
-  - **Score Order**: $9 > 8 > 7 > 6 > 5 > 4 > 3 > 2 > 1 > 0$.
+  - **Score Order**: $9 > 8 > 7 > 6 > 5 > 4 > 3 > 2 > 1 > 0$. Equal scores are broken by the highest card (Ace high), then the remaining cards (house rule).
   - **Edge Cases**:
     - $19$ points ($9 + 10 + K$) and $9$ points ($A + 3 + 5$) both evaluate to $9$ points ($19 \equiv 9 \equiv 9 \pmod{10}$).
     - $20$ points (e.g., $10 + 10 + K \rightarrow 0 \pmod{10}$) evaluates to $0$ points (Bù).
 
 ### 3.3 Comparison Tuple Specification
-`evaluator.py` must output a standardized `HandScore` named tuple / dataclass:
+`evaluator.py` outputs a frozen `HandScore` dataclass:
 ```python
-HandScore(category: int, primary_rank: int, secondary_rank: int, score: int)
+HandScore(category: HandCategory, primary_rank: int, secondary_rank: int, score: int,
+          tie_breaker: tuple[int, ...], name: str)
 ```
-This enables direct Python tuple comparison (`hand_a.score_tuple > hand_b.score_tuple`).
+Comparison uses `score_tuple = (category, primary_rank, secondary_rank, score, tie_breaker)`; `name` is display text only. This enables direct comparison of scores (`hand_a.score > hand_b.score`) or hands (`hand_a > hand_b`). Because suits never matter, `evaluate_hand` looks the score up in a 455-entry table keyed by the sorted ranks.
 
 ---
 
@@ -99,7 +100,7 @@ Because Liêng hand strength is suit-invariant pre-showdown:
   - 12 Liêng forms (`A-2-3` to `Q-K-A`).
   - 6 Đĩ forms (`J-J-Q`, `J-J-K`, `J-Q-Q`, `J-K-K`, `Q-Q-K`, `Q-K-K`).
   - 424 Điểm forms.
-- Reducing $22,100 \rightarrow 455$ canonical keys minimizes offline Monte Carlo overhead and compresses database size below 100 KB.
+- Reducing $22,100 \rightarrow 455$ canonical keys cuts the offline work to $455 \times 18{,}424 \approx 8.4$ million exact showdowns and keeps the database below 100 KB.
 
 ---
 
@@ -114,16 +115,17 @@ Where:
 - $B$: Player's additional Bet Size.
 - $P(\text{Fold})$: Opponent's probability of folding to the bet (Fold Equity).
 - $P(\text{Win} \mid \text{Call})$: Player's showdown equity against opponent's calling range.
-- $\text{FinalPot} = P + B + C_{\text{opp}}$, where $C_{\text{opp}}$ is opponent's call contribution (typically $C_{\text{opp}} = B$).
+- $\text{FinalPot} = P + B + C_{\text{opp}}$, where $C_{\text{opp}}$ is opponent's call contribution. The code assumes $C_{\text{opp}} = B$: `ev.final_pot(P, B)` returns $P + 2B$.
 - Showdown Value: $[P(\text{Win} \mid \text{Call}) \times \text{FinalPot}] - B$.
 - **Decision Rule**: Execute Raise if and only if $\text{EV} > 0$.
 
 ---
 
 ## 6. Performance Budgets & Latency Guardrails
-- **Single Hand Evaluation**: $< 1.0\ \mu\text{s}$ per 3-card hand.
-- **In-Memory Hash Table Lookup**: $O(1)$ time complexity, $< 5.0\ \mu\text{s}$ per hand key.
-- **Full Range EV Calculation (all 455 canonical hands)**: $< 25\ \text{ms}$.
-- **CLI Interactive Command Execution**: $< 50\ \text{ms}$ total response latency.
-- **Memory Footprint**: RAM usage for the lookup database $< 10\ \text{MB}$.
+Measured on a developer laptop (2026-10-24); the tested budgets are scaled by `PERF_BUDGET_FACTOR` in CI.
+- **Single Hand Evaluation**: $< 1.0\ \mu\text{s}$ per 3-card hand. Met: about 0.3 µs (tested in `test_evaluator.py`).
+- **In-Memory Hash Table Lookup**: $O(1)$ time complexity, $< 5.0\ \mu\text{s}$ per hand key. Met: about 0.1 µs (tested in `test_db.py`).
+- **Full Range EV Calculation (all 455 canonical hands)**: $< 25\ \text{ms}$. Met: the calling-range equity table takes about 0.4 ms and a full `solve_range` about 2 ms (tested in `test_calling_range.py`).
+- **CLI Command Execution**: $< 300\ \text{ms}$ for one cold-start command. Measured 0.13–0.19 s: Python start-up, imports including `rich`, and building the calling-range tables for `--opponent-model range`. The earlier 50 ms target is not reachable for a fresh Python process with these dependencies. Not covered by a test.
+- **Memory Footprint**: RAM usage for the lookup structures $< 10\ \text{MB}$. Met: about 0.2 MB for the win-rate database and 1.1 MB for the calling-range tables.
 

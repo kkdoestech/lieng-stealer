@@ -7,12 +7,15 @@ Sáp (Category 4) > Liêng (Category 3) > Đĩ (Category 2) > Điểm (Category 
 
 from __future__ import annotations
 
+import itertools
 import re
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from enum import Enum, IntEnum
-from typing import Final, Iterable, Sequence
+from functools import cached_property
+from typing import Final
 
-from src.exceptions import InvalidCardError, InvalidHandSizeError
+from src.exceptions import DuplicateCardError, InvalidCardError, InvalidHandSizeError
 
 
 class Suit(Enum):
@@ -25,27 +28,15 @@ class Suit(Enum):
     @property
     def symbol(self) -> str:
         """Return Unicode symbol for the suit."""
-        symbols = {
-            Suit.SPADES: "♠",
-            Suit.CLUBS: "♣",
-            Suit.DIAMONDS: "♦",
-            Suit.HEARTS: "♥",
-        }
-        return symbols[self]
+        return _SUIT_SYMBOLS[self]
 
     @classmethod
-    def from_str(cls, suit_str: str) -> "Suit":
+    def from_str(cls, suit_str: str) -> Suit:
         """Parse suit from single-character representation or unicode symbol."""
-        cleaned = suit_str.strip().lower()
-        mapping = {
-            "s": cls.SPADES, "♠": cls.SPADES,
-            "c": cls.CLUBS, "♣": cls.CLUBS,
-            "d": cls.DIAMONDS, "♦": cls.DIAMONDS,
-            "h": cls.HEARTS, "♥": cls.HEARTS,
-        }
-        if cleaned in mapping:
-            return mapping[cleaned]
-        raise InvalidCardError(f"Invalid suit '{suit_str}'. Must be one of s, c, d, h or ♠, ♣, ♦, ♥.")
+        suit = _SUIT_BY_TEXT.get(suit_str.strip().lower())
+        if suit is None:
+            raise InvalidCardError(f"Invalid suit '{suit_str}'. Must be one of s, c, d, h or ♠, ♣, ♦, ♥.")
+        return suit
 
 
 class Rank(IntEnum):
@@ -67,16 +58,7 @@ class Rank(IntEnum):
     @property
     def short_name(self) -> str:
         """Compact rank string representation."""
-        if self <= Rank.NINE:
-            return str(self.value)
-        names = {
-            Rank.TEN: "10",
-            Rank.JACK: "J",
-            Rank.QUEEN: "Q",
-            Rank.KING: "K",
-            Rank.ACE: "A",
-        }
-        return names[self]
+        return _RANK_NAMES[self]
 
     @property
     def point_value(self) -> int:
@@ -93,18 +75,37 @@ class Rank(IntEnum):
         return self in (Rank.JACK, Rank.QUEEN, Rank.KING)
 
     @classmethod
-    def from_str(cls, rank_str: str) -> "Rank":
+    def from_str(cls, rank_str: str) -> Rank:
         """Parse rank from string."""
-        cleaned = rank_str.strip().upper()
-        mapping = {
-            "2": cls.TWO, "3": cls.THREE, "4": cls.FOUR, "5": cls.FIVE,
-            "6": cls.SIX, "7": cls.SEVEN, "8": cls.EIGHT, "9": cls.NINE,
-            "10": cls.TEN, "T": cls.TEN,
-            "J": cls.JACK, "Q": cls.QUEEN, "K": cls.KING, "A": cls.ACE,
-        }
-        if cleaned in mapping:
-            return mapping[cleaned]
-        raise InvalidCardError(f"Invalid rank '{rank_str}'. Must be 2-10, T, J, Q, K, or A.")
+        rank = _RANK_BY_TEXT.get(rank_str.strip().upper())
+        if rank is None:
+            raise InvalidCardError(f"Invalid rank '{rank_str}'. Must be 2-10, T, J, Q, K, or A.")
+        return rank
+
+
+# Lookup tables used by the enums above. They live at module level because a dict assigned inside
+# an Enum class body would become an enum member, and building them once avoids per-call work.
+_SUIT_SYMBOLS: Final[dict[Suit, str]] = {
+    Suit.SPADES: "♠",
+    Suit.CLUBS: "♣",
+    Suit.DIAMONDS: "♦",
+    Suit.HEARTS: "♥",
+}
+_SUIT_BY_TEXT: Final[dict[str, Suit]] = {
+    **{suit.value: suit for suit in Suit},
+    **{symbol: suit for suit, symbol in _SUIT_SYMBOLS.items()},
+}
+_RANK_NAMES: Final[dict[Rank, str]] = {
+    **{rank: str(rank.value) for rank in Rank if rank <= Rank.TEN},
+    Rank.JACK: "J",
+    Rank.QUEEN: "Q",
+    Rank.KING: "K",
+    Rank.ACE: "A",
+}
+_RANK_BY_TEXT: Final[dict[str, Rank]] = {
+    **{name: rank for rank, name in _RANK_NAMES.items()},
+    "T": Rank.TEN,
+}
 
 
 @dataclass(frozen=True)
@@ -124,7 +125,7 @@ class Card:
         return self.rank.is_face_card
 
     @classmethod
-    def from_str(cls, card_str: str) -> "Card":
+    def from_str(cls, card_str: str) -> Card:
         """Parse a card string such as 'Ah', '9d', '10c', or 'Ts'.
 
         Args:
@@ -147,8 +148,12 @@ class Card:
             rank_part = cleaned[0]
             suit_part = cleaned[1:]
 
-        rank = Rank.from_str(rank_part)
-        suit = Suit.from_str(suit_part)
+        try:
+            rank = Rank.from_str(rank_part)
+            suit = Suit.from_str(suit_part)
+        except InvalidCardError as err:
+            # Name the whole card: "11h" alone would otherwise be reported as "Invalid rank '1'".
+            raise InvalidCardError(f"Invalid card '{cleaned}': {err}") from err
         return cls(rank=rank, suit=suit)
 
     def __str__(self) -> str:
@@ -181,13 +186,15 @@ class HandCategory(IntEnum):
     @property
     def display_name(self) -> str:
         """Human-readable category name."""
-        names = {
-            HandCategory.DIEM: "Điểm",
-            HandCategory.DI: "Đĩ",
-            HandCategory.LIENG: "Liêng",
-            HandCategory.SAP: "Sáp",
-        }
-        return names[self]
+        return _CATEGORY_NAMES[self]
+
+
+_CATEGORY_NAMES: Final[dict[HandCategory, str]] = {
+    HandCategory.DIEM: "Điểm",
+    HandCategory.DI: "Đĩ",
+    HandCategory.LIENG: "Liêng",
+    HandCategory.SAP: "Sáp",
+}
 
 
 # Predefined canonical Liêng sequences mapped to strength (1 = lowest, 12 = highest).
@@ -278,6 +285,10 @@ class HandScore:
             return NotImplemented
         return self.score_tuple == other.score_tuple
 
+    def __hash__(self) -> int:
+        # Must agree with __eq__: equal scores hash equally, whatever their display name.
+        return hash(self.score_tuple)
+
     def __str__(self) -> str:
         return self.name
 
@@ -298,6 +309,9 @@ def evaluate_hand(cards: Sequence[Card]) -> HandScore:
          Strictly beats any Điểm hand, including 9 points.
       4. Điểm (Cat 1): Score = sum(CardValue) mod 10 (0 to 9).
 
+    Suits never change a hand's strength, so every score is looked up in a 455-entry table keyed
+    by the sorted ranks (built once at import by ``_score_for_sorted_ranks``).
+
     Args:
         cards: A sequence of exactly 3 unique Card instances.
 
@@ -305,23 +319,29 @@ def evaluate_hand(cards: Sequence[Card]) -> HandScore:
         A fully-populated HandScore instance.
 
     Raises:
-        InvalidHandSizeError: If card count != 3 or cards contain duplicates.
+        InvalidHandSizeError: If card count != 3.
+        DuplicateCardError: If the same card appears twice (a subclass of InvalidHandSizeError).
     """
     if len(cards) != 3:
         raise InvalidHandSizeError(f"A Liêng hand must contain exactly 3 cards, got {len(cards)}.")
 
     c1, c2, c3 = cards[0], cards[1], cards[2]
-    if c1 == c2 or c2 == c3 or c1 == c3:
-        raise InvalidHandSizeError("A Liêng hand cannot contain duplicate cards.")
+    r1, r2, r3 = c1.rank, c2.rank, c3.rank
+    # Two cards are equal only if both rank and suit match; suits are enum singletons.
+    if (r1 == r2 and c1.suit is c2.suit) or (r2 == r3 and c2.suit is c3.suit) or (r1 == r3 and c1.suit is c3.suit):
+        raise DuplicateCardError("A Liêng hand cannot contain duplicate cards.")
 
-    r1, r2, r3 = c1.rank.value, c2.rank.value, c3.rank.value
     if r1 > r2:
         r1, r2 = r2, r1
     if r2 > r3:
         r2, r3 = r3, r2
     if r1 > r2:
         r1, r2 = r2, r1
+    return _SCORE_BY_RANKS[(r1, r2, r3)]
 
+
+def _score_for_sorted_ranks(r1: int, r2: int, r3: int) -> HandScore:
+    """Score three rank values given in ascending order (the rules of evaluate_hand)."""
     descending_ranks = (r3, r2, r1)
 
     # 1. Check Sáp (Three of a Kind)
@@ -362,7 +382,7 @@ def evaluate_hand(cards: Sequence[Card]) -> HandScore:
         )
 
     # 4. Fall through to Điểm (Points modulo 10)
-    point_score = (c1.point_value + c2.point_value + c3.point_value) % 10
+    point_score = (Rank(r1).point_value + Rank(r2).point_value + Rank(r3).point_value) % 10
     name = f"{point_score} điểm" if point_score > 0 else "0 điểm (Bù)"
     return HandScore(
         category=HandCategory.DIEM,
@@ -374,6 +394,13 @@ def evaluate_hand(cards: Sequence[Card]) -> HandScore:
     )
 
 
+# Every rank multiset (C(15, 3) = 455 of them), scored once. Keys are ascending rank values.
+_SCORE_BY_RANKS: Final[dict[tuple[int, int, int], HandScore]] = {
+    (r1, r2, r3): _score_for_sorted_ranks(r1, r2, r3)
+    for r1, r2, r3 in itertools.combinations_with_replacement(range(Rank.TWO, Rank.ACE + 1), 3)
+}
+
+
 @dataclass(frozen=True)
 class Hand:
     """Immutable representation of a 3-card Liêng hand."""
@@ -383,15 +410,15 @@ class Hand:
         if len(self.cards) != 3:
             raise InvalidHandSizeError(f"A Liêng hand must have 3 cards, got {len(self.cards)}.")
         if len(set(self.cards)) != 3:
-            raise InvalidHandSizeError("A Liêng hand cannot have duplicate cards.")
+            raise DuplicateCardError("A Liêng hand cannot have duplicate cards.")
 
     @classmethod
-    def from_cards(cls, c1: Card, c2: Card, c3: Card) -> "Hand":
+    def from_cards(cls, c1: Card, c2: Card, c3: Card) -> Hand:
         """Construct a Hand from 3 Card instances."""
         return cls(cards=(c1, c2, c3))
 
     @classmethod
-    def from_str(cls, hand_str: str) -> "Hand":
+    def from_str(cls, hand_str: str) -> Hand:
         """Parse a hand string such as 'Ah Kd 2c' or 'As,Kh,Qd'.
 
         Args:
@@ -409,12 +436,16 @@ class Hand:
             raise InvalidHandSizeError(
                 f"Hand string '{hand_str}' must contain exactly 3 cards, found {len(tokens)}."
             )
-        parsed_cards = tuple(Card.from_str(tok) for tok in tokens)
-        return cls(cards=parsed_cards)  # type: ignore[arg-type]
+        c1, c2, c3 = (Card.from_str(tok) for tok in tokens)
+        return cls(cards=(c1, c2, c3))
 
-    @property
+    @cached_property
     def score(self) -> HandScore:
-        """Evaluate and return the HandScore."""
+        """Evaluate the hand once and return its HandScore.
+
+        ``cached_property`` writes straight into the instance ``__dict__``, so it works on this
+        frozen dataclass (which has no ``__slots__``).
+        """
         return evaluate_hand(self.cards)
 
     def __lt__(self, other: object) -> bool:
@@ -438,9 +469,14 @@ class Hand:
         return self.score >= other.score
 
     def __eq__(self, other: object) -> bool:
+        """Two hands are equal when they are equally strong (they would tie at showdown)."""
         if not isinstance(other, Hand):
             return NotImplemented
         return self.score == other.score
+
+    def __hash__(self) -> int:
+        # Must agree with __eq__: hands that tie hash equally, so they collapse in sets and dicts.
+        return hash(self.score.score_tuple)
 
     def __str__(self) -> str:
         return " ".join(str(c) for c in self.cards)
