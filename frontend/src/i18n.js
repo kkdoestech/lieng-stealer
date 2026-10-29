@@ -50,7 +50,11 @@ export const STRINGS = {
     specQuery: "Lookup",
     specQueryVal: "O(1), precomputed",
 
-    recommendedAction: "Recommended action",
+    recommendedAction: "Recommended action 🃏",
+    sizesTag: "Sizing ladder 📉",
+    assumptionTag: "Assumption 💖",
+    chosenTag: "Chosen 🃏",
+    rangeCoverage: "Range coverage",
     actionLabel: { CHECK: "Check", SMALL_BET: "Small bet", LARGE_BET: "Large bet", ALL_IN: "All in" },
     kindLabel: { VALUE: "Value", THIN_VALUE: "Thin value", BLUFF: "Bluff" },
     blocked: {
@@ -122,7 +126,7 @@ export const STRINGS = {
 
     notesCollapse: "Hide analysis notes",
     notesExpand: "Show analysis notes",
-    notesTitle: "Analysis",
+    notesTitle: "Analysis 🤖",
     notesLoading: "Loading analysis…",
     notesEmpty: "No analysis for this hand yet.",
     aiNoAdvice: () => "The analysis came back empty.",
@@ -180,7 +184,11 @@ export const STRINGS = {
     specQuery: "Độ phức tạp truy vấn",
     specQueryVal: "O(1) tra cứu bộ đệm",
 
-    recommendedAction: "Hành động khuyến nghị",
+    recommendedAction: "Hành động khuyến nghị 🃏",
+    sizesTag: "Mức cược 📉",
+    assumptionTag: "Giả định 💖",
+    chosenTag: "Đã chọn 🃏",
+    rangeCoverage: "Độ phủ dải bài",
     actionLabel: { CHECK: "Không cược", SMALL_BET: "Cược nhỏ", LARGE_BET: "Cược lớn", ALL_IN: "Tất tay" },
     kindLabel: { VALUE: "Cược giá trị", THIN_VALUE: "Giá trị mỏng", BLUFF: "Cược hù" },
     blocked: {
@@ -252,7 +260,7 @@ export const STRINGS = {
 
     notesCollapse: "Thu gọn ghi chú phân tích",
     notesExpand: "Ghi chú phân tích toán học",
-    notesTitle: "Tư vấn lý thuyết trò chơi",
+    notesTitle: "Tư vấn lý thuyết trò chơi 🤖",
     notesLoading: "Đang gửi truy vấn phân tích…",
     notesEmpty: "Chưa có dữ liệu phân tích cho tình huống này.",
     aiNoAdvice: () => "Không có phân tích nào được tạo.",

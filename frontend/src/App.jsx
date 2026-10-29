@@ -1,7 +1,12 @@
 import { useState, useEffect, useEffectEvent, useRef } from 'react';
 import './App.css';
 import { STRINGS, LANGUAGES } from './i18n.js';
-import { formatMoney, formatZones } from './format.js';
+import { formatMoney } from './format.js';
+import { assumptionLine, toneClass } from './verdict.js';
+import VerdictCard from './components/VerdictCard.jsx';
+import SizingLadder from './components/SizingLadder.jsx';
+import AssumptionSlip from './components/AssumptionSlip.jsx';
+import StatStrip from './components/StatStrip.jsx';
 
 // Empty by default: requests go to /api on the page's own origin, which the Vite dev server
 // proxies to Flask (vite.config.js). Set VITE_API_URL at build time when the API lives elsewhere.
@@ -25,65 +30,6 @@ const HAND_PRESETS = [
 // Backend category enum -> display label and i18n description key
 const CATEGORY_LABELS = { SAP: "SÁP", LIENG: "LIÊNG", DI: "ĐĨ", DIEM: "ĐIỂM" };
 const CATEGORY_DESC_KEYS = { SAP: "descSap", LIENG: "descLieng", DI: "descDi", DIEM: "descDiem" };
-
-// Advice kind -> colour class. Colour names the kind of hand, never whether the advice is "good":
-// a bluff is a legitimate play.
-const KIND_CLASSES = {
-  VALUE: "kind-value",
-  THIN_VALUE: "kind-thin",
-  BLUFF: "kind-bluff",
-  NONE: "kind-none",
-};
-
-const percent = (value) => `${(value * 100).toFixed(1)}%`;
-const wholePercent = (value) => `${Math.round(value * 100)}%`;
-const signedMoney = (value, locale) => `${value > 0 ? "+" : ""}${formatMoney(value, locale)}`;
-
-// The sentence that explains the recommendation. Every number is the response's own: a check's
-// `ev` is 0 by definition, so its reasons quote the rung the ladder priced best.
-function whyLine(t, advice, summary) {
-  const { sizing, fold_equity: foldEquity, pot } = summary;
-  const money = (value) => signedMoney(value, t.locale);
-  const equity = advice.win_rate_defined ? percent(advice.equity_when_called) : t.winRateUndefined;
-  const fold = wholePercent(foldEquity);
-  const worstFold = wholePercent(Math.max(0, foldEquity - sizing.fold_step));
-  const foldStep = Math.round(sizing.fold_step * 100);
-  const best = advice.ladder.reduce((a, rung) => (rung.ev_ratio > a.ev_ratio ? rung : a));
-  const small = advice.ladder[0];
-
-  switch (advice.reason) {
-    case "ALL_IN_VALUE":
-      return t.whyAllInValue(equity, foldStep);
-    case "LARGE_VALUE":
-      return t.whyLargeValue(equity);
-    case "LARGE_THIN":
-      return t.whyLargeThin(equity);
-    case "SMALL_VALUE":
-      return t.whySmallValue(`${formatMoney(advice.amount, t.locale)} ${t.currency}`);
-    case "SMALL_THIN":
-      return t.whySmallThin(equity);
-    case "SMALL_BLUFF":
-      return t.whySmallBluff(money(advice.ev), equity);
-    case "CHECK_NO_EDGE":
-      return t.whyCheckNoEdge(fold);
-    case "CHECK_EDGE_TOO_SMALL":
-      return t.whyCheckEdgeTooSmall(
-        money(best.ev),
-        percent(best.ev_ratio),
-        wholePercent(sizing.min_edge_ratio)
-      );
-    case "CHECK_ASSUMPTION_FRAGILE":
-      return t.whyCheckFragile(money(small.ev), fold, money(small.worst_ev_ratio * pot), worstFold);
-  }
-}
-
-// The assumption the solver actually used, in the response's own words and numbers.
-function assumptionLine(t, summary) {
-  const foldPct = Math.round(summary.fold_equity * 100);
-  return summary.opponent_model === "range"
-    ? t.modelAssumptionRange(foldPct)
-    : t.modelAssumptionRandom(foldPct);
-}
 
 function loadSavedLang() {
   try {
@@ -490,99 +436,21 @@ export default function App() {
           </div>
         </section>
 
-        {/* Right column: results */}
+        {/* Right column: results on the scrapbook board */}
         <section className="results-container">
-          {/* Verdict: what to do, how much, why, and why not the bigger bet */}
-          {advice && (
-            <div className={`verdict-card ${KIND_CLASSES[advice.kind]}`}>
-              <div className="verdict-banner">
-                <div>
-                  <span className="verdict-label">{t.recommendedAction}</span>
-                  <div className="verdict-title-row">
-                    <h2 className="verdict-title">{t.actionLabel[advice.action]}</h2>
-                    {advice.action !== "CHECK" && (
-                      <span className="kind-chip">{t.kindLabel[advice.kind]}</span>
-                    )}
-                  </div>
-                  <div className="verdict-meta">
-                    <span className="holding-tag">{handEval.hand}</span>
-                    <span className="holding-sep">·</span>
-                    <span>{handEval.canonical_id}</span>
-                    <span className="holding-sep">·</span>
-                    <span className="holding-score">{handEval.score_name}</span>
-                  </div>
-                </div>
+          <div className="results-board">
+            {advice && <VerdictCard advice={advice} handEval={handEval} summary={summary} t={t} />}
 
-                <div className="verdict-col-right">
-                  <span className="verdict-label">{t.expectedValueTag}</span>
-                  <div className="verdict-ev">
-                    {signedMoney(advice.ev, t.locale)} <span className="ev-currency">{t.currency}</span>
-                  </div>
-                  <div className="verdict-breakeven">{t.evAtRecommendedSize}</div>
-                  {handEval.ev !== advice.ev && (
-                    <div className="verdict-breakeven">
-                      {t.evAtYourBetSize(`${signedMoney(handEval.ev, t.locale)} ${t.currency}`)}
-                    </div>
-                  )}
-                  {zones && (
-                    <div className="verdict-breakeven">
-                      {t.profitableWhen} <span className="mono-green">{formatZones(zones)}</span>
-                    </div>
-                  )}
-                  {handEval.sensitivity && (
-                    <div className="verdict-breakeven">
-                      {t.assumptionSensitivity(handEval.sensitivity.status)}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <p className="verdict-why">{whyLine(t, advice, summary)}</p>
-              <p className="verdict-assumption">{assumptionLine(t, summary)}</p>
-
-              <div className="ladder-strip">
-                {advice.ladder.map((rung) => (
-                  <div
-                    key={rung.action}
-                    className={`ladder-rung${rung.action === advice.action ? " chosen" : ""}${
-                      rung.eligible ? "" : " rung-blocked"
-                    }`}
-                  >
-                    <div className="ladder-head">
-                      <span className="ladder-mark">{rung.eligible ? "✓" : "✗"}</span>
-                      <span className="ladder-label">{t.actionLabel[rung.action]}</span>
-                    </div>
-                    <div className="ladder-amount">
-                      {formatMoney(rung.amount, t.locale)}{" "}
-                      <span className="ev-currency">{t.currency}</span>
-                    </div>
-                    <div className="ladder-ev">
-                      {t.evTag} {signedMoney(rung.ev, t.locale)}
-                    </div>
-                    {!rung.eligible && <div className="ladder-blocked">{t.blocked[rung.blocked_by]}</div>}
-                  </div>
-                ))}
-              </div>
-
-              <p className="ladder-note">
-                {t.thresholdNote(
-                  Math.round(summary.sizing.min_edge_ratio * 100),
-                  Math.round(summary.sizing.fold_step * 100)
-                )}
-              </p>
-            </div>
-          )}
-
-          {/* No hand entered: the range tables below still answer the question */}
-          {solveData && !handEval && (
-            <div className="verdict-banner verdict-empty" role="status">
-              <div>
-                <span className="verdict-label">{t.recommendedAction}</span>
-                <h2 className="verdict-title">{t.noHandTitle}</h2>
-                <div className="verdict-meta">{t.noHandBody}</div>
-                {summary && <p className="verdict-assumption">{assumptionLine(t, summary)}</p>}
+            {/* No hand entered: the range tables below still answer the question */}
+            {solveData && !handEval && (
+              <section className="verdict-empty polaroid tone-check" role="status">
+                <span className="tape tape-top" aria-hidden="true" />
+                <div className="kicker">{t.recommendedAction}</div>
+                <h2 className="verb">{t.noHandTitle}</h2>
+                <div className="meta">{t.noHandBody}</div>
+                {summary && <p className="assumption-text">{assumptionLine(t, summary)}</p>}
                 {actionCounts && (
-                  <p className="verdict-why">
+                  <p className="why">
                     {t.actionCountsLine(
                       actionCounts.ALL_IN,
                       actionCounts.LARGE_BET,
@@ -591,55 +459,12 @@ export default function App() {
                     )}
                   </p>
                 )}
-              </div>
-            </div>
-          )}
+              </section>
+            )}
 
-          {/* Summary figures */}
-          <div className="hud-metrics-grid">
-            <div className="hud-card">
-              <div>{t.betRecommended}</div>
-              <div className="hud-value">
-                {summary?.bet_recommended_percent?.toFixed(1) || "0.0"}%
-              </div>
-              <div className="hud-subtext">{t.combosWorthBet}</div>
-            </div>
-
-            <div className="hud-card">
-              <div>{t.showdownEquity}</div>
-              <div className={`hud-value ${advice?.win_rate_defined === false ? "hud-phrase" : ""}`}>
-                {advice?.win_rate_defined === false
-                  ? t.winRateUndefined
-                  : handEval
-                    ? percent(handEval.showdown_equity)
-                    : t.notAvailable}
-              </div>
-              <div className="hud-subtext">
-                {handEval && handEval.call_range_percent != null
-                  ? `${t.vsCallingRange(Math.round(handEval.call_range_percent))} · ${t.vsRandomShort(
-                      percent(handEval.equity_vs_random)
-                    )}`
-                  : handEval
-                    ? t.showdownEquitySub
-                    : t.notAvailable}
-              </div>
-            </div>
-
-            <div className="hud-card">
-              <div>{t.expectedValue}</div>
-              <div className={`hud-value ${advice?.ev > 0 ? "green-metric" : ""}`}>
-                {advice ? signedMoney(advice.ev, t.locale) : "0"}
-              </div>
-              <div className="hud-subtext">{t.evAtRecommendedSize}</div>
-            </div>
-
-            <div className="hud-card">
-              <div>{t.bluffThreshold}</div>
-              <div className="hud-value">
-                {summary ? `${(summary.pure_bluff_break_even_fold_equity * 100).toFixed(1)}%` : t.notAvailable}
-              </div>
-              <div className="hud-subtext">{t.bluffThresholdSub}</div>
-            </div>
+            {advice && <SizingLadder advice={advice} summary={summary} t={t} />}
+            {advice && <AssumptionSlip summary={summary} t={t} tone={toneClass(advice)} />}
+            {summary && <StatStrip summary={summary} t={t} />}
           </div>
 
           {/* Coverage by category */}
@@ -712,7 +537,7 @@ export default function App() {
                           {item.ev > 0 ? "+" : ""}{formatMoney(item.ev, t.locale)} {t.currency}
                         </td>
                         <td className="dim-cell">{item.multiplicity} {t.combosSuffix}</td>
-                        <td className={KIND_CLASSES[item.kind]}>
+                        <td className="kind-cell">
                           {t.actionLabel[item.action]} · {t.kindLabel[item.kind]}
                         </td>
                       </tr>
