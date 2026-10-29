@@ -64,7 +64,7 @@ def test_health_endpoint(client):
     assert data["status"] == "healthy"
     assert data["database_loaded"] is True
     assert data["classes_loaded"] == 455
-    assert data["version"] == "3.0.0"
+    assert data["version"] == "3.1.0"
 
 
 # --- /api/solve -----------------------------------------------------------------------------
@@ -160,7 +160,9 @@ def test_a_junk_hand_checks_instead_of_shoving(client):
 def test_the_opponent_model_moves_the_rung(client):
     """J-7-2 clears the all-in win-rate gate against a random caller but not against a calling range."""
     body = {"pot": 100000, "bet_size": 50000, "fold_equity": 0.35, "hand": "Js 7h 2d"}
-    vs_random = client.post("/api/solve", json=body).get_json()["hand_evaluation"]["advice"]
+    vs_random = client.post(
+        "/api/solve", json={**body, "opponent_model": "random"}
+    ).get_json()["hand_evaluation"]["advice"]
     vs_range = client.post("/api/solve", json={**body, "opponent_model": "range"}).get_json()["hand_evaluation"]["advice"]
 
     assert (vs_random["action"], vs_random["amount"], vs_random["ev"]) == ("ALL_IN", 100000.0, 144906.2367)
@@ -354,6 +356,7 @@ def test_sensitivity_uses_the_derived_calling_range(client):
 def test_sensitivity_is_present_for_the_random_model_too(client):
     hand_eval = client.post("/api/solve", json={
         "pot": 100000, "bet_size": 50000, "fold_equity": 0.35, "hand": "As Kh Qd",
+        "opponent_model": "random",
     }).get_json()["hand_evaluation"]
     assert hand_eval["sensitivity"]["status"] == "ROBUST_BET"
     assert len(hand_eval["sensitivity"]["scenarios"]) == 3
@@ -462,17 +465,19 @@ def test_invalid_hand_message_has_no_stacked_prefix(client):
     assert error == {"error": "Invalid card 'Xh': Invalid rank 'X'. Must be 2-10, T, J, Q, K, or A.", "code": "invalid_hand"}
 
 
-def test_solve_default_model_is_random_hand(client):
-    """Omitting opponent_model keeps the original random-hand equity for existing clients."""
+def test_solve_default_model_is_range(client):
+    """Omitting opponent_model assumes the realistic model: the opponent folds their weakest hands."""
     res = client.post("/api/solve", json={"pot": 100000, "bet_size": 100000, "fold_equity": 0.35, "hand": "Ks Qh 3d"})
     data = res.get_json()
     hand_eval = data["hand_evaluation"]
-    assert data["summary"]["opponent_model"] == "random"
-    assert hand_eval["showdown_equity"] == hand_eval["equity_vs_random"]
+    assert data["summary"]["opponent_model"] == "range"
+    assert hand_eval["showdown_equity"] < 0.02
+    assert hand_eval["equity_vs_random"] == pytest.approx(0.36, abs=0.00005)
     assert hand_eval["advice"]["kind"] == "BLUFF"
     assert hand_eval["advice"]["action"] == "SMALL_BET"
-    assert hand_eval["advice"]["ev"] == pytest.approx(52393.18)
-    assert hand_eval["profitable_fold_zones"] == [[0.0, 1.0]]
+    assert hand_eval["advice"]["ev"] == 14715.32
+    assert hand_eval["break_even_fold_equity"] is None
+    assert hand_eval["profitable_from_fold_equity"] == 0.51
 
 
 def test_solve_range_model_prices_medium_hand(client):
@@ -512,7 +517,10 @@ def test_solve_category_breakdown(client):
 
 def test_break_even_fields_random_model(client):
     """Random model: the exact closed-form break-even, plus the 1%-grid point where raising stays +EV."""
-    payload = {"pot": 100000, "bet_size": 50000, "fold_equity": 0.05, "hand": "2s 3h 5d"}
+    payload = {
+        "pot": 100000, "bet_size": 50000, "fold_equity": 0.05, "hand": "2s 3h 5d",
+        "opponent_model": "random",
+    }
     hand_eval = client.post("/api/solve", json=payload).get_json()["hand_evaluation"]
     # S = 0.0024 * 200k - 50k = -49,520  ->  f = 49,520 / 149,520 = 0.3312; first +EV grid point is 0.34
     assert hand_eval["break_even_fold_equity"] == 0.3312

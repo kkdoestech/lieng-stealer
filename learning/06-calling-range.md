@@ -357,7 +357,7 @@ Whether this module is used at all is decided by the `OpponentModel` enum
 `RANGE = "range"`. It is a `StrEnum` (Python 3.11+), whose members are also `str`s, so
 `OpponentModel.RANGE == "range"` is `True`, `str(OpponentModel.RANGE)` is `"range"`, and
 `OpponentModel("range")` turns the text of a web request into the enum. It is switched on in
-[range_finder.py:79](../backend/src/range_finder.py#L79), [cli.py:260](../backend/src/cli.py#L260)
+[range_finder.py:79](../backend/src/range_finder.py#L79), [cli.py:262](../backend/src/cli.py#L262)
 and [app.py:306](../backend/app.py#L306).
 
 The same module re-exports the two state-space sizes from `hands.py` (lesson 03):
@@ -505,15 +505,15 @@ the fix introduced one small new problem, which commit `a9d9ce9` fixed.
    class to have a distinct strength.` and exited 2, although the user typed nothing wrong. Now both
    checks raise `ModelError` ([calling_range.py:65-68](../backend/src/calling_range.py#L65-L68)), a
    new `LiengError` subclass ([exceptions.py:37-38](../backend/src/exceptions.py#L37-L38)), and the
-   CLI catches it before the catch-all ([cli.py:370-372](../backend/src/cli.py#L370-L372)): the same
+   CLI catches it before the catch-all ([cli.py:372-374](../backend/src/cli.py#L372-L374)): the same
    command now prints
    `Internal model error: The calling-range model needs every canonical class to have a distinct strength.`
-   and exits 1, like a database problem. (With the default `random` model the CLI never builds the
+   and exits 1, like a database problem. (With `--opponent-model random` the CLI never builds the
    calling-range model, so it still runs and exits 0.) The API, which builds the model in
    `create_app()`, fails at start-up, which is right. Pinned by `test_rejects_a_subset_of_hands` and
    `test_rejects_classes_with_equal_strength`, which now expect `ModelError`, and by
    `test_a_broken_model_is_an_internal_error_not_invalid_input`
-   ([test_cli.py:97-108](../backend/tests/test_cli.py#L97-L108)).
+   ([test_cli.py:100-111](../backend/tests/test_cli.py#L100-L111)).
 
 ---
 

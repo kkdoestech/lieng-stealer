@@ -5,7 +5,7 @@
 > wrong.
 > **Files:** [`backend/src/db.py`](../backend/src/db.py), [`backend/src/paths.py`](../backend/src/paths.py),
 > [`backend/tests/test_db.py`](../backend/tests/test_db.py), and the two places that create it:
-> [`app.py`](../backend/app.py#L135-L136) and [`cli.py`](../backend/src/cli.py#L258)
+> [`app.py`](../backend/app.py#L135-L136) and [`cli.py`](../backend/src/cli.py#L260)
 > ([`range_finder.py`](../backend/src/range_finder.py#L46-L47) only checks that it is loaded).
 > **Time:** ~40 min. **Before this:** [04 — The generator and `winrates.json`](04-generator.md).
 
@@ -342,7 +342,7 @@ different database. A missing or invalid file raises `DatabaseError` right there
 at start-up instead of answering requests with no data. Loading and validating the 82,694-byte
 file took 5.5 ms here (most of it is building the 455 reference classes for the validation). The
 CLI builds its own from `--db`, which also defaults to `DEFAULT_DB_PATH`
-([cli.py:258](../backend/src/cli.py#L258)). `RangeFinder` no longer loads anything itself: given
+([cli.py:260](../backend/src/cli.py#L260)). `RangeFinder` no longer loads anything itself: given
 an unloaded database it raises `DatabaseNotLoadedError`
 ([range_finder.py:46-47](../backend/src/range_finder.py#L46-L47)). Until October 2026 it quietly
 loaded the default path behind your back, and `app.py` had an `if DB_PATH.is_file()` guard that

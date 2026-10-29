@@ -382,7 +382,7 @@ class Hand:
 `Hand.from_str` ([evaluator.py:420-440](../backend/src/evaluator.py#L420-L440)) splits on spaces,
 commas or hyphens with `re.split(r"[\s,\-]+", …)` ([evaluator.py:434](../backend/src/evaluator.py#L434)):
 `"As,Kh,Qd"`, `"As-Kh-Qd"` and `"  As   Kh  Qd "` all parse to `As Kh Qd`; `"AsKhQd"` is one token
-and fails with `found 1`. This is the entry point for the CLI ([cli.py:253](../backend/src/cli.py#L253))
+and fails with `found 1`. This is the entry point for the CLI ([cli.py:255](../backend/src/cli.py#L255))
 and the API ([app.py:296](../backend/app.py#L296)).
 
 The strength is evaluated **once per hand** and then remembered:

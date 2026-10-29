@@ -411,6 +411,14 @@
   color: var(--text);
 }
 
+/* The opponent assumption, stated in plain words under the why line. */
+.verdict-assumption {
+  margin-top: 6px;
+  font-size: 0.87rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
 /* No hand entered: a neutral banner that explains the range-only view. */
 .verdict-empty {
   padding: 12px 0;
