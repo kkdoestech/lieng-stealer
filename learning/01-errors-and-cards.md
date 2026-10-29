@@ -113,9 +113,9 @@ LiengError
 
 The point of a family is the `except` at the edges. The CLI catches `DatabaseError` first and
 reports `Cannot load the win-rate database: …` with exit code 1
-([cli.py:367](../backend/src/cli.py#L367)), then `ModelError` as `Internal model error: …`, also
-exit 1 ([cli.py:370](../backend/src/cli.py#L370)), and only then catches the rest of the family
-once and turns it into `Invalid input: …` with exit code 2 ([cli.py:373](../backend/src/cli.py#L373)).
+([cli.py:369](../backend/src/cli.py#L369)), then `ModelError` as `Internal model error: …`, also
+exit 1 ([cli.py:372](../backend/src/cli.py#L372)), and only then catches the rest of the family
+once and turns it into `Invalid input: …` with exit code 2 ([cli.py:375](../backend/src/cli.py#L375)).
 The order matters: `ModelError` is a `LiengError` too, so the last `except` would otherwise blame
 the user for a broken model. The API has one
 handler that turns `InvalidGameParamsError` into a 400 with `"code": "invalid_params"`
@@ -438,11 +438,11 @@ Six weak spots were listed here when the course was written. The October 2026 fi
    ([test_range_finder.py:134-138](../backend/tests/test_range_finder.py#L134-L138)), and the CLI
    reports it as `Internal model error: …`, exit 1, instead of blaming the input
    (`test_a_broken_model_is_an_internal_error_not_invalid_input`,
-   [test_cli.py:97-108](../backend/tests/test_cli.py#L97-L108)). *Still open, and minor:* two plain
+   [test_cli.py:100-111](../backend/tests/test_cli.py#L100-L111)). *Still open, and minor:* two plain
    `ValueError`s remain for programming mistakes rather than user input (`steps < 1` at
    [ev.py:178](../backend/src/ev.py#L178), `samples < 1` at
    [generator.py:54](../backend/src/generator.py#L54)), which is why the CLI still catches
-   `(LiengError, ValueError)` ([cli.py:373](../backend/src/cli.py#L373)).
+   `(LiengError, ValueError)` ([cli.py:375](../backend/src/cli.py#L375)).
 3. ✅ **Fixed: nothing pinned the hierarchy.** If `DatabaseError` stopped inheriting from
    `LiengError`, all 93 tests at the time still passed. Now
    [test_exceptions.py:23-38](../backend/tests/test_exceptions.py#L23-L38) checks every class's
@@ -610,7 +610,7 @@ change `DatabaseError(LiengError)` to `DatabaseError(Exception)`. Predict which 
 Nothing else notices. The CLI still prints
 `Cannot load the win-rate database: Database file 'nope.json' does not exist.` and exits 1,
 because it catches `DatabaseError` by name before the catch-all
-([cli.py:367](../backend/src/cli.py#L367)). Before the fixes, the same change made every test pass
+([cli.py:369](../backend/src/cli.py#L369)). Before the fixes, the same change made every test pass
 while the CLI crashed with a traceback; the parents test is now the only safety net, which is
 exactly its job. Undo with `git checkout -- backend/src/exceptions.py`.
 </details>
@@ -634,7 +634,7 @@ Before the change it prints
 `400 {'code': 'invalid_hand', 'error': 'A Liêng hand cannot have duplicate cards.'}`. After it,
 `3 failed, 169 passed`: `test_duplicate_cards_raises` (it expects `InvalidHandSizeError`), the
 `DuplicateCardError` case of the parents test, and `test_analyze_rejects_an_invalid_hand`
-([test_api.py:297-300](../backend/tests/test_api.py#L297-L300)), which now gets a 500. The probe
+([test_api.py:299-302](../backend/tests/test_api.py#L299-L302)), which now gets a 500. The probe
 logs a traceback and prints `500 {'code': 'internal_error', 'error': 'Internal server error.'}`: the
 API's `invalid_hand` handler is registered for `InvalidHandSizeError`
 ([app.py:203-206](../backend/app.py#L203-L206)), so a duplicate that is no longer one falls through
@@ -706,7 +706,7 @@ def test_space_inside_a_card_is_rejected() -> None:
 4. Equal cards have equal hashes, because `@dataclass(frozen=True)` generates `__eq__` and
    `__hash__` from the same fields.
 5. `except LiengError` and `except KeyError` (also `except UnknownHandError`). It subclasses
-   `LiengError` so the project's catch-alls handle it ([cli.py:373](../backend/src/cli.py#L373)),
+   `LiengError` so the project's catch-alls handle it ([cli.py:375](../backend/src/cli.py#L375)),
    and `KeyError` so code written when `WinRateDB.get` raised a plain `KeyError`
    ([db.py:130](../backend/src/db.py#L130)) keeps working.
 </details>

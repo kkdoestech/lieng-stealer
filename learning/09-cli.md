@@ -32,16 +32,16 @@ maths of its own. What is interesting is *how* it prints and *how* it fails.
 | # | Location | What to look for |
 |---|----------|------------------|
 | 1 | [cli.py:1-8](../backend/src/cli.py#L1-L8) | The four exit codes, documented in the module docstring. |
-| 2 | [cli.py:19-49](../backend/src/cli.py#L19-L49) | Imports (shared defaults, `DEFAULT_DB_PATH`, `category_breakdown`, the advice types), labels, and the exit-code constants. |
-| 3 | [cli.py:51-77](../backend/src/cli.py#L51-L77) | `rich` imported *optionally*; `_console()` and `_use_utf8_stdout()` run on first use, not at import. |
-| 4 | [cli.py:80-82](../backend/src/cli.py#L80-L82) | `format_currency`: thousands separators, decimals only when needed. |
-| 5 | [cli.py:85-155](../backend/src/cli.py#L85-L155) | The banner and the solver overview: a `rich` branch and a plain `print` branch each. |
-| 6 | [cli.py:158-233](../backend/src/cli.py#L158-L233) | The action labels, the colour per kind, one sentence per reason, and the two helpers that mark a ladder row. |
-| 7 | [cli.py:236-304](../backend/src/cli.py#L236-L304) | Your hand: the advice panel, the why sentence, the ladder with a marker per rung. |
-| 8 | [cli.py:306-345](../backend/src/cli.py#L306-L345) | The category table, built from `category_breakdown`. |
-| 9 | [cli.py:347-385](../backend/src/cli.py#L347-L385) | `run_solver`: validate, compute, then print. |
-| 10 | [cli.py:387-425](../backend/src/cli.py#L387-L425) | `interactive_mode`: five `input()` prompts, and an exit code back. |
-| 11 | [cli.py:428-493](../backend/src/cli.py#L428-L493) | `main`: argparse, interactive or not, exit codes 1 and 2. |
+| 2 | [cli.py:19-52](../backend/src/cli.py#L19-L52) | Imports (shared defaults, `DEFAULT_DB_PATH`, `category_breakdown`, the advice types), labels, and the exit-code constants. |
+| 3 | [cli.py:54-80](../backend/src/cli.py#L54-L80) | `rich` imported *optionally*; `_console()` and `_use_utf8_stdout()` run on first use, not at import. |
+| 4 | [cli.py:83-85](../backend/src/cli.py#L83-L85) | `format_currency`: thousands separators, decimals only when needed. |
+| 5 | [cli.py:88-198](../backend/src/cli.py#L88-L198) | The banner and the solver overview: a `rich` branch and a plain `print` branch each. |
+| 6 | [cli.py:200-231](../backend/src/cli.py#L200-L231) | The action labels, the colour per kind, one sentence per reason, and the two helpers that mark a ladder row. |
+| 7 | [cli.py:233-300](../backend/src/cli.py#L233-L300) | Your hand: the advice panel, the why sentence, the ladder with a marker per rung. |
+| 8 | [cli.py:303-341](../backend/src/cli.py#L303-L341) | The category table, built from `category_breakdown`. |
+| 9 | [cli.py:344-381](../backend/src/cli.py#L344-L381) | `run_solver`: validate, compute, then print. |
+| 10 | [cli.py:384-422](../backend/src/cli.py#L384-L422) | `interactive_mode`: five `input()` prompts, and an exit code back. |
+| 11 | [cli.py:425-490](../backend/src/cli.py#L425-L490) | `main`: argparse, interactive or not, exit codes 1 and 2. |
 | 12 | [test_cli.py](../backend/tests/test_cli.py) | Sixteen tests: `capsys`, `SystemExit`, a fake keyboard, an empty stdout, a forced plain branch, a fake broken model, the ladder markers. |
 
 ---
@@ -73,12 +73,12 @@ backend ([db.py:82-89](../backend/src/db.py#L82-L89), lesson 05).
 
 ### 2. `main`: flags, defaults and the interactive switch
 
-[cli.py:318-347](../backend/src/cli.py#L318-L347) declares six options: `--pot`, `--bet`,
+[cli.py:320-349](../backend/src/cli.py#L320-L349) declares six options: `--pot`, `--bet`,
 `--fold-equity` (with the alias `--p-fold`), `--hand`, `--db` and `--opponent-model`. The
 choices for the last one come from the enum itself, `[m.value for m in OpponentModel]`, so a new
 model would appear in `--help` automatically. Then:
 
-📍 [`backend/src/cli.py:457-484`](../backend/src/cli.py#L457-L484)
+📍 [`backend/src/cli.py:459-486`](../backend/src/cli.py#L459-L486)
 ```python
     args = parser.parse_args(argv)
     opponent_model = OpponentModel(args.opponent_model)
@@ -116,7 +116,7 @@ model would appear in `--help` automatically. Then:
 - **The switch is "none of the four game flags".** `--db` and `--opponent-model` don't count, so
   `python -m src.cli --opponent-model range` opens the prompts. The flag is not lost: it is passed
   to `interactive_mode` and becomes the default answer of the model question (`[range]`).
-  [test_cli.py:83-86](../backend/tests/test_cli.py#L83-L86) pins that.
+  [test_cli.py:84-87](../backend/tests/test_cli.py#L84-L87) pins that.
 - **Defaults come from `ev.py`.** The options default to `None` so that the code can tell "not
   given" from "given". The real defaults are `DEFAULT_POT`, `DEFAULT_BET_SIZE` and
   `DEFAULT_FOLD_EQUITY` ([ev.py:15-18](../backend/src/ev.py#L15-L18)), the same constants the API
@@ -133,7 +133,7 @@ model would appear in `--help` automatically. Then:
 - **The first line of `main` switches stdout to UTF-8.** That used to happen when the module was
   imported. Now importing `src.cli` (as every test does) changes nothing:
 
-📍 [`backend/src/cli.py:70-77`](../backend/src/cli.py#L70-L77)
+📍 [`backend/src/cli.py:73-80`](../backend/src/cli.py#L73-L80)
 ```python
 def _use_utf8_stdout() -> None:
     """Ask the terminal stream for UTF-8 so Vietnamese text prints on Windows consoles."""
@@ -174,14 +174,14 @@ is not your typing: here, a database that cannot be loaded, or a broken model
 cause it; only a code change can, and a test fakes one (weak spot 10). 130 is `128 + 2`, the
 shell's code for "stopped by signal 2 (SIGINT)", which is what Ctrl+C sends. Running out of input
 is a normal way for a scripted session to end, so it is 0. The constants live at
-[cli.py:47-49](../backend/src/cli.py#L47-L49), so no bare `sys.exit(2)` is left in the code.
+[cli.py:50-52](../backend/src/cli.py#L50-L52), so no bare `sys.exit(2)` is left in the code.
 
 ### 4. `run_solver`: validate, compute, then print
 
 `run_solver(pot, bet_size, fold_equity, hand_str=None, db_path=DEFAULT_DB_PATH,
-opponent_model=RANDOM)` ([cli.py:236-252](../backend/src/cli.py#L236-L252)) is the whole pipeline:
+opponent_model=RANDOM)` ([cli.py:238-254](../backend/src/cli.py#L238-L254)) is the whole pipeline:
 
-📍 [`backend/src/cli.py:342-379`](../backend/src/cli.py#L342-L379)
+📍 [`backend/src/cli.py:344-381`](../backend/src/cli.py#L344-L381)
 ```python
 def run_solver(
     pot: float,
@@ -246,7 +246,7 @@ will differ): building `CallingRangeModel()` took 53–55 ms, loading and valida
 
 ### 5. Your hand: the same recommendation as the API
 
-📍 [`backend/src/cli.py:231-298`](../backend/src/cli.py#L231-L298)
+📍 [`backend/src/cli.py:233-300`](../backend/src/cli.py#L233-L300)
 ```python
 def render_single_hand_decision(
     solution: HandSolution,
@@ -322,7 +322,7 @@ The renderer formats, it does not decide. Every value it prints comes off `recor
 `_ACTION_LABELS[advice.action]` and `advice.amount` for the headline, `_why_line` for the sentence,
 and the three `advice.ladder` rows with `_rung_marker` (✓ when the rung is eligible, ✗ when it is not)
 and `_rung_suffix` (the blocker's name, or `<- recommended`). `_why_line`
-([cli.py:205-216](../backend/src/cli.py#L205-L216)) fills one template per `Reason` from the advice's
+([cli.py:207-218](../backend/src/cli.py#L207-L218)) fills one template per `Reason` from the advice's
 own numbers, so the sentence and the figures cannot drift apart.
 
 `Expected Value` in the panel is `record.ev`, the EV at *your* `--bet`, and the headline amount is
@@ -380,7 +380,7 @@ clears the 5% floor, and both bigger rungs lose money at the centre fold rate (`
 The label caps the size; the floor prices it.
 
 And the overview panel above it, titled **SOLVER OVERVIEW** (`render_solver_overview`,
-[cli.py:125-155](../backend/src/cli.py#L125-L155)):
+[cli.py:127-157](../backend/src/cli.py#L127-L157)):
 
 | Line | random | range |
 |------|--------|-------|
@@ -391,7 +391,7 @@ And the overview panel above it, titled **SOLVER OVERVIEW** (`render_solver_over
 | Highest EV Hand | A-A-A (EV: +165,000) | A-A-A (EV: +165,000) |
 | Threshold Hand (EV > 0) | K-8-3 (EV: +370.85) | K-Q-4 (EV: +420) |
 
-Two details of `format_currency` ([cli.py:80-82](../backend/src/cli.py#L80-L82)) show up here:
+Two details of `format_currency` ([cli.py:83-85](../backend/src/cli.py#L83-L85)) show up here:
 `+370.85` has decimals because the EV is not a whole number, while `+420` has none. The 22,100 is
 `TOTAL_COMBINATIONS` from `hands.py` (lesson 08), not a literal. Note what this panel counts and what
 the hand panel says: `Profitable Classes` is "EV above zero at `--bet`", while the answer is a size.
@@ -400,7 +400,7 @@ has the four counts).
 
 ### 6. `rich` if available, `print` if not
 
-📍 [`backend/src/cli.py:51-67`](../backend/src/cli.py#L51-L67)
+📍 [`backend/src/cli.py:54-70`](../backend/src/cli.py#L54-L70)
 ```python
 if TYPE_CHECKING:
     from rich.console import Console
@@ -425,7 +425,7 @@ def _console() -> Console:
 ([requirements-dev.txt](../backend/requirements-dev.txt)), not a runtime one: the production API
 never prints a table, so it does not ship. The CLI still works without it: every renderer starts
 with `if HAS_RICH:` and has an `else:` branch of plain `print` calls (for example
-[cli.py:103-113](../backend/src/cli.py#L103-L113)). The console itself is made by `_console()` the
+[cli.py:105-115](../backend/src/cli.py#L105-L115)). The console itself is made by `_console()` the
 first time a renderer needs it (see the concept box below). You can see the fallback without
 uninstalling anything, by hiding the package before the import (see 🧪 Try it). The plain version
 of the range run above:
@@ -451,7 +451,7 @@ of the range run above:
 The two branches show the same totals, but they are still not the same report: the plain category
 table has no coverage column and no sample hands. The hand panels do agree now. The plain one used
 to print `Expected Value:     40,200` without the `+`; it now uses the same expression as the `rich`
-branch ([cli.py:291](../backend/src/cli.py#L291), weak spot 7), and since 3.0.0 both branches print
+branch ([cli.py:293](../backend/src/cli.py#L293), weak spot 7), and since 3.0.0 both branches print
 the action, the why sentence and the three ladder rows:
 
 ```
@@ -479,7 +479,7 @@ process with these imports), and whole commands measured 0.14 s for the random m
 
 ### 7. The category table, from shared code
 
-📍 [`backend/src/cli.py:301-303`](../backend/src/cli.py#L301-L303)
+📍 [`backend/src/cli.py:303-305`](../backend/src/cli.py#L303-L305)
 ```python
 def render_categorized_heatmap(records: list[HandEVRecord]) -> None:
     """Render categorized summary tables showing distribution and top hands."""
@@ -490,18 +490,18 @@ def render_categorized_heatmap(records: list[HandEVRecord]) -> None:
 `classes`, `combos` and `profitable_combos` summed from the records. The API's
 `category_breakdown` field is built by the same call, so the CLI table and the web UI cannot
 disagree about how many Đĩ combos exist. The CLI adds only presentation: a label from
-`CATEGORY_LABELS` ([cli.py:40-45](../backend/src/cli.py#L40-L45)), the number of profitable
+`CATEGORY_LABELS` ([cli.py:43-48](../backend/src/cli.py#L43-L48)), the number of profitable
 classes, a coverage percentage, and up to five sample hands
-([cli.py:207-222](../backend/src/cli.py#L207-L222)). An older version kept the four totals (52,
+([cli.py:209-224](../backend/src/cli.py#L209-L224)). An older version kept the four totals (52,
 768, 144, 21,136) as literals in this function; see weak spot 3.
 
 ### 8. Interactive mode, and how the test types for you
 
-`interactive_mode(db_path, default_model)` ([cli.py:274-278](../backend/src/cli.py#L274-L278))
+`interactive_mode(db_path, default_model)` ([cli.py:276-280](../backend/src/cli.py#L276-L280))
 asks for the pot, the bet and the fold rate first, each with a default from `ev.py` when you just
 press Enter. Then:
 
-📍 [`backend/src/cli.py:398-420`](../backend/src/cli.py#L398-L420)
+📍 [`backend/src/cli.py:400-422`](../backend/src/cli.py#L400-L422)
 ```python
         model_str = input(
             f"Opponent folds 'random' or 'range' (weakest hands first)? [{default_model.value}]: "
@@ -539,7 +539,7 @@ press Enter. Then:
 
 How do you test something that reads the keyboard? You replace `input`:
 
-📍 [`backend/tests/test_cli.py:87-104`](../backend/tests/test_cli.py#L87-L104)
+📍 [`backend/tests/test_cli.py:88-107`](../backend/tests/test_cli.py#L88-L107)
 ```python
 def _answer_prompts(monkeypatch, answers):
     """Feed interactive-mode prompts from a list instead of the keyboard."""
@@ -547,10 +547,12 @@ def _answer_prompts(monkeypatch, answers):
     monkeypatch.setattr("builtins.input", lambda _prompt: next(replies))
 
 
-def test_interactive_mode_asks_for_opponent_model(monkeypatch, capsys):
-    _answer_prompts(monkeypatch, ["100000", "100000", "0.35", "range", "Ks Qh 3d"])
+def test_interactive_mode_defaults_to_range(monkeypatch, capsys, plain):
+    _answer_prompts(monkeypatch, ["100000", "100000", "0.35", "", "Ks Qh 3d"])
     main([])
-    assert ">>> ACTION: SMALL BET (33,000) — BLUFF <<<" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert ">>> ACTION: SMALL BET (33,000) — BLUFF <<<" in output
+    assert "folds their weakest 35% first, calls with the best 65% (range)" in output
 
 
 def test_interactive_mode_reports_invalid_hand(monkeypatch, capsys):
@@ -565,12 +567,15 @@ def test_interactive_mode_reports_invalid_hand(monkeypatch, capsys):
   out the next answer. pytest puts the real one back after the test.
 - `main([])` passes an empty argument list, so none of the four flags is set and `main` goes
   interactive. (Calling `main()` would read pytest's own `sys.argv`.)
+- An empty answer to the model question takes the default, `range`, so the first test checks the
+  banner line `folds their weakest 35% first, calls with the best 65% (range)`. `plain` forces the
+  plain-text report, which does not wrap at the console width.
 - The bad hand ends the session with code 2, so `main` raises `SystemExit`, and the test catches it
   with `pytest.raises`.
 - `capsys.readouterr().out` returns everything printed to stdout during the test, and `.err` returns
-  stderr. The exit-code test ([test_cli.py:81-85](../backend/tests/test_cli.py#L81-L85)) checks
+  stderr. The exit-code test ([test_cli.py:82-86](../backend/tests/test_cli.py#L82-L86)) checks
   `.code == 2` and `"Invalid input"` in `.err`. The end-of-input test
-  ([test_cli.py:123-129](../backend/tests/test_cli.py#L123-L129)) uses a fake `input` that raises
+  ([test_cli.py:126-132](../backend/tests/test_cli.py#L126-L132)) uses a fake `input` that raises
   `EOFError` instead of returning an answer.
 
 ---
@@ -581,7 +586,7 @@ def test_interactive_mode_reports_invalid_hand(monkeypatch, capsys):
 parser = argparse.ArgumentParser(description="…")
 parser.add_argument("--pot", type=float, default=None)          # "--pot 5" → args.pot == 5.0
 parser.add_argument("--fold-equity", "--p-fold", dest="fold_equity", type=float)  # two spellings
-parser.add_argument("--opponent-model", choices=["random", "range"], default="random")
+parser.add_argument("--opponent-model", choices=["random", "range"], default="range")
 args = parser.parse_args(argv)                                    # argv=None → read sys.argv
 ```
 
@@ -627,10 +632,12 @@ annotation `-> Console` is never evaluated (the module starts with
   tool you run by hand.
 - **Exit codes that mean something.** 0, 1, 2 and 130 are named constants and documented at the
   top of the module, so a shell script can tell "fix your input" from "fix the installation".
-- **The range model is opt-in, and the default is random.** `--opponent-model` defaults to
-  `random`, which keeps old commands producing old answers
-  ([test_cli.py:21](../backend/tests/test_cli.py#L21) pins it). The web UI chose the opposite
-  default (lesson 13).
+- **The default is the range model.** `--opponent-model` defaults to `range`, the stricter assumption,
+  and `--opponent-model random` switches to the uniform one
+  ([test_cli.py:29](../backend/tests/test_cli.py#L29) pins the default,
+  [test_cli.py:37](../backend/tests/test_cli.py#L37) the switch). A command written before version
+  3.1.0 that omitted the flag now gets the range numbers, so it has to pass `--opponent-model random`
+  to keep them. The web UI and the API made the same change (lesson 13).
 - **`rich` is optional.** The fallback costs duplicated code in every renderer, but the tool keeps
   working on a production install, where `rich` is not present. The alternative, a hard
   dependency, would remove half the module.
@@ -642,47 +649,47 @@ annotation `-> Console` is never evaluated (the module starts with
 1. ✅ **Fixed: a bad `--hand` was reported after the whole report.** The hand used to be parsed
    last, inside the hand renderer, so `--hand "As Xh Kd"` printed 48 lines and then failed. Now
    `run_solver` parses the hand and checks every number before anything is printed
-   ([cli.py:364-366](../backend/src/cli.py#L364-L366)). Pinned by
+   ([cli.py:366-368](../backend/src/cli.py#L366-L368)). Pinned by
    `test_invalid_hand_is_reported_before_any_output`
-   ([test_cli.py:108-113](../backend/tests/test_cli.py#L108-L113)), which asserts an empty stdout;
+   ([test_cli.py:111-116](../backend/tests/test_cli.py#L111-L116)), which asserts an empty stdout;
    exercise 4 breaks it on purpose.
 2. ✅ **Fixed: interactive mode always "succeeded".** It printed `Exiting session: …` and returned,
    so the exit code was 0 after an error, and `EOFError` escaped as a traceback. Now
-   `interactive_mode` returns 2, 1, 0 or 130 ([cli.py:410-425](../backend/src/cli.py#L410-L425))
-   and `main` exits with it ([cli.py:465-469](../backend/src/cli.py#L465-L469)). Pinned by
-   `test_interactive_mode_reports_invalid_hand` ([test_cli.py:100-105](../backend/tests/test_cli.py#L100-L105))
+   `interactive_mode` returns 2, 1, 0 or 130 ([cli.py:412-427](../backend/src/cli.py#L412-L427))
+   and `main` exits with it ([cli.py:467-471](../backend/src/cli.py#L467-L471)). Pinned by
+   `test_interactive_mode_reports_invalid_hand` ([test_cli.py:103-108](../backend/tests/test_cli.py#L103-L108))
    and `test_interactive_mode_ends_cleanly_at_end_of_input`
-   ([test_cli.py:123-129](../backend/tests/test_cli.py#L123-L129)). The Ctrl+C path has no test yet
+   ([test_cli.py:126-132](../backend/tests/test_cli.py#L126-L132)). The Ctrl+C path has no test yet
    (exercise 5).
 3. ✅ **Fixed: hard-coded totals.** The per-category combos (52, 768, 144, 21,136) and "22,100" used
    to be literals. Now the table comes from `category_breakdown`
-   ([cli.py:306-308](../backend/src/cli.py#L306-L308)) and the total from `TOTAL_COMBINATIONS`
-   ([cli.py:151](../backend/src/cli.py#L151)). The shared function is pinned by
+   ([cli.py:308-310](../backend/src/cli.py#L308-L310)) and the total from `TOTAL_COMBINATIONS`
+   ([cli.py:153](../backend/src/cli.py#L153)). The shared function is pinned by
    `test_category_breakdown_totals` ([test_range_finder.py:125-131](../backend/tests/test_range_finder.py#L125-L131));
    no CLI test reads the table itself.
 4. ✅ **Fixed: a missing database was called "Invalid input".** `DatabaseError` is a `LiengError`
    ([exceptions.py:41](../backend/src/exceptions.py#L41)), so it used to land in the exit-2 branch.
    Now it is caught first, with its own message and exit code 1
-   ([cli.py:410-412](../backend/src/cli.py#L410-L412), for both `run_solver` and interactive mode).
+   ([cli.py:412-414](../backend/src/cli.py#L412-L414), for both `run_solver` and interactive mode).
    Pinned by `test_missing_database_has_its_own_message_and_exit_code`
-   ([test_cli.py:116-120](../backend/tests/test_cli.py#L116-L120)).
+   ([test_cli.py:119-123](../backend/tests/test_cli.py#L119-L123)).
 5. ✅ **Fixed: import-time side effects, and a swallowed exception.** Importing the module used to
    reconfigure `sys.stdout` inside `except Exception: pass`, and create a module-level console.
-   Now `main` calls `_use_utf8_stdout()` ([cli.py:430](../backend/src/cli.py#L430)), which catches
-   only `OSError` and `ValueError` and says why ([cli.py:70-77](../backend/src/cli.py#L70-L77)),
+   Now `main` calls `_use_utf8_stdout()` ([cli.py:432](../backend/src/cli.py#L432)), which catches
+   only `OSError` and `ValueError` and says why ([cli.py:73-80](../backend/src/cli.py#L73-L80)),
    and the console is created on first use by `_console()`
-   ([cli.py:64-67](../backend/src/cli.py#L64-L67)). No test pins this directly.
+   ([cli.py:67-70](../backend/src/cli.py#L67-L70)). No test pins this directly.
 6. ✅ **Fixed: defaults written three times.** 100,000 / 50,000 / 0.35 were typed in `main`, in
    `interactive_mode` and in `app.py`. Now all three read `DEFAULT_POT`, `DEFAULT_BET_SIZE` and
    `DEFAULT_FOLD_EQUITY` from [ev.py:15-18](../backend/src/ev.py#L15-L18) (here at
-   [cli.py:394-401](../backend/src/cli.py#L394-L401) and [:471-476](../backend/src/cli.py#L471-L476)).
+   [cli.py:396-403](../backend/src/cli.py#L396-L403) and [:473-478](../backend/src/cli.py#L473-L478)).
 7. **Two different reports (half fixed).** The totals match, and the plain hand panel signs a
-   positive EV like the `rich` one ([cli.py:291](../backend/src/cli.py#L291)), pinned by
+   positive EV like the `rich` one ([cli.py:293](../backend/src/cli.py#L293)), pinned by
    `test_plain_text_report_shows_the_sign_of_a_positive_ev`
-   ([test_cli.py:140-148](../backend/tests/test_cli.py#L140-L148)), which runs the fallback. Since
+   ([test_cli.py:143-151](../backend/tests/test_cli.py#L143-L151)), which runs the fallback. Since
    3.0.0 the plain panel also prints the action, the why line and the ladder, so the two panels now
    carry the same content. The plain category table is still smaller
-   ([cli.py:336-344](../backend/src/cli.py#L336-L344): no coverage column, no sample hands), and no
+   ([cli.py:338-346](../backend/src/cli.py#L338-L346): no coverage column, no sample hands), and no
    test looks at it. *Fix:* build the lines once and let `rich` only decorate them (exercise 6
    starts with the test).
 8. **Duplicated logic with the API.** The category table is shared, and the equity choice is no
@@ -691,7 +698,7 @@ annotation `-> Console` is never evaluated (the module starts with
    profitable, coverage) and never shows the fold zones, so for K-Q-3 it says nothing where the web
    page draws two zones (exercise 7).
 9. ✅ **Fixed: "Game-Theoretic Solver".** The `--help` description used to promise game theory. It
-   now reads "Expected-Value Solver & Heatmap Viewer" ([cli.py:431](../backend/src/cli.py#L431)),
+   now reads "Expected-Value Solver & Heatmap Viewer" ([cli.py:433](../backend/src/cli.py#L433)),
    which matches README's Limitations section: an EV calculation against an assumed fold rate, not
    an equilibrium. No test pins the wording.
 10. ✅ **Fixed: a broken model was called "Invalid input".** `CallingRangeModel` checks its own
@@ -699,9 +706,9 @@ annotation `-> Console` is never evaluated (the module starts with
     the CLI reported a bug in the solver as `Invalid input: …` with exit 2. Now the checks raise
     `ModelError` ([calling_range.py:65-68](../backend/src/calling_range.py#L65-L68)), and `main`
     and `interactive_mode` catch it before the exit-2 clause: `Internal model error: …` on stderr,
-    exit 1 ([cli.py:413-415](../backend/src/cli.py#L413-L415)). Pinned by
+    exit 1 ([cli.py:415-417](../backend/src/cli.py#L415-L417)). Pinned by
     `test_a_broken_model_is_an_internal_error_not_invalid_input`
-    ([test_cli.py:150-161](../backend/tests/test_cli.py#L150-L161)), which swaps `CallingRangeModel`
+    ([test_cli.py:152-163](../backend/tests/test_cli.py#L152-L163)), which swaps `CallingRangeModel`
     for a function that raises.
 
 ---
@@ -797,10 +804,12 @@ rate are used, and how many classes are profitable? Check by running it.
 
 <details><summary>Solution</summary>
 
-Not interactive: `--bet` is one of the four game flags. The pot defaults to 100,000 and the fold
-rate to 0.35 (`DEFAULT_POT`, `DEFAULT_FOLD_EQUITY`), with the random model. That is the
-pot-sized-bet case from section 5: `Profitable Classes: 387 / 455`, coverage 84.65%, threshold hand
-K-8-3. No hand panel is printed.
+Not interactive: `--bet` is one of the four game flags. The pot defaults to 100,000, the fold rate
+to 0.35 (`DEFAULT_POT`, `DEFAULT_FOLD_EQUITY`) and the model to range. That is the pot-sized-bet case
+from section 5: `Profitable Classes: 250 / 455`, coverage 54.57%, threshold hand K-Q-4.
+`--opponent-model random` gives the old numbers instead, `387 / 455`, coverage 84.65%, threshold hand
+K-8-3, because equity against a uniform caller is higher than equity against the folding range, so
+more hands clear the floor. No hand panel is printed.
 </details>
 
 **🟢 2. Predict.** `python -m src.cli --hand "As As Qd"`. What appears on stderr, how many lines
@@ -815,22 +824,24 @@ kind of `InvalidHandSizeError` and so a `LiengError`, which `main` turns into ex
 happens on the first line of `run_solver`, before anything is printed.
 </details>
 
-**🟢 3. Predict.** In interactive mode you press Enter three times, type `range`, then press Enter
-again. What runs, and what is the exit code? Then: what changes if you start it as
-`python -m src.cli --opponent-model range` and press Enter five times?
+**🟢 3. Predict.** In interactive mode you press Enter at every prompt. What runs, and what is the
+exit code? Then: what changes if you type `random` at the model question instead?
 
 <details><summary>Solution</summary>
 
 The defaults (100,000 / 50,000 / 0.35), the range model, and no hand. The report shows
-`Opponent Model: folds weakest hands first (range)` and `Profitable Classes: 455 / 455`, since a
-half-pot bet at 35% folds is above the 33.3% bluff break-even, so every hand is +EV. No hand panel,
-exit code 0. Check with `printf '\n\n\nrange\n\n' | python -m src.cli`. With the flag, nothing
-changes in the result: the model prompt shows `[range]`, and the empty answer takes it.
+`Opponent Model: folds their weakest 35% first, calls with the best 65% (range)` and
+`Profitable Classes: 455 / 455`, since a half-pot bet at 35% folds is above the 33.3% bluff
+break-even, so every hand is +EV. No hand panel, exit code 0. Check with
+`printf '\n\n\n\n\n' | python -m src.cli`. Typing `random` instead shows
+`Opponent Model: folds 35% regardless of hand strength (uniform)`. Starting it as
+`python -m src.cli --opponent-model random` shows `[random]` in the model question, and the empty
+answer takes that.
 </details>
 
 **🟡 4. Break the fix for weak spot 1.** In `run_solver`, move the line
 `hand = Hand.from_str(hand_str) if hand_str else None` from the top
-([cli.py:364](../backend/src/cli.py#L364)) to just above `if hand is not None:`. Before you run
+([cli.py:366](../backend/src/cli.py#L366)) to just above `if hand is not None:`. Before you run
 `python -m pytest tests/test_cli.py -q`, predict which of the sixteen tests fail. Two other tests also
 use a bad hand: why do they still pass?
 
@@ -851,7 +862,7 @@ the fix came with a new test instead of relying on the old ones. Undo it with
 
 **🟡 5. Pin Ctrl+C.** Weak spot 2 left exit code 130 without a test. Write one: a fake `input`
 that raises `KeyboardInterrupt`, then check the exit code and the message. Then delete the
-`except KeyboardInterrupt:` clause ([cli.py:309-311](../backend/src/cli.py#L309-L311)) and run the
+`except KeyboardInterrupt:` clause ([cli.py:311-313](../backend/src/cli.py#L311-L313)) and run the
 tests again. What does pytest print, and what is its own exit code?
 
 <details><summary>Solution</summary>
@@ -885,12 +896,12 @@ and the new test never got a result. Read exit codes in CI, not only the summary
 
 **🔴 6. One report, two looks.** Weak spot 7 is half fixed: the plain hand panel signs a positive
 EV, and `test_plain_text_report_shows_the_sign_of_a_positive_ev`
-([test_cli.py:140-148](../backend/tests/test_cli.py#L140-L148)) pins it by forcing the plain branch.
+([test_cli.py:143-151](../backend/tests/test_cli.py#L143-L151)) pins it by forcing the plain branch.
 Do the same for the other half. Write a test that forces the plain branch, runs the range model
 with a pot-sized bet (`--pot 100000 --bet 100000 --fold-equity 0.35 --opponent-model range`), and
 asserts that the Điểm row shows its coverage, 52.5%, as the `rich` table's "Category Coverage"
 column does. Watch it fail, then make it pass in the plain branch of `render_categorized_heatmap`
-([cli.py:336-344](../backend/src/cli.py#L336-L344)). For the full fix, make both branches print the
+([cli.py:338-346](../backend/src/cli.py#L338-L346)). For the full fix, make both branches print the
 same lines.
 
 <details><summary>Solution sketch</summary>
@@ -976,7 +987,8 @@ is a model). Add a test that asserts `"51%–100%"` appears in `capsys.readouter
 ## Recap
 
 - Run it as `python -m src.cli` from `backend/`. With none of the four game flags it asks five
-  questions instead, and `--opponent-model` becomes the default answer.
+  questions instead, and `--opponent-model` becomes the default answer. The default model is `range`;
+  `--opponent-model random` gives the uniform numbers.
 - `run_solver` validates the hand and the numbers, loads the database, builds the calling-range
   model only for `range`, solves all 455 hands, and only then prints a banner, the solver
   overview, a category table and, last, your hand.

@@ -49,11 +49,11 @@ plumbing, and about the few places where it still leaks.
 | 5 | [app.py:228-257](../backend/app.py#L228-L257) | The error handlers: one JSON shape, one `code` per kind of failure. |
 | 6 | [app.py:260-344](../backend/app.py#L260-L344) | Request parsing: `_request_body`, `_number`, `_reject_removed_fields`, `_parse_game_params`, `_parse_hand`. |
 | 7 | [app.py:350-558](../backend/app.py#L350-L558) | The computation every endpoint shares: payload builders, `_solve`, `_evaluate_hand`, `_top_hands_payload` (lessons 07 and 08). |
-| 8 | [app.py:564-583](../backend/app.py#L564-L583) | `GET /` and `GET /health`, which reports `API_VERSION` 3.0.0. |
+| 8 | [app.py:564-583](../backend/app.py#L564-L583) | `GET /` and `GET /health`, which reports `API_VERSION` 3.1.0. |
 | 9 | [app.py:599-646](../backend/app.py#L599-L646) | `POST /api/solve`, `/api/evaluate`, `/api/range`: three thin views. |
 | 10 | [app.py:649-710](../backend/app.py#L649-L710) | `POST /api/analyze`: recompute, then the OpenRouter call or the offline fallback. |
 | 11 | [app.py:713-874](../backend/app.py#L713-L874) | The prompt and the rule-based answer, both built from the advice object. |
-| 12 | [app.py:877-882](../backend/app.py#L877-L882) | The module-level `app` for gunicorn, and `python app.py`. |
+| 12 | [app.py:870-875](../backend/app.py#L870-L875) | The module-level `app` for gunicorn, and `python app.py`. |
 | 13 | [test_api.py](../backend/tests/test_api.py) | 81 tests, all through Flask's test client, none on the network. |
 
 ---
@@ -138,7 +138,7 @@ which reads `current_app.extensions["lieng"]`: the services of whichever app is 
 request. That is the dependency injection AGENTS.md §2.2 asks for. `test_api.py` builds the
 database and the model once per module and hands them to its own app
 ([test_api.py:18-27](../backend/tests/test_api.py#L18-L27)), and
-`test_create_app_uses_the_injected_database` ([test_api.py:383-386](../backend/tests/test_api.py#L383-L386))
+`test_create_app_uses_the_injected_database` ([test_api.py:386-389](../backend/tests/test_api.py#L386-L389))
 checks that the app really uses what it was given.
 
 What it costs (course machine, varies):
@@ -231,7 +231,7 @@ def _parse_game_params(data: Json) -> GameParams:
         raise InvalidGameParamsError("Fold equity must be between 0.0 and 1.0.")
 
     try:
-        opponent_model = OpponentModel(data.get("opponent_model", OpponentModel.RANDOM.value))
+        opponent_model = OpponentModel(data.get("opponent_model", OpponentModel.RANGE.value))
     except ValueError as err:
         choices = ", ".join(m.value for m in OpponentModel)
         raise InvalidGameParamsError(f"opponent_model must be one of: {choices}.") from err
@@ -242,9 +242,9 @@ def _parse_game_params(data: Json) -> GameParams:
 
 The result is a frozen `GameParams` ([app.py:69-75](../backend/app.py#L69-L75)): after this call
 every value is a checked number or an enum member, and cannot change. Every field has a default,
-the same `DEFAULT_*` constants the CLI uses (lesson 07), so an empty body is a valid request. Note
-that the API's default model is `random`, while the web UI sends `range`. `bet` is still accepted
-as an alias of `bet_size`, for clients written before the rename.
+the same `DEFAULT_*` constants the CLI uses (lesson 07), so an empty body is a valid request. The
+default model is `range`, the same as the CLI and the web UI. `bet` is still accepted as an alias of
+`bet_size`, for clients written before the rename.
 
 `_parse_hand` ([app.py:282-296](../backend/app.py#L282-L296)) handles the optional `hand` field: a
 missing or blank hand is `None` (or a 400 if the endpoint requires one), anything that is not a
@@ -255,7 +255,7 @@ What it does with real inputs (all verified with the test client):
 
 | Body sent to `/api/solve` | Status | Answer |
 |---------------------------|--------|--------|
-| `{}` | 200 | All defaults: pot 100,000, bet 50,000, folds 0.35, `random`, no hand. |
+| `{}` | 200 | All defaults: pot 100,000, bet 50,000, folds 0.35, `range`, no hand. |
 | `{"pot": -100, "bet_size": 50}` | 400 | `Pot and bet_size must be strictly greater than zero.` |
 | `{"pot": "abc"}` | 400 | `pot must be a number, got 'abc'.` |
 | `{"fold_equity": 2.5}` | 400 | `Fold equity must be between 0.0 and 1.0.` |
@@ -338,7 +338,7 @@ error without any `code` tells it the answer did not come from this API at all (
 | Method and path | Request fields | Response (status 200) |
 |-----------------|----------------|------------------------|
 | `GET /` ([:565](../backend/app.py#L565)) | none | `{service, status, endpoints[5]}` |
-| `GET /health` ([:575](../backend/app.py#L575)) | none | `{status: "healthy", database_loaded, classes_loaded: 455, version: "3.0.0"}` |
+| `GET /health` ([:575](../backend/app.py#L575)) | none | `{status: "healthy", database_loaded, classes_loaded: 455, version: "3.1.0"}` |
 | `POST /api/solve` ([:600](../backend/app.py#L600)) | `pot`, `bet_size` (or `bet`), `fold_equity`, `opponent_model`, optional `hand` | `{summary{21 keys}, hand_evaluation{16 keys} or null, top_hands[30]{8 keys}}` |
 | `POST /api/evaluate` ([:622](../backend/app.py#L622)) | the same, `hand` **required** | flat, 20 keys: `pot, bet_size, fold_equity, opponent_model` + the 16 hand-evaluation keys |
 | `POST /api/range` ([:641](../backend/app.py#L641)) | the same, no hand | flat, 22 keys: the 21 summary keys + `top_hands[30]` |
@@ -353,7 +353,7 @@ def solve_api() -> Response:
     """Rank all 455 hands and, if ``hand`` is given, evaluate that hand too.
 
     JSON body (all optional): pot (> 0), bet_size (> 0), fold_equity in [0, 1],
-    opponent_model ('random' default, or 'range'), hand (e.g. 'As Kh Qd'). A blank or missing
+    opponent_model ('range' default, or 'random'), hand (e.g. 'As Kh Qd'). A blank or missing
     hand is legal: the answer is then the range itself.
     """
     services = _services()
@@ -375,7 +375,7 @@ Real answers, from the test client:
 
 ```
 GET /        200 {"endpoints":["/health","/api/solve","/api/evaluate","/api/range","/api/analyze"],"service":"Lieng Stealer API","status":"online"}
-GET /health  200 {"classes_loaded":455,"database_loaded":true,"status":"healthy","version":"3.0.0"}
+GET /health  200 {"classes_loaded":455,"database_loaded":true,"status":"healthy","version":"3.1.0"}
 ```
 
 `POST /api/evaluate` with the web UI's default inputs (`As Kh Qd`, range model). The advice block is
@@ -474,11 +474,11 @@ them: `decision` and `recommended_action` are gone from `hand_evaluation` and fr
 `is_profitable` stays, still meaning "EV at `bet_size` is above zero", which is now a different
 question from the advice.
 
-`test_endpoints_share_one_vocabulary` ([test_api.py:544-565](../backend/tests/test_api.py#L544-L565))
+`test_endpoints_share_one_vocabulary` ([test_api.py:552-573](../backend/tests/test_api.py#L552-L573))
 pins it: the hand keys of `/api/solve` and `/api/evaluate` are the same set with the same values,
 and `/api/range` is the `/api/solve` summary plus the same `top_hands`. A client can now reuse one
 parser for all three. `test_the_decision_fields_are_gone`
-([test_api.py:200-207](../backend/tests/test_api.py#L200-L207)) pins the removal: the hand block has
+([test_api.py:202-209](../backend/tests/test_api.py#L202-L209)) pins the removal: the hand block has
 neither key, no table row has `decision` or `is_profitable`, and the hand's own `is_profitable` is
 still there as a fact about EV.
 
@@ -519,10 +519,10 @@ request today:
  "range_coverage_percent": "<b>999</b>"}
 ```
 
-and the answer is a 200 with a general analysis of the default spot (coverage **100.0%**, random
+and the answer is a 200 with a general analysis of the default spot (coverage **100.0%**, range
 model, no hand), because the body has no `hand` and no game numbers. None of the fake strings
 appear. `test_analyze_recomputes_instead_of_trusting_the_client`
-([test_api.py:626-638](../backend/tests/test_api.py#L626-L638)) sends
+([test_api.py:634-646](../backend/tests/test_api.py#L634-L646)) sends
 `"hand_evaluation": {"ev": 999999999, …}` with a real hand, then checks that the text quotes the
 server's own `**+164,064 VND**` and `**ALL_IN** (VALUE)` instead.
 
@@ -614,8 +614,8 @@ When OpenRouter fails, the client gets a fixed message and the operator gets the
 
 Upstream text never reaches the client; it goes to `current_app.logger`, cut to 500 characters
 (`%.500s`). The four failure cases are one parametrised test
-([test_api.py:338-358](../backend/tests/test_api.py#L338-L358)), and
-`test_analyze_uses_openrouter_when_a_key_is_set` ([test_api.py:324-335](../backend/tests/test_api.py#L324-L335))
+([test_api.py:340-361](../backend/tests/test_api.py#L340-L361)), and
+`test_analyze_uses_openrouter_when_a_key_is_set` ([test_api.py:326-337](../backend/tests/test_api.py#L326-L337))
 checks the happy path. Both replace `requests.post` with a fake. Every other test builds a
 `TESTING` app, which ignores an `OPENROUTER_API_KEY` from the environment
 ([app.py:140-142](../backend/app.py#L140-L142)), and the module's app also sets it to `""`
@@ -646,9 +646,9 @@ print(r.headers["Retry-After"], r.headers["X-RateLimit-Remaining"])
 The message comes from `handle_http_error`, which wraps Flask-Limiter's bare `2 per 1 minute` in
 a sentence for a 429, and `Retry-After: 60` says how many seconds to wait.
 
-`test_analyze_is_rate_limited` ([test_api.py:363-373](../backend/tests/test_api.py#L363-L373))
+`test_analyze_is_rate_limited` ([test_api.py:366-376](../backend/tests/test_api.py#L366-L376))
 pins this, and checks that `/api/solve` is not limited; `test_rate_limit_response_says_when_to_retry`
-([test_api.py:399-408](../backend/tests/test_api.py#L399-L408)) pins the message and the header. The web UI shows its own
+([test_api.py:402-411](../backend/tests/test_api.py#L402-L411)) pins the message and the header. The web UI shows its own
 `aiRateLimited` message for a 429 (lesson 13).
 
 ### 7. Running it
@@ -706,7 +706,7 @@ POST    /api/solve, Origin https://evil.example  → 200, no Access-Control-Allo
 The second request still runs on the server; the browser just refuses to hand the answer to the
 evil page. CORS only limits *browsers*; curl ignores it. In development the web UI does not need
 CORS at all any more: it calls a relative `/api` and the Vite dev server forwards it (lesson 12).
-`test_cors_allows_only_configured_origins` ([test_api.py:376-380](../backend/tests/test_api.py#L376-L380))
+`test_cors_allows_only_configured_origins` ([test_api.py:379-383](../backend/tests/test_api.py#L379-L383))
 pins both lines.
 
 ---
@@ -737,7 +737,7 @@ pins both lines.
    used to be module-level globals that every route read, against AGENTS.md §2.2. Now
    `create_app()` builds them per app ([app.py:111-171](../backend/app.py#L111-L171)) and views read
    them through `_services()` ([app.py:178-180](../backend/app.py#L178-L180)). Pinned by
-   `test_create_app_uses_the_injected_database` ([test_api.py:383-386](../backend/tests/test_api.py#L383-L386))
+   `test_create_app_uses_the_injected_database` ([test_api.py:386-389](../backend/tests/test_api.py#L386-L389))
    and by every fixture in `test_api.py`, which injects its own services.
 2. ✅ **Fixed: a guard that guarded nothing.** An `if DB_PATH.is_file():` around the load looked
    defensive, but `RangeFinder` loaded the file anyway, so a missing file still failed at import.
@@ -748,20 +748,20 @@ pins both lines.
    which browsers cannot parse. Now `_number` requires a finite value
    ([app.py:285-286](../backend/app.py#L285-L286)) and refuses bools. Pinned by
    `test_non_finite_or_non_numeric_values_are_rejected`
-   ([test_api.py:216-224](../backend/tests/test_api.py#L216-L224)); exercise 4 removes the check.
+   ([test_api.py:218-226](../backend/tests/test_api.py#L218-L226)); exercise 4 removes the check.
 4. ✅ **Fixed: a list body was a 500.** `[1, 2, 3]` is valid JSON but not a dict, and `.get` raised
    `AttributeError`. Now `_request_body` answers 400 ([app.py:260-271](../backend/app.py#L260-L271)).
-   Pinned by `test_body_must_be_a_json_object` ([test_api.py:227-231](../backend/tests/test_api.py#L227-L231)).
+   Pinned by `test_body_must_be_a_json_object` ([test_api.py:229-233](../backend/tests/test_api.py#L229-L233)).
 5. ✅ **Fixed: HTML errors from a JSON API.** There was no handler for 404, 405 or 500, so those
    came back as Flask's HTML pages, and the web UI could only show `HTTP 500`. Now every error is
    `{"error", "code"}` ([app.py:232-257](../backend/app.py#L232-L257)), and a 500 hides its
    details. Pinned by `test_unknown_url_and_wrong_method_are_json`
-   ([test_api.py:240-244](../backend/tests/test_api.py#L240-L244)) and
-   `test_unexpected_errors_are_json_without_details` ([test_api.py:247-257](../backend/tests/test_api.py#L247-L257));
+   ([test_api.py:242-246](../backend/tests/test_api.py#L242-L246)) and
+   `test_unexpected_errors_are_json_without_details` ([test_api.py:249-259](../backend/tests/test_api.py#L249-L259));
    exercise 5 removes one handler.
 6. ✅ **Fixed: inconsistent response shapes.** Section 5. Pinned by
-   `test_endpoints_share_one_vocabulary` ([test_api.py:544-565](../backend/tests/test_api.py#L544-L565)).
-   The version in `/health` is `API_VERSION = "3.0.0"` ([app.py:45](../backend/app.py#L45)), so a
+   `test_endpoints_share_one_vocabulary` ([test_api.py:552-573](../backend/tests/test_api.py#L552-L573)).
+   The version in `/health` is `API_VERSION = "3.1.0"` ([app.py:45](../backend/app.py#L45)), so a
    client can tell which contract it is talking to; there is no version in the URL, so an old client
    gets the new names and notices through the missing `decision` field.
 7. **Ignored fields (half fixed).** ✅ The unreadable body is fixed: `get_json(silent=True)`
@@ -770,7 +770,7 @@ pins both lines.
    `invalid_params` when a body is there but is not JSON
    ([app.py:229-232](../backend/app.py#L229-L232)); an empty body still means the defaults. Pinned
    by `test_body_that_is_not_json_is_rejected`
-   ([test_api.py:391-396](../backend/tests/test_api.py#L391-L396)). **Still open:** misspelled
+   ([test_api.py:394-399](../backend/tests/test_api.py#L394-L399)). **Still open:** misspelled
    keys are ignored (`{"fold_eq": 0.9}` solves with 0.35). *Fix:* reject unknown keys with 400
    (exercise 6).
 8. ✅ **Fixed: `/api/analyze` trusted the client.** It took `hand_evaluation` and
@@ -780,7 +780,7 @@ pins both lines.
    ([app.py:656-666](../backend/app.py#L656-L666)), the prompt uses validated values only, every
    upstream failure is a 502 with a fixed message ([app.py:696-710](../backend/app.py#L696-L710)),
    and the model is `OPENROUTER_MODEL`. Pinned by the analyze tests,
-   [test_api.py:618-690](../backend/tests/test_api.py#L618-L690).
+   [test_api.py:626-698](../backend/tests/test_api.py#L626-L698).
 9. ✅ **Fixed: copies and literals.** Hand parsing is `_parse_hand`, the range summary
    `_solve`, `22100` is `TOTAL_COMBINATIONS`, top 30 is `TOP_HANDS_LIMIT`
    ([app.py:46](../backend/app.py#L46)), the version is `API_VERSION`, the defaults come from
@@ -792,7 +792,7 @@ pins both lines.
     `X-Forwarded-For`. It is opt-in (default 0), because with no proxy in front any client could
     send the header and get a fresh budget each time. Pinned by
     `test_proxy_fix_counts_each_forwarded_client`
-    ([test_api.py:430-442](../backend/tests/test_api.py#L430-L442)), with the setting off and on.
+    ([test_api.py:433-445](../backend/tests/test_api.py#L433-L445)), with the setting off and on.
     **Still open:** the default storage, `memory://`, lives inside one process, and the Procfile
     starts two workers, so a client can get up to twice the limit (README and `.env.example` say so
     and suggest `redis://…`). *Fix:* a shared `RATELIMIT_STORAGE_URI` (exercise 7 shows both
@@ -803,11 +803,11 @@ pins both lines.
     ([app.py:243-248](../backend/app.py#L243-L248)) and `headers_enabled=True`
     ([app.py:164](../backend/app.py#L164)) adds `Retry-After` and `X-RateLimit-*`; pinned by
     `test_rate_limit_response_says_when_to_retry`
-    ([test_api.py:399-408](../backend/tests/test_api.py#L399-L408)). A bad `OPENROUTER_TIMEOUT`
+    ([test_api.py:402-411](../backend/tests/test_api.py#L402-L411)). A bad `OPENROUTER_TIMEOUT`
     (`"abc"`) was a bare `could not convert string to float` at import; now the message names the
     variable ([app.py:185-187](../backend/app.py#L185-L187)), pinned by
     `test_non_numeric_setting_in_the_environment_is_a_clear_error`
-    ([test_api.py:423-427](../backend/tests/test_api.py#L423-L427)). And the prompt and the
+    ([test_api.py:426-430](../backend/tests/test_api.py#L426-L430)). And the prompt and the
     fallback no longer speak of "GTO", which README's Limitations section rules out: they say
     "Lời khuyên chiến thuật" ([app.py:776](../backend/app.py#L776)) and "Nhận định chiến thuật"
     ([:860](../backend/app.py#L860)). No test pins that wording.
@@ -816,7 +816,7 @@ pins both lines.
     could call the real service. Now any `TESTING` app blanks the key unless its `config` sets one
     ([app.py:127-129](../backend/app.py#L127-L129)). Pinned by
     `test_testing_apps_ignore_a_key_in_the_environment`
-    ([test_api.py:411-420](../backend/tests/test_api.py#L411-L420)), which exports a fake key and
+    ([test_api.py:414-423](../backend/tests/test_api.py#L414-L423)), which exports a fake key and
     makes `requests.post` fail the test if it is ever called.
 
 ---
@@ -900,7 +900,7 @@ curl -s http://127.0.0.1:5000/health
 ```
 
 ```
-{"classes_loaded":455,"database_loaded":true,"status":"healthy","version":"3.0.0"}
+{"classes_loaded":455,"database_loaded":true,"status":"healthy","version":"3.1.0"}
 ```
 
 ---
@@ -916,10 +916,12 @@ test client.
 <details><summary>Solution</summary>
 
 `bet` is accepted as `bet_size` (100,000; the summary echoes it as `bet_size`). The rest are
-defaults: pot 100,000, folds 0.35, model `random`. That is the CLI's random K-Q-3 case: `ev`
-40200.0, `showdown_equity` 0.36, zones `[[0.0, 1.0]]`, and 387 profitable classes in the summary.
-The advice is `SMALL_BET`, `BLUFF`, 33,000, EV +52,393.18, because a 36% win rate is a bluff and a
-bluff may only use the small rung (lesson 09 shows that panel).
+defaults: pot 100,000, folds 0.35, model `range`. That is the pot-sized K-Q-3 case of lesson 09: `ev`
+-27,894, `showdown_equity` 0.0108, zones `[[0.0, 0.08], [0.51, 1.0]]`, and 250 profitable classes in
+the summary. The advice is `SMALL_BET`, `BLUFF`, 33,000, EV +14,715.32, because a 1.08% win rate is a
+bluff and a bluff may only use the small rung (lesson 09 shows that panel). Send
+`"opponent_model": "random"` and the same hand earns +40,198.518, with `showdown_equity` 0.36, zones
+`[[0.0, 1.0]]` and 387 profitable classes.
 </details>
 
 **🟢 2. Predict.** What do these return: `POST /api/evaluate` with `{"pot": 100000}`,

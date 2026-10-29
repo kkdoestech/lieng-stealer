@@ -98,7 +98,7 @@ def final_pot(pot: float, bet_size: float) -> float:
 ```
 
 Every function in `ev.py` calls `final_pot()`, and so do the API's range summary
-([app.py:359](../backend/app.py#L359)) and the CLI report ([cli.py:100](../backend/src/cli.py#L100)).
+([app.py:359](../backend/app.py#L359)) and the CLI report ([cli.py:102](../backend/src/cli.py#L102)).
 If the call model ever changes, this is the line to change.
 
 ### 2. `calculate_ev`: two lines of maths behind four guards
@@ -143,8 +143,9 @@ when you leave a value out:
 | showdown part = 0.65 × 149,380 | 97,097 |
 | **EV** | **+132,097** |
 
-The UI shows +131,876 for the same hand. The UI defaults to the *range* opponent model, which
-gives Q-K-A slightly less equity (0.9952) because the hands that call are stronger (lesson 06).
+The default request uses the *range* opponent model, which gives Q-K-A slightly less equity (0.9952)
+because the hands that call are stronger (lesson 06), so the API and the CLI answer +131,876 for the
+same hand. The table above is the uniform model, which `"opponent_model": "random"` still selects.
 
 ### 3. Three numbers you can check in your head
 
@@ -533,7 +534,7 @@ This is the AGENTS.md rule "immutable data models" in practice.
 5. **A field that is sometimes meaningless.** `EVResult.break_even_fold_equity` is always
    computed from the current `w`. Under the range model, `w` itself depends on `f`, so the number
    does not mean "break-even". The API hides it (`None`), and so does the CLI ("n/a (range
-   model)", [cli.py:166-169](../backend/src/cli.py#L166-L169)). The dataclass still carries it
+   model)", [cli.py:168-171](../backend/src/cli.py#L168-L171)). The dataclass still carries it
    (exercise 6).
 6. **Modelling limits, not bugs.** One betting round, a fixed call size, one fold rate that applies to
    all three rungs, and `f` is a number you guess. The output is exactly as good as that guess.
@@ -677,8 +678,8 @@ contract?
 
 K-Q-3's zones become `[(0.0, 0.08), (0.501, 1.0)]`, and 5-3-2's start moves from 0.34 to 0.332. The
 assertions that pin grid values fail: `test_solve_range_model_prices_medium_hand`
-([test_api.py:495](../backend/tests/test_api.py#L495)) and the 5-3-2 break-even test
-([test_api.py:519](../backend/tests/test_api.py#L519)). The 1% resolution is effectively part of the
+([test_api.py:500](../backend/tests/test_api.py#L500)) and the 5-3-2 break-even test
+([test_api.py:527](../backend/tests/test_api.py#L527)). The 1% resolution is effectively part of the
 public API: the page and the tests both assume it. Changing it is an API change, not an internal tweak.
 </details>
 

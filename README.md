@@ -8,7 +8,7 @@ possible hands at once.
 It ships as a Python engine with a command-line tool, a Flask JSON API, and a bilingual (English /
 Vietnamese) React web app called **LIÊNG SCOPE**.
 
-`Python 3.11+` · `Flask 3` · `React 19 + Vite 8` · `267 backend + 35 frontend tests` · `MIT license`
+`Python 3.11+` · `Flask 3` · `React 19 + Vite 8` · `267 backend + 37 frontend tests` · `MIT license`
 
 ---
 
@@ -35,9 +35,9 @@ Vietnamese) React web app called **LIÊNG SCOPE**.
 - **Knows every hand's equity.** The win rate of all 455 hand types (all 22,100 hands, with suits
   ignored) against every possible opponent hand, computed **exactly** and stored in a small JSON file.
 - **Models the opponent two ways.**
-  - `random`: the opponent folds regardless of their cards.
-  - `range`: the opponent folds their **weakest** hands, so you are called only by strong ones. Computed
-    exactly, with card removal.
+  - `range` (the default): the opponent folds their **weakest** hands first, so you are called only by
+    stronger ones. Computed exactly, with card removal.
+  - `random`: the opponent folds regardless of their cards, so a call comes from a uniformly random hand.
 - **Recommends a size.** One of three wagers (a third of the pot, three quarters, the whole pot) with
   its EV, the win rate behind it, and the reason it won. Hands that earn nothing get a check instead.
 - **Prices every fold estimate.** The choice must clear a 5%-of-pot floor at your fold rate and at the
@@ -64,7 +64,7 @@ python app.py
 ```
 
 Check it: `curl -s http://127.0.0.1:5000/health` →
-`{"classes_loaded":455,"database_loaded":true,"status":"healthy","version":"3.0.0"}`
+`{"classes_loaded":455,"database_loaded":true,"status":"healthy","version":"3.1.0"}`
 
 **2. Frontend** (in a second terminal):
 
@@ -75,8 +75,8 @@ npm run dev
 ```
 
 Open <http://localhost:5173>. The page solves the default spot on load: pot 100,000 VND, bet 50,000,
-the opponent folds 35%, hand `As Kh Qd`. In development the page calls `/api/...` on its own origin and
-Vite forwards those requests to the backend.
+the opponent folds 35% of their weakest hands first, hand `As Kh Qd`. In development the page calls
+`/api/...` on its own origin and Vite forwards those requests to the backend.
 
 **Or use the command line only** (no frontend needed):
 
@@ -123,23 +123,33 @@ hands collapse into C(15, 3) = **455 canonical hand types** (rank multisets). Ea
 
 ### 3. Equity: how often a hand wins when called
 
-- **Against a random hand** (`random` model): for each of the 455 types, remove its three cards from the
+`opponent_model` picks one of two readings of the same assumption. Both take `fold_equity` as the share
+of the time the opponent folds, and they differ in which hands do the folding.
+
+- **`range` (the default).** The opponent folds the weakest *f* share of the 22,100 pre-deal hands and
+  calls with the strongest *1 − f*. Folding works from the bottom up, so a call comes from a stronger
+  hand than the average one. `CallingRangeModel` computes this exactly, including card removal (your
+  cards can't be in the opponent's hand), using one prefix-sum table per hand type (built once in
+  ≈ 50 ms). At *f* = 0 it reproduces `winrates.json` exactly.
+- **`random` (only when you ask for it).** The opponent folds *f* of the time whatever they hold, so a
+  call comes from a uniformly random hand. For each of the 455 types, remove its three cards from the
   deck and compare it with **every** possible opponent hand, all C(49, 3) = 18,424 of them. Equity =
-  (wins + ½ ties) / 18,424. The results are stored in `backend/data/winrates.json` (≈ 83 KB) and loaded
-  into a dictionary at start-up for O(1) lookups.
-- **Against a calling range** (`range` model): an opponent who folds a fraction *f* of the time is assumed
-  to fold their weakest hands, so a call comes from the strongest (1 − *f*) × 22,100 combinations.
-  `CallingRangeModel` computes equity against exactly that range, including card removal (your cards
-  can't be in the opponent's hand), using one prefix-sum table per hand type (built once in ≈ 50 ms).
-  At *f* = 0 it reproduces `winrates.json` exactly.
+  (wins + ½ ties) / 18,424. Those numbers are stored in `backend/data/winrates.json` (≈ 83 KB) and
+  loaded into a dictionary at start-up for O(1) lookups.
+
+The API, the CLI and the web page all default to `range`. To get the uniform model, send
+`"opponent_model": "random"`.
+
+The models disagree most about medium hands. At a 30% fold rate, `K-Q-3` (3 points) has equity
+**8.19%** against the range model and **36.00%** against the uniform one. `9-8-4` has **0.00%** and
+**10.89%**. Across all 455 classes, **370** differ by more than 5 equity points. At the web page's
+default 35% fold rate the gap for `K-Q-3` is wider still, **1.08%** against the range and **36.00%**
+against the uniform model.
 
 `fold_equity` is the API's **single** opponent assumption. The calling range it implies,
-`(1 − f) × 100%`, is reported back as `call_range_percent` (read-only, derived). The same engine powers
-the single-hand answer and the 455-class table, so one request has exactly one equity per hand — the
-verdict card and the table row cannot disagree.
-
-The difference matters for medium hands: `K-Q-3` (3 points) wins **36%** against a random hand, but only
-**1.1%** against an opponent who folds their weakest 35% and calls with the rest.
+`(1 − f) × 100%`, is reported back as `call_range_percent` (read-only, derived, and `null` under
+`random`). The same engine powers the single-hand answer and the 455-class table, so one request has
+exactly one equity per hand, and the verdict card and the table row cannot disagree.
 
 ### 4. From EV to a bet size
 
@@ -206,15 +216,17 @@ fails.*
 Inputs on the left, results on the right.
 
 - **Inputs:** pot and bet (with −/+ steppers and presets such as *100k* or *0.33x pot*), the opponent's
-  fold frequency (slider), how the opponent folds (**Weakest hands** = `range`, the default; **At
-  random** = `random`), and your hand (e.g. `As Kh Qd`, or one of the presets). The calling-range slider
-  is a second view of the same assumption: it shows the strongest `(1 − f) × 100%` of hands and moving it
-  moves the fold frequency, so the page always sends the API one opponent assumption.
-- **Results:** the recommendation (action, kind and amount) with the ladder and the reason behind it;
-  *where raising pays*, a bar showing the profitable fold ranges with a marker at your current estimate;
-  range coverage, showdown equity, EV and bluff break-even; coverage by category; the most profitable
-  hands; and optional **analysis notes** (see [`/api/analyze`](#http-api)). Clearing the hand keeps the
-  range tables on screen and says so.
+  fold frequency (slider), how the opponent folds (**Folds weakest 35% first** = `range`, the default;
+  **Folds 35% regardless of hand** = `random`), and your hand (e.g. `As Kh Qd`, or one of the presets).
+  The calling-range slider is a second view of the same assumption: it shows the strongest
+  `(1 − f) × 100%` of hands and moving it moves the fold frequency, so the page always sends the API one
+  opponent assumption.
+- **Results:** the recommendation (action, kind and amount) with the ladder and the reason behind it; a
+  line naming the assumption in the response's own numbers (*the opponent folds their weakest 35% of
+  hands and calls with the best 65%*); *where raising pays*, a bar showing the profitable fold ranges
+  with a marker at your current estimate; range coverage, showdown equity, EV and bluff break-even;
+  coverage by category; the most profitable hands; and optional **analysis notes** (see
+  [`/api/analyze`](#http-api)). Clearing the hand keeps the range tables on screen and says so.
 - **EN / VI** switch in the header; the choice is remembered in the browser. Numbers follow the language
   (`131,876` in English, `131.876` in Vietnamese).
 
@@ -225,7 +237,7 @@ The visual rules (colours, type, layout, copy) are in [`DESIGN.md`](DESIGN.md).
 From `backend/`:
 
 ```bash
-python -m src.cli --pot 100000 --bet 100000 --fold-equity 0.35 --hand "Ks Qh 3d" --opponent-model range
+python -m src.cli --pot 100000 --bet 100000 --fold-equity 0.35 --hand "Ks Qh 3d"
 ```
 
 It prints the game state, a range summary, a per-category table and the advice for your hand:
@@ -254,7 +266,7 @@ It prints the game state, a range summary, a per-category table and the advice f
 | `--bet` | Your bet / raise | 50000 |
 | `--fold-equity` (alias `--p-fold`) | Opponent fold probability, 0–1 | 0.35 |
 | `--hand` | Your hand, e.g. `"As Kh Qd"` or `"As,Kh,Qd"` | none (range report only) |
-| `--opponent-model` | `random` or `range` | `random` |
+| `--opponent-model` | `range` or `random` | `range` |
 | `--db` | Path to the win-rate file | `backend/data/winrates.json`, wherever you run from |
 
 Run it with no options (or only `--opponent-model`, which becomes the default answer) for an
@@ -285,11 +297,16 @@ origins in `CORS_ORIGINS` (by default the Vite dev server; see [Configuration](#
 | `pot` | number | 100000 | > 0 |
 | `bet_size` (`bet` is still accepted) | number | 50000 | > 0 |
 | `fold_equity` | number | 0.35 | 0–1; the single opponent assumption. Under `range` it also fixes the calling range, `(1 − f) × 100%` |
-| `opponent_model` | `"random"` \| `"range"` | `"random"` | the web app sends `"range"` |
+| `opponent_model` | `"range"` \| `"random"` | `"range"` | `"range"` folds the weakest hands first, `"random"` folds regardless of hand strength. The web page sends `"range"` |
 | `hand` | string | — | optional for `/api/solve`, required for `/api/evaluate` |
 
 The body must be a JSON object, and numbers must be real, finite numbers (`"nan"`, `"inf"` and `true` are
 rejected). Missing fields take the defaults above.
+
+**Changed in 3.1.0:** the default `opponent_model` is now `"range"`. A client or command that omitted the
+field and relied on the old uniform numbers must send `"opponent_model": "random"` (API) or
+`--opponent-model random` (CLI). The old and new answers differ for most medium hands, as the K-Q-3 and
+9-8-4 numbers in [How it works](#3-equity-how-often-a-hand-wins-when-called) show.
 
 **Removed in 2.0.0:** `call_range_percent`. It encoded the same opponent assumption as `fold_equity`
 (a caller holding the strongest 30% folds 70% of the time), so sending both let one answer be computed
@@ -489,52 +506,54 @@ curl -s -X POST http://127.0.0.1:5000/api/evaluate -H "Content-Type: application
   -d '{"pot": 100000, "bet_size": 50000, "fold_equity": 0.35, "hand": "As Kh Qd"}'
 ```
 
-The game parameters plus exactly the `hand_evaluation` fields of `/api/solve` (`sensitivity` included,
-cut here to keep it short):
+The game parameters plus exactly the `hand_evaluation` fields of `/api/solve`. The request omits
+`opponent_model`, so it runs on the default `range` model. This is the Flask test client's own output for
+that body, pasted unchanged except for `sensitivity`, cut to keep it short:
 
 ```json
 {
   "advice": {
     "action": "ALL_IN",
     "amount": 100000.0,
-    "equity_when_called": 0.99693335,
-    "ev": 164402.00325,
-    "ev_ratio": 1.6440200325,
+    "equity_when_called": 0.9952,
+    "ev": 164064.0,
+    "ev_ratio": 1.64064,
     "kind": "VALUE",
     "ladder": [
-      {"action": "SMALL_BET", "amount": 33000.0, "blocked_by": null, "eligible": true, "ev": 121119.10846500001, "ev_ratio": 1.21119108465, "robust": true, "worst_ev_ratio": 1.1787001485500002},
-      {"action": "LARGE_BET", "amount": 75000.0, "blocked_by": null, "eligible": true, "ev": 148251.669375, "ev_ratio": 1.48251669375, "robust": true, "worst_ev_ratio": 1.4082833562500001},
-      {"action": "ALL_IN", "amount": 100000.0, "blocked_by": null, "eligible": true, "ev": 164402.00325, "ev_ratio": 1.6440200325, "robust": true, "worst_ev_ratio": 1.5449400275}
+      {"action": "SMALL_BET", "amount": 33000.0, "blocked_by": null, "eligible": true, "ev": 120932.07999999999, "ev_ratio": 1.2093208, "robust": true, "worst_ev_ratio": 1.1763872},
+      {"action": "LARGE_BET", "amount": 75000.0, "blocked_by": null, "eligible": true, "ev": 147970.0, "ev_ratio": 1.4797, "robust": true, "worst_ev_ratio": 1.4048},
+      {"action": "ALL_IN", "amount": 100000.0, "blocked_by": null, "eligible": true, "ev": 164064.0, "ev_ratio": 1.64064, "robust": true, "worst_ev_ratio": 1.54076}
     ],
     "reason": "ALL_IN_VALUE",
     "robust": true,
-    "why": {"call_component": 129402.00325000001, "fold_component": 35000.0, "net": 164402.00325},
+    "why": {"call_component": 129064.0, "fold_component": 35000.0, "net": 164064.0},
     "win_rate_defined": true
   },
   "bet_size": 50000.0,
-  "break_even_fold_equity": 0.0,
-  "call_range_percent": null,
+  "break_even_fold_equity": null,
+  "call_range_percent": 65.0,
   "canonical_id": "Q-K-A",
   "category": "LIENG",
   "category_name": "Liêng",
   "equity_vs_random": 0.99693335,
-  "ev": 132101.33550000002,
+  "ev": 131876.0,
   "fold_equity": 0.35,
   "hand": "As Kh Qd",
   "is_profitable": true,
-  "opponent_model": "random",
+  "opponent_model": "range",
   "pot": 100000.0,
   "profitable_fold_zones": [[0.0, 1.0]],
   "profitable_from_fold_equity": 0.0,
   "random_hand_equity": 0.99693335,
   "score_name": "Liêng Q-K-A",
-  "showdown_equity": 0.99693335
+  "showdown_equity": 0.9952
 }
 ```
 
-Q-K-A wins 99.69% of showdowns and all three rungs clear the floor, so the answer is the largest one. The
-two EV fields differ on purpose: `ev` is the EV of the `bet_size` you sent (50,000), `advice.ev` is the EV
-of the size the policy recommends (100,000).
+Q-K-A wins 99.52% of showdowns against the strongest 65% of hands, which is `showdown_equity` here, and
+99.69% against a random hand, which is `equity_vs_random`. All three rungs clear the floor, so the
+answer is the largest one. The two EV fields differ on purpose: `ev` is the EV of the `bet_size` you
+sent (50,000), `advice.ev` is the EV of the size the policy recommends (100,000).
 
 `/api/range` returns the same fields as the `/api/solve` `summary` (including `category_breakdown`) plus
 `top_hands`, in the same shape as above. `/api/analyze` takes the same fields as `/api/solve` (with an
@@ -595,7 +614,7 @@ lieng-stealer/
 │       ├── i18n.js             English and Vietnamese UI text
 │       ├── format.js           money and fold-zone formatting
 │       ├── index.css, App.css  colour tokens and layout
-│       └── *.test.js(x)        Vitest tests (35 tests)
+│       └── *.test.js(x)        Vitest tests (37 tests)
 ├── .github/workflows/ci.yml    CI: backend, frontend and course checks on every push
 ├── learning/                   guided tour of the codebase: 18 lessons, start at COURSE.md
 ├── AGENTS.md                   engineering spec: rules, data model, maths, performance budgets
@@ -614,7 +633,7 @@ From the repository root:
 ```bash
 (cd backend && python -m pytest -q)                          # 267 collected; 2 fail on Windows only
 (cd backend && ruff check . && mypy)                         # lint + strict type check: 0 issues
-(cd frontend && npm test)                                    # 35 passed (Vitest, 3 files)
+(cd frontend && npm test)                                    # 37 passed (Vitest, 3 files)
 (cd frontend && npm run lint && npm run build)               # 0 warnings; production build in dist/
 python3 learning/verify_course.py                            # the course still matches the code
 ```
@@ -636,7 +655,7 @@ budgets by `PERF_BUDGET_FACTOR` (CI sets 3, because shared runners are slower).
 | `test_cli.py` | 16 | The ladder in the report and its markers, checks that quote the best refused rung, interactive mode, exit codes, validation before output, plain-text fallback |
 | `test_api.py` | 81 | Every endpoint, both models, one answer per hand, the advice block, injected thresholds and `sizing`, the removed fields, blank hands, JSON errors, `/api/analyze` (OpenRouter mocked), rate limit and `Retry-After`, proxy handling, CORS, settings |
 | `test_dynamic_scenarios.py` | 6 | End-to-end player stories (value raise, junk fold, pure bluff, coverage sweep, both models) |
-| frontend `App.test.jsx` | 29 | Rendering, the shared contract body, the linked sliders, the blank-hand range view, error messages, stale results cleared, language toggle, steppers, request cancelling, the recommendation and its ladder |
+| frontend `App.test.jsx` | 31 | Rendering, the shared contract body, the linked sliders, the blank-hand range view, error messages, stale results cleared, language toggle, steppers, request cancelling, the recommendation and its ladder, the assumption line |
 | frontend `format.test.js`, `i18n.test.js` | 6 | Locale-aware money formatting, zone formatting, EN/VI dictionary parity |
 
 The tests never call the internet: the LLM calls are mocked or use the offline fallback.
@@ -674,8 +693,9 @@ hosting platform's settings.
 - **EV, not an equilibrium.** The tool computes the expected value of one bet at each of three sizes,
   under the assumptions you give it. It does not solve for a game-theory-optimal strategy.
 - **One betting round, two players:** the opponent can only fold or call; no re-raises, no multi-way pots.
-- **The fold frequency is your estimate.** The `range` model also assumes the opponent folds strictly from
-  the weakest hand up; real players sit somewhere between `range` and `random`.
+- **The fold frequency is your estimate.** The default `range` model also assumes the opponent folds
+  strictly from the weakest hand up. Real players fold a mix of hands, so the answer is only as good as
+  the `fold_equity` you send.
 - **Tie-breaking rules** follow one common convention (see [Hand ranking](#1-hand-ranking)); house rules vary.
 - **Profitable zones are on a 1% grid**, so a zone boundary can differ from the exact value by up to one
   point (e.g. 0.51 instead of 0.50).
