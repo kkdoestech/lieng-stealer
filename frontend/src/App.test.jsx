@@ -304,14 +304,14 @@ describe("App", () => {
 
     const chosen = screen.getByText(/33,000/).closest(".ladder-rung");
     expect(chosen).toHaveClass("chosen");
-    expect(chosen).toHaveTextContent("✓");
+    expect(chosen).toHaveTextContent("●");
     expect(chosen).toHaveTextContent("Small bet");
     expect(chosen).not.toHaveTextContent("not worth the extra risk");
 
     const blocked = screen.getAllByText("not worth the extra risk").map((node) => node.closest(".ladder-rung"));
     expect(blocked).toHaveLength(2);
     expect(blocked[0]).toHaveClass("rung-blocked");
-    expect(blocked[0]).toHaveTextContent("✗");
+    expect(blocked[0]).toHaveTextContent("○");
     expect(blocked[0]).toHaveTextContent("75,000");
     expect(blocked[0]).toHaveTextContent("EV -11,995");
   });

@@ -1,45 +1,133 @@
+/* Liêng Scope — "dark pastel scrapbook".
+   Tokens, base type and the dotted scrapbook mat live here; the components' clothes live in App.css.
+   Self-hosted fonts live in ./fonts.css; the app must render offline, so no CDN faces at runtime. */
+
 :root {
-  /* Ayu Dark (bordered): one background, regions split by 1px lines */
-  --bg: #0B0E14;
-  --bg-input: #0D1017;
-  --bg-hover: #141922;
-  --bg-active: #1F2530;
+  /* page: near-black desk with a dotted mat */
+  --page: #121212;
+  --dot: #2a2a2a;
+  --dot-strong: #343434;
+  --carbon: #1a1a1a;
+  --carbon-2: #202020;
+  --hair: #343434;
 
-  --line: #232834;
-  --line-control: #3D4452;
+  /* bright ink on paper */
+  --ink: #f6f2ec;
+  --ink-muted: #c4b8bf;
+  --ink-faint: #8f858b;
 
-  --text: #BFBDB6;
-  --text-strong: #E6E1CF;
-  --muted: #8A9199;
+  /* paper edges */
+  --edge: #f2f2f2;
+  --edge-2: #d8d8d8;
 
-  --accent: #E6B450;   /* focus, main action, thin-value hands */
-  --accent-hover: #D9A63F;
-  --good: #AAD94C;     /* value hands / +EV */
-  --bad: #F07178;      /* -EV / errors */
-  --bluff: #D2A6FF;    /* bluff hands: a bluff is a real play, not a warning */
-  /* Soft fills for the profit map: the same two colours, mostly transparent */
-  --zone-good: color-mix(in srgb, var(--good) 45%, transparent);
-  --zone-bad: color-mix(in srgb, var(--bad) 20%, transparent);
+  /* semantic neon: the only place colour means something */
+  --value: #00ffa3;
+  --thin: #ffcc00;
+  --bluff: #c96bff;
+  --check: #9aa0a6;
+  --bad: #ff5c5c;
+  --stamp-ink: #080808;
 
-  --radius: 3px;
+  /* stationery */
+  --tape: #d9c9a3;
+  --tape-2: #c9b6d8;
+  --tape-edge: #b8a982;
+  --marker: #ffcc00;
+  --hard: #000000;
 
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, "Helvetica Neue", Arial, sans-serif;
-  font-size: 15px;
-  line-height: 1.5;
-  font-weight: 400;
-  color-scheme: dark;
+  /* focus */
+  --focus: #f2f2f2;
+
+  /* type */
+  --font-hand: "Caveat", "Segoe Script", "Comic Sans MS", cursive;
+  --font-print: "Patrick Hand", "Comic Sans MS", "Segoe Print", cursive;
+  --font-mono: "JetBrains Mono", "Cascadia Mono", "Consolas", "Liberation Mono", monospace;
+
+  --radius: 0px;
+
+  /* every angle is a token, so one media query flattens the whole tilt system */
+  --tilt-verdict: -2deg;
+  --tilt-ladder: 1.5deg;
+  --tilt-slip: -1.5deg;
+  --tilt-stamp: 3deg;
+  --tilt-tape: -6deg;
+}
+
+/* Paper tints by kind. The card background follows the recommendation's kind so the page reads at a
+   glance; a check is neutral gray and never carries a kind stamp. */
+.tone-value {
+  --card: #14251d;
+  --card-2: #1c3027;
+  --kind: var(--value);
+}
+.tone-thin {
+  --card: #29220f;
+  --card-2: #342b15;
+  --kind: var(--thin);
+}
+.tone-bluff {
+  --card: #221a33;
+  --card-2: #2c2141;
+  --kind: var(--bluff);
+}
+.tone-check {
+  --card: #1f1f1f;
+  --card-2: #292929;
+  --kind: var(--check);
 }
 
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--hair) transparent;
+}
+
+::selection {
+  background: var(--edge);
+  color: var(--page);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--page);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--hair);
+  border-radius: 0;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ink-faint);
+}
+
+html {
+  color-scheme: dark;
+  background: var(--page);
 }
 
 body {
-  background: var(--bg);
-  color: var(--text);
   min-height: 100vh;
+  background-color: var(--page);
+  /* two dot layers: a fine 22px grid and a sparse 110px grid — a scrapbook mat, flat colours only */
+  background-image:
+    radial-gradient(circle, var(--dot) 1.2px, transparent 1.3px),
+    radial-gradient(circle, var(--dot-strong) 1.4px, transparent 1.5px);
+  background-size:
+    22px 22px,
+    110px 110px;
+  color: var(--ink);
+  font-family: var(--font-print);
+  font-size: 15px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 input,
@@ -47,6 +135,7 @@ select,
 button {
   font: inherit;
   color: inherit;
+  border-radius: var(--radius);
 }
 
 button {
@@ -54,11 +143,67 @@ button {
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 
 code,
 pre {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
+}
+
+/* Shared type roles. Human text uses Caveat (display) or Patrick Hand (print); numerals use JetBrains
+   Mono and nothing else. Caveat has no Vietnamese subset, so it is only used for Latin-only display
+   words (the wordmark); every VI-bearing label uses the print face. */
+.kicker {
+  font-family: var(--font-print);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+.title {
+  font-family: var(--font-hand);
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1.05;
+  color: var(--ink);
+}
+
+.verb {
+  font-family: var(--font-hand);
+  font-size: 56px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  color: var(--ink);
+}
+
+/* Caveat ships no Vietnamese subset. When the copy is Vietnamese, the display roles fall back to the
+   print face, which carries a Vietnamese subset — never a mixed-glyph word. */
+:lang(vi) .verb,
+:lang(vi) .title,
+:lang(vi) .drawer-title,
+:lang(vi) .terminal-title,
+:lang(vi) .tactical-btn {
+  font-family: var(--font-print);
+}
+
+@media (max-width: 1024px) {
+  .verb {
+    font-size: 44px;
+  }
+}
+
+@media (max-width: 640px) {
+  .verb {
+    font-size: 38px;
+  }
+  .title {
+    font-size: 26px;
+  }
 }

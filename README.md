@@ -15,6 +15,7 @@ Vietnamese) React web app called **LIÊNG SCOPE**.
 ## Contents
 
 - [What it does](#what-it-does)
+- [UI preview](#ui-preview)
 - [Quick start](#quick-start)
 - [How it works](#how-it-works)
 - [Using it](#using-it): [web app](#web-app) · [command line](#command-line) · [HTTP API](#http-api)
@@ -45,6 +46,18 @@ Vietnamese) React web app called **LIÊNG SCOPE**.
 - **Scans the whole range.** How many of the 22,100 hands take each size in this spot, per category.
 - **Answers instantly.** The slow work (≈ 10 s) runs once, offline; each question is a lookup plus a
   little arithmetic (≈ 1–2 ms for all 455 hand types).
+
+---
+
+## UI preview
+
+The web app is a dark scrapbook board: the verdict is a pastel polaroid, the sizing ladder is a taped
+sticky note, and the opponent assumption is a small scrap tucked underneath. Every number is set in
+monospace so EV values line up down the ladder, while Value / Thin / Bluff are signalled by neon
+emerald / amber / violet stamps. The paper tint follows the recommendation, and a check gets a neutral
+sheet with no stamp.
+
+![LIÊNG SCOPE — verdict polaroid, sizing ladder, assumption scrap and the dark reference tables](design/preview-scrapbook.png)
 
 ---
 
