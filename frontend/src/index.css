@@ -12,10 +12,11 @@
   --text-strong: #E6E1CF;
   --muted: #8A9199;
 
-  --accent: #E6B450;   /* focus, main action only */
+  --accent: #E6B450;   /* focus, main action, thin-value hands */
   --accent-hover: #D9A63F;
-  --good: #AAD94C;     /* raise / +EV */
-  --bad: #F07178;      /* fold / -EV / errors */
+  --good: #AAD94C;     /* value hands / +EV */
+  --bad: #F07178;      /* -EV / errors */
+  --bluff: #D2A6FF;    /* bluff hands: a bluff is a real play, not a warning */
   /* Soft fills for the profit map: the same two colours, mostly transparent */
   --zone-good: color-mix(in srgb, var(--good) 45%, transparent);
   --zone-bad: color-mix(in srgb, var(--bad) 20%, transparent);

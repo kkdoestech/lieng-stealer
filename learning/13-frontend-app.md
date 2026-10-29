@@ -37,14 +37,14 @@ Its own jobs are input, errors, translation and formatting.
 | # | Location | What to look for |
 |---|----------|------------------|
 | 1 | [App.jsx:1-36](../frontend/src/App.jsx#L1-L36) | Imports, `API_BASE`, steppers' limits, presets as data, label maps, `loadSavedLang`. |
-| 2 | [App.jsx:38-91](../frontend/src/App.jsx#L38-L91) | `solveErrorFor` and `fetchSolveAndAnalysis`: two fetches, every way to fail, and the abort checks. |
-| 3 | [App.jsx:93-123](../frontend/src/App.jsx#L93-L123) | `Stepper`, the one component used twice. |
-| 4 | [App.jsx:125-154](../frontend/src/App.jsx#L125-L154) | All state, the `currentRun` ref, and the effect that saves the language. |
-| 5 | [App.jsx:156-221](../frontend/src/App.jsx#L156-L221) | `runSolve`, `startSolve`, the mount effect, and the derived values. |
-| 6 | [App.jsx:223-403](../frontend/src/App.jsx#L223-L403) | The header and the left column: steppers, presets, slider, model toggle, profit map. |
-| 7 | [App.jsx:405-588](../frontend/src/App.jsx#L405-L588) | The right column: verdict, summary rows, two tables, notes. |
+| 2 | [App.jsx:38-99](../frontend/src/App.jsx#L38-L99) | `solveErrorFor` and `fetchSolveAndAnalysis`: two fetches, every way to fail, and the abort checks. |
+| 3 | [App.jsx:101-131](../frontend/src/App.jsx#L101-L131) | `Stepper`, the one component used twice. |
+| 4 | [App.jsx:133-162](../frontend/src/App.jsx#L133-L162) | All state, the `currentRun` ref, and the effect that saves the language. |
+| 5 | [App.jsx:164-229](../frontend/src/App.jsx#L164-L229) | `runSolve`, `startSolve`, the mount effect, and the derived values. |
+| 6 | [App.jsx:231-412](../frontend/src/App.jsx#L231-L412) | The header and the left column: steppers, presets, slider, model toggle, profit map. |
+| 7 | [App.jsx:414-599](../frontend/src/App.jsx#L414-L599) | The right column: verdict, summary rows, two tables, notes. |
 | 8 | [i18n.js](../frontend/src/i18n.js) and [i18n.test.js](../frontend/src/i18n.test.js) | Two dictionaries with the same 84 keys, and the test that enforces it. |
-| 9 | [format.js](../frontend/src/format.js), [format.test.js](../frontend/src/format.test.js) and [App.test.jsx](../frontend/src/App.test.jsx) | The two pure helpers, and the 20 tests. |
+| 9 | [format.js](../frontend/src/format.js), [format.test.js](../frontend/src/format.test.js) and [App.test.jsx](../frontend/src/App.test.jsx) | The two pure helpers, and the 37 tests. |
 
 ---
 
@@ -56,30 +56,30 @@ Every `useState` call gives one value and its setter (see the concept box). Ther
 
 | State | Initial value | Changed by | Read by |
 |-------|---------------|-----------|---------|
-| `lang` | saved choice or `"en"` | language toggle [:235](../frontend/src/App.jsx#L235) | `t` [:127](../frontend/src/App.jsx#L127), the effect [:147-154](../frontend/src/App.jsx#L147-L154) |
-| `pot` | `100000` | the pot `Stepper` [:257](../frontend/src/App.jsx#L257), presets [:264](../frontend/src/App.jsx#L264) | request body [:160](../frontend/src/App.jsx#L160), bet presets [:277](../frontend/src/App.jsx#L277) |
-| `betSize` | `50000` | the bet `Stepper` [:274](../frontend/src/App.jsx#L274), presets [:283](../frontend/src/App.jsx#L283) | request body [:161](../frontend/src/App.jsx#L161), preset highlight [:282](../frontend/src/App.jsx#L282) |
-| `hand` | `"As Kh Qd"` | typing [:355](../frontend/src/App.jsx#L355), presets [:365](../frontend/src/App.jsx#L365) | request body [:163](../frontend/src/App.jsx#L163), preset highlight [:364](../frontend/src/App.jsx#L364) |
-| `foldEquity` | `0.35` | slider [:304](../frontend/src/App.jsx#L304) | request body, `35%` badge [:295](../frontend/src/App.jsx#L295), profit marker [:341](../frontend/src/App.jsx#L341) |
-| `opponentModel` | `"range"` | model buttons [:322](../frontend/src/App.jsx#L322) | request body, `aria-pressed` [:321](../frontend/src/App.jsx#L321) |
-| `isLoading` | `true` | `startSolve` [:192](../frontend/src/App.jsx#L192), callbacks [:170](../frontend/src/App.jsx#L170), [:177](../frontend/src/App.jsx#L177) | button label and `disabled` [:377-379](../frontend/src/App.jsx#L377-L379) |
-| `isAiLoading` | `true` | `startSolve` [:193](../frontend/src/App.jsx#L193), callbacks [:178](../frontend/src/App.jsx#L178), [:182](../frontend/src/App.jsx#L182) | notes drawer [:578](../frontend/src/App.jsx#L578) |
-| `solveData` | `null` | callbacks [:169](../frontend/src/App.jsx#L169), [:175](../frontend/src/App.jsx#L175) | derived values [:211-221](../frontend/src/App.jsx#L211-L221), top hands [:521](../frontend/src/App.jsx#L521) |
-| `aiAdvice` | `null` | callbacks [:176](../frontend/src/App.jsx#L176), [:181](../frontend/src/App.jsx#L181) | notes drawer [:575](../frontend/src/App.jsx#L575), [:582](../frontend/src/App.jsx#L582) |
-| `isNotesOpen` | `false` | drawer button [:565](../frontend/src/App.jsx#L565) | drawer [:567-571](../frontend/src/App.jsx#L567-L571) |
-| `solveError` | `null` | `startSolve` [:194](../frontend/src/App.jsx#L194), callbacks [:168](../frontend/src/App.jsx#L168), [:174](../frontend/src/App.jsx#L174) | error box [:382-386](../frontend/src/App.jsx#L382-L386) |
+| `lang` | saved choice or `"en"` | language toggle [:243](../frontend/src/App.jsx#L243) | `t` [:135](../frontend/src/App.jsx#L135), the effect [:155-162](../frontend/src/App.jsx#L155-L162) |
+| `pot` | `100000` | the pot `Stepper` [:265](../frontend/src/App.jsx#L265), presets [:272](../frontend/src/App.jsx#L272) | request body [:168](../frontend/src/App.jsx#L168), bet presets [:286](../frontend/src/App.jsx#L286) |
+| `betSize` | `50000` | the bet `Stepper` [:283](../frontend/src/App.jsx#L283), presets [:292](../frontend/src/App.jsx#L292) | request body [:169](../frontend/src/App.jsx#L169), preset highlight [:291](../frontend/src/App.jsx#L291) |
+| `hand` | `"As Kh Qd"` | typing [:364](../frontend/src/App.jsx#L364), presets [:374](../frontend/src/App.jsx#L374) | request body [:171](../frontend/src/App.jsx#L171), preset highlight [:373](../frontend/src/App.jsx#L373) |
+| `foldEquity` | `0.35` | slider [:313](../frontend/src/App.jsx#L313) | request body, `35%` badge [:304](../frontend/src/App.jsx#L304), profit marker [:350](../frontend/src/App.jsx#L350) |
+| `opponentModel` | `"range"` | model buttons [:331](../frontend/src/App.jsx#L331) | request body, `aria-pressed` [:330](../frontend/src/App.jsx#L330) |
+| `isLoading` | `true` | `startSolve` [:200](../frontend/src/App.jsx#L200), callbacks [:178](../frontend/src/App.jsx#L178), [:185](../frontend/src/App.jsx#L185) | button label and `disabled` [:386-388](../frontend/src/App.jsx#L386-L388) |
+| `isAiLoading` | `true` | `startSolve` [:201](../frontend/src/App.jsx#L201), callbacks [:186](../frontend/src/App.jsx#L186), [:190](../frontend/src/App.jsx#L190) | notes drawer [:589](../frontend/src/App.jsx#L589) |
+| `solveData` | `null` | callbacks [:177](../frontend/src/App.jsx#L177), [:183](../frontend/src/App.jsx#L183) | derived values [:219-229](../frontend/src/App.jsx#L219-L229), top hands [:530](../frontend/src/App.jsx#L530) |
+| `aiAdvice` | `null` | callbacks [:184](../frontend/src/App.jsx#L184), [:189](../frontend/src/App.jsx#L189) | notes drawer [:586](../frontend/src/App.jsx#L586), [:593](../frontend/src/App.jsx#L593) |
+| `isNotesOpen` | `false` | drawer button [:575](../frontend/src/App.jsx#L575) | drawer [:577-581](../frontend/src/App.jsx#L577-L581) |
+| `solveError` | `null` | `startSolve` [:202](../frontend/src/App.jsx#L202), callbacks [:176](../frontend/src/App.jsx#L176), [:182](../frontend/src/App.jsx#L182) | error box [:391-395](../frontend/src/App.jsx#L391-L395) |
 
 The first six are **inputs**. The last six describe **what happened**. Results are never edited by
 hand: they are replaced as a whole when an answer arrives. `isLoading` and `isAiLoading` start as
 `true` because the first solve begins as soon as the page mounts (section 4).
 
-One more value is not state: `currentRun = useRef(null)` ([:145](../frontend/src/App.jsx#L145))
+One more value is not state: `currentRun = useRef(null)` ([:153](../frontend/src/App.jsx#L153))
 holds the `AbortController` of the run in progress. Changing a ref does not re-render; it is a box
 that survives between renders (see the concept box).
 
 The language is loaded once and saved on every change:
 
-📍 [`frontend/src/App.jsx:29-36`](../frontend/src/App.jsx#L29-L36)
+📍 [`frontend/src/App.jsx:88-95`](../frontend/src/App.jsx#L88-L95)
 ```jsx
 function loadSavedLang() {
   try {
@@ -91,18 +91,18 @@ function loadSavedLang() {
 }
 ```
 
-`useState(loadSavedLang)` at [:126](../frontend/src/App.jsx#L126) passes the function itself, so React
+`useState(loadSavedLang)` at [:134](../frontend/src/App.jsx#L134) passes the function itself, so React
 calls it only on the first render. `localStorage` survives reloads but can throw (some private
-modes), hence the `try/catch` here and in the effect at [:147-154](../frontend/src/App.jsx#L147-L154),
+modes), hence the `try/catch` here and in the effect at [:155-162](../frontend/src/App.jsx#L155-L162),
 which also sets `<html lang>` for screen readers. An unknown saved value falls back to English.
-`t = STRINGS[lang]` ([:127](../frontend/src/App.jsx#L127)) is the dictionary every label reads.
+`t = STRINGS[lang]` ([:135](../frontend/src/App.jsx#L135)) is the dictionary every label reads.
 
 ### 2. `fetchSolveAndAnalysis`, step 1: `/api/solve`
 
 The round trip lives **outside** the component. It holds no state; it reports each step through
 three callbacks and stops calling them as soon as its `signal` is aborted:
 
-📍 [`frontend/src/App.jsx:48-74`](../frontend/src/App.jsx#L48-L74)
+📍 [`frontend/src/App.jsx:107-133`](../frontend/src/App.jsx#L107-L133)
 ```jsx
 // One solve + analysis round trip. It holds no state: it reports each step through the callbacks
 // and stops calling them as soon as `signal` is aborted (a newer run started, or the page unmounted).
@@ -142,7 +142,7 @@ async function fetchSolveAndAnalysis(body, signal, { onSolved, onSolveFailed, on
   check makes the old run go quiet instead of overwriting the newer run's results (section 4).
 - **Errors are a key plus a detail**, not a sentence (section 7). `solveErrorFor` picks the key:
 
-📍 [`frontend/src/App.jsx:38-46`](../frontend/src/App.jsx#L38-L46)
+📍 [`frontend/src/App.jsx:97-105`](../frontend/src/App.jsx#L97-L105)
 ```jsx
 // Map a failed /api/solve response to the message shown under the button ({ key, detail }).
 // The API answers every error with { error, code }. A response without a code did not come from
@@ -160,12 +160,13 @@ alone, never on the status, and shows the server's `error` only as the detail. N
 something other than Flask answered. The two input codes get the server's detail; any other code
 (`internal_error`, `not_found`, …) is the solver's fault, not the user's. The UI always sends all
 five fields, so the backend's defaults never apply. Note `opponent_model`: the UI starts on
-`"range"`, while the API defaults to `"random"` ([app.py:274](../backend/app.py#L274)). That is why
-the same Q-K-A shows **+131,876** in the UI but **+132,097** from a bare `curl` (lesson 07).
+`"range"`, and so does the API ([app.py:321](../backend/app.py#L321)), so the same Q-K-A shows
+**+131,876** in the UI and from a bare `curl`. Add `"opponent_model": "random"` to the curl body and
+it shows **+132,101** instead (lesson 07).
 
 ### 3. Step 2: `/api/analyze`, and every way to fail
 
-📍 [`frontend/src/App.jsx:76-91`](../frontend/src/App.jsx#L76-L91)
+📍 [`frontend/src/App.jsx:135-150`](../frontend/src/App.jsx#L135-L150)
 ```jsx
   // The server recomputes everything for the analysis from the same inputs.
   let advice;
@@ -202,10 +203,10 @@ the real ones:
 | A web host that doesn't route `/api` answers with its own 404 page | [:42](../frontend/src/App.jsx#L42) (no `code`) | `{solverOffline}` | same |
 | No HTTP answer at all, `fetch` throws | outer `catch` [:69-71](../frontend/src/App.jsx#L69-L71) | `{solverOffline}` | same |
 | 200, but the body is not valid JSON | inner `catch` [:65-67](../frontend/src/App.jsx#L65-L67) | `{badResponse}` | The solver sent a response this page couldn't read. Try again. |
-| Analyze answers 429 (rate limit) | [:85](../frontend/src/App.jsx#L85) | `aiAdvice = {aiRateLimited}` | Too many analysis requests. Wait a minute, then run the solver again. |
-| Analyze answers another non-2xx (e.g. 502 `upstream_error`) | [:85](../frontend/src/App.jsx#L85) | `aiAdvice = {aiUnreachable}` | Couldn't reach the AI analysis service. The numbers above are unaffected. |
-| Analyze answers 200 with empty `advice` | [:83](../frontend/src/App.jsx#L83) | `aiAdvice = {aiNoAdvice}` | The analysis came back empty. |
-| Analyze request fails in transit | [:87-88](../frontend/src/App.jsx#L87-L88) | `aiAdvice = {aiTransportFault, detail}` | Analysis request failed: Failed to fetch |
+| Analyze answers 429 (rate limit) | [:93](../frontend/src/App.jsx#L93) | `aiAdvice = {aiRateLimited}` | Too many analysis requests. Wait a minute, then run the solver again. |
+| Analyze answers another non-2xx (e.g. 502 `upstream_error`) | [:93](../frontend/src/App.jsx#L93) | `aiAdvice = {aiUnreachable}` | Couldn't reach the AI analysis service. The numbers above are unaffected. |
+| Analyze answers 200 with empty `advice` | [:91](../frontend/src/App.jsx#L91) | `aiAdvice = {aiNoAdvice}` | The analysis came back empty. |
+| Analyze request fails in transit | [:95-96](../frontend/src/App.jsx#L95-L96) | `aiAdvice = {aiTransportFault, detail}` | Analysis request failed: Failed to fetch |
 | A newer run started, or the page unmounted | the `signal.aborted` checks | nothing changes | (the newer run's results) |
 
 A failed solve also clears the old verdict, tables and notes (section 4), so nothing on screen
@@ -219,7 +220,7 @@ spot 3).
 The component's side of a run is three small functions. `runSolve` builds the body and turns each
 callback into state changes:
 
-📍 [`frontend/src/App.jsx:156-187`](../frontend/src/App.jsx#L156-L187)
+📍 [`frontend/src/App.jsx:215-246`](../frontend/src/App.jsx#L215-L246)
 ```jsx
   // Start one run with the current inputs; every state change happens in a callback, after the
   // matching response has arrived. The API takes one opponent assumption: fold_equity. The
@@ -258,7 +259,7 @@ callback into state changes:
 As soon as the numbers are in, `isLoading` goes false and the page renders them; the analysis is
 still on its way. `startSolve` is what the button calls:
 
-📍 [`frontend/src/App.jsx:188-197`](../frontend/src/App.jsx#L188-L197)
+📍 [`frontend/src/App.jsx:247-256`](../frontend/src/App.jsx#L247-L256)
 ```jsx
   // Start a run from a click: cancel any run still in flight, then show the loading state.
   const startSolve = () => {
@@ -280,7 +281,7 @@ run" never appears ([App.test.jsx:151-172](../frontend/src/App.test.jsx#L151-L17
 
 The first run starts on mount:
 
-📍 [`frontend/src/App.jsx:199-217`](../frontend/src/App.jsx#L199-L217)
+📍 [`frontend/src/App.jsx:258-277`](../frontend/src/App.jsx#L258-L277)
 ```jsx
   // The first run on mount. It reads the current inputs without making them effect dependencies.
   const startFirstRun = useEffectEvent((controller) => {
@@ -297,7 +298,8 @@ The first run starts on mount:
 
   const handEval = solveData?.hand_evaluation;
   const summary = solveData?.summary;
-  const isRaise = handEval?.decision === "RAISE";
+  const advice = handEval?.advice;
+  const actionCounts = summary?.action_counts;
 
   const zones = handEval?.profitable_fold_zones;
 
@@ -312,8 +314,8 @@ The first run starts on mount:
 - **Derived values** are recomputed on every render instead of being stored in state, so they can
   never disagree with `solveData`. `?.` returns `undefined` while `solveData` is still `null`.
 - `pct` is the one number the UI computes itself: it is a **string** (`"100.0"`), which is why the
-  status column compares `Number(cat.pct) === 100` ([:500](../frontend/src/App.jsx#L500),
-  [:509](../frontend/src/App.jsx#L509)).
+  status column compares `Number(cat.pct) === 100` ([:509](../frontend/src/App.jsx#L509),
+  [:518](../frontend/src/App.jsx#L518)).
 
 ### 5. From JSON to screen
 
@@ -322,25 +324,27 @@ key of the `/api/solve` answer and where it ends up:
 
 | JSON key | Example value | Shown as | Where |
 |----------|---------------|----------|-------|
-| `hand_evaluation.decision` | `"RAISE"` | "Raise / all-in", green (red for `CHECK/FOLD`) | [:213](../frontend/src/App.jsx#L213), [:409-414](../frontend/src/App.jsx#L409-L414) |
-| `.hand` · `.canonical_id` · `.score_name` | `As Kh Qd` · `Q-K-A` · `Liêng Q-K-A` | the line under the verdict | [:416-420](../frontend/src/App.jsx#L416-L420) |
-| `.ev` | `131876.0` | "+131,876 VND", and again in the summary | [:427](../frontend/src/App.jsx#L427), [:464-465](../frontend/src/App.jsx#L464-L465) |
-| `.profitable_fold_zones` | `[[0.0, 1.0]]` | "…when the opponent folds 0%–100%", and the green bar | [:430](../frontend/src/App.jsx#L430), [:330-344](../frontend/src/App.jsx#L330-L344) |
-| `.showdown_equity` | `0.9952` | "Showdown equity 99.5%" | [:451](../frontend/src/App.jsx#L451) |
-| `.equity_vs_random` | `0.9969` | "…· 99.7% vs. a random hand" (range model only) | [:454-457](../frontend/src/App.jsx#L454-L457) |
-| `summary.opponent_model`, `.fold_equity` | `"range"`, `0.35` | "vs. the top 65% that call" | [:454-455](../frontend/src/App.jsx#L454-L455) |
-| `summary.range_coverage_percent` | `100.0` | "Range coverage 100.0%" | [:441](../frontend/src/App.jsx#L441) |
-| `summary.profitable_combinations` | `22100` | "22,100 of 22,100 combos are +EV" | [:444](../frontend/src/App.jsx#L444) |
-| `summary.pure_bluff_break_even_fold_equity` | `0.3333` | "Bluff break-even 33.3%" | [:473](../frontend/src/App.jsx#L473) |
-| `summary.category_breakdown[]` | 4 rows | the coverage table | [:499-514](../frontend/src/App.jsx#L499-L514) |
-| `top_hands[]` (30 sent) | `A-A-A` first | the first **10** rows of the second table, with `showdown_equity` as the equity column | [:540-553](../frontend/src/App.jsx#L540-L553) |
+| `hand_evaluation.advice` | `{"action": "ALL_IN", "kind": "VALUE", "amount": 100000.0, …}` | the recommendation the card renders, with the ladder behind it | [:274](../frontend/src/App.jsx#L274) |
+| `.hand` · `.canonical_id` · `.score_name` | `As Kh Qd` · `Q-K-A` · `Liêng Q-K-A` | the line under the verdict | [:425-429](../frontend/src/App.jsx#L425-L429) |
+| `.ev` | `131876.0` | "+131,876 VND", and again in the summary | [:436](../frontend/src/App.jsx#L436), [:473-474](../frontend/src/App.jsx#L473-L474) |
+| `.profitable_fold_zones` | `[[0.0, 1.0]]` | "…when the opponent folds 0%–100%", and the green bar | [:439](../frontend/src/App.jsx#L439), [:339-353](../frontend/src/App.jsx#L339-L353) |
+| `.showdown_equity` | `0.9952` | "Showdown equity 99.5%" | [:460](../frontend/src/App.jsx#L460) |
+| `.equity_vs_random` | `0.9969` | "…· 99.7% vs. a random hand" (range model only) | [:463-466](../frontend/src/App.jsx#L463-L466) |
+| `summary.opponent_model`, `.fold_equity` | `"range"`, `0.35` | "vs. the top 65% that call" | [:463-464](../frontend/src/App.jsx#L463-L464) |
+| `summary.range_coverage_percent` | `100.0` | "Range coverage 100.0%" | [:450](../frontend/src/App.jsx#L450) |
+| `summary.profitable_combinations` | `22100` | "22,100 of 22,100 combos are +EV" | [:453](../frontend/src/App.jsx#L453) |
+| `summary.pure_bluff_break_even_fold_equity` | `0.3333` | "Bluff break-even 33.3%" | [:482](../frontend/src/App.jsx#L482) |
+| `summary.category_breakdown[]` | 4 rows | the coverage table | [:508-523](../frontend/src/App.jsx#L508-L523) |
+| `top_hands[]` (30 sent) | `A-A-A` first | the first **10** rows of the second table, with `showdown_equity` as the equity column | [:550-563](../frontend/src/App.jsx#L550-L563) |
 
-Sent but never read: in `hand_evaluation` `category`, `category_name`, `is_profitable`,
-`break_even_fold_equity` and `profitable_from_fold_equity`; in `summary` `pot`, `bet_size`,
-`final_pot`, `total_canonical_classes`, `profitable_classes`, `total_combinations`, `highest_ev_*`
-and `threshold_*` (15 of the 29 fields); and `top_hands[].decision`, since the table reads
-`is_profitable` ([:549](../frontend/src/App.jsx#L549)). The "of 22,100" is written into the
-translation ([i18n.js:51](../frontend/src/i18n.js#L51)) instead.
+Sent but never read: in `hand_evaluation` `category`, `category_name`, `random_hand_equity`,
+`is_profitable`, `break_even_fold_equity` and `profitable_from_fold_equity`; in `summary` `pot`,
+`bet_size`, `final_pot`, `total_canonical_classes`, `profitable_classes`, `total_combinations`,
+`bet_ladder`, `highest_ev_*` and `threshold_*`; and in `advice`, `robust`. The page renders
+`advice.action`, `.kind`, `.amount`, `.reason`, `.why`, the three `ladder` rows, and `sizing` for
+the numbers behind them, so the thresholds are read from the response instead of typed into the
+page. The "of 22,100" is written into the translation
+([i18n.js:55](../frontend/src/i18n.js#L55)) instead.
 
 With an empty hand field, `hand_evaluation` is `null`: the verdict and profit map disappear, equity
 shows `N/A`, and the summary and tables still show the whole-range results.
@@ -349,7 +353,7 @@ shows `N/A`, and the summary and tables still show the whole-range results.
 
 The pot and the bet use the same small component:
 
-📍 [`frontend/src/App.jsx:93-123`](../frontend/src/App.jsx#L93-L123)
+📍 [`frontend/src/App.jsx:152-182`](../frontend/src/App.jsx#L152-L182)
 ```jsx
 function Stepper({ id, label, value, onChange }) {
   return (
@@ -386,22 +390,22 @@ function Stepper({ id, label, value, onChange }) {
 
 - `Stepper` receives everything as **props** (`id`, `label`, `value`, `onChange`) and owns no state.
   `App` renders it twice: `<Stepper id="pot-input" label={t.potLabel} value={pot} onChange={setPot} />`
-  ([:257](../frontend/src/App.jsx#L257)) and the same for the bet ([:274](../frontend/src/App.jsx#L274)).
+  ([:265](../frontend/src/App.jsx#L265)) and the same for the bet ([:283](../frontend/src/App.jsx#L283)).
 - The input is **controlled** (see the concept box). Minus stops at `MIN_AMOUNT` (1,000), plus has
   no upper limit, both by `AMOUNT_STEP` (10,000, [:11-13](../frontend/src/App.jsx#L11-L13)). A test
   clicks minus from 100,000 and from 5,000 ([App.test.jsx:119-131](../frontend/src/App.test.jsx#L119-L131)).
 - `min` only affects the browser's own arrows, which CSS hides (lesson 14). Clearing the field gives
   `Number("")` = 0, and the server's 400 catches it (section 3).
 - The buttons have an `aria-label` ("Current pot (VND) −10k"), and `<label htmlFor="pot-input">`
-  ([:256](../frontend/src/App.jsx#L256)) links the label to the field. The tests find the buttons
+  ([:264](../frontend/src/App.jsx#L264)) links the label to the field. The tests find the buttons
   by exactly that name.
 
 The presets are data at the top of the file:
 
-📍 [`frontend/src/App.jsx:15-23`](../frontend/src/App.jsx#L15-L23)
+📍 [`frontend/src/App.jsx:15-24`](../frontend/src/App.jsx#L15-L24)
 ```jsx
 const POT_PRESETS = [50000, 100000, 200000, 500000];
-const BET_PRESET_MULTIPLES = [0.5, 1, 2]; // bet = multiple × pot
+const BET_PRESET_MULTIPLES = [0.33, 0.75, 1];
 const HAND_PRESETS = [
   { cards: "As Kh Qd", labelKey: "presetLiengQKA" },
   { cards: "7s 7h 7d", labelKey: "presetSap7" },
@@ -409,20 +413,25 @@ const HAND_PRESETS = [
   { cards: "9s 10h Kd", labelKey: "presetDiem9" },
   { cards: "2s 3h 5d", labelKey: "presetDiem0" },
 ];
+
 ```
 
-Each list becomes buttons with one `.map`: pot presets at [:259-268](../frontend/src/App.jsx#L259-L268),
-bet presets at [:276-288](../frontend/src/App.jsx#L276-L288) and hand presets at
-[:360-369](../frontend/src/App.jsx#L360-L369). A hand preset stores an i18n **key**, not a label, so
-the text comes from `t[labelKey]`. A bet preset computes its amount from the pot
-(`Math.round(pot * multiple)`), looks active only while the bet equals it exactly, and gets its label
-from `t.betPresetLabel(...)` with the multiple formatted for the locale: "0.5x pot" in English,
-"0,5x pot" in Vietnamese. The model buttons ([:315-327](../frontend/src/App.jsx#L315-L327)) form a
-`role="group"` with `aria-pressed`, so assistive technology announces which one is on.
+The bet multiples are the policy's three rungs (0.33, 0.75 and the whole pot), so a preset can
+never ask for a size the ladder does not price (lesson 07, section 8). A hand preset stores an
+i18n **key**, not a label, so the text comes from `t[labelKey]`. A bet preset computes its amount
+from the pot (`Math.round(pot * multiple)`), looks active only while the bet equals it exactly, and
+gets its label from `t.betPresetLabel(...)` with the multiple formatted for the locale: "0.33x pot"
+in English, "0,33x pot" in Vietnamese.
+
+Each list becomes buttons with one `.map`: pot presets at [:325-337](../frontend/src/App.jsx#L325-L337),
+bet presets right below them and hand presets further down. The model buttons form a `role="group"`
+with `aria-pressed`, so assistive technology announces which one is on. Their text carries the fold
+rate, `Folds weakest 35% first` and `Folds 35% regardless of hand`, so the chips and the numbers
+below them always agree.
 
 The profit map draws each zone with inline percentages:
 
-📍 [`frontend/src/App.jsx:357-371`](../frontend/src/App.jsx#L357-L371)
+📍 [`frontend/src/App.jsx:418-432`](../frontend/src/App.jsx#L418-L432)
 ```jsx
             {zones && (
               <div className="profit-map">
@@ -447,13 +456,13 @@ pot-sized bet the zones are `[[0, 0.08], [0.51, 1]]` (lesson 07): two green stre
 
 ### 7. Translations: one message per error code
 
-All copy lives in [i18n.js](../frontend/src/i18n.js): `STRINGS.en` and `STRINGS.vi`, 84 keys each.
-Twelve values are functions. Six take a parameter (`betPresetLabel`, `invalidHand`,
-`invalidParams`, `vsCallingRange`, `vsRandomShort`, `aiTransportFault`) and six take none
-(`solverOffline`, `serverError`, `badResponse`, `aiNoAdvice`, `aiUnreachable`, `aiRateLimited`).
-The solve errors sit together:
+All copy lives in [i18n.js](../frontend/src/i18n.js): `STRINGS.en` and `STRINGS.vi`, 104 keys each.
+29 values are functions, 23 of which take a parameter (`betPresetLabel`, `invalidHand`,
+`invalidParams`, `vsCallingRange`, `vsRandomShort`, `modelRange`, `modelRandom`, the two model
+assumption lines, the advice reason lines), and six take none (`solverOffline`, `serverError`,
+`badResponse`, `aiNoAdvice`, `aiUnreachable`, `aiRateLimited`). The solve errors sit together:
 
-📍 [`frontend/src/i18n.js:36-40`](../frontend/src/i18n.js#L36-L40)
+📍 [`frontend/src/i18n.js:40-44`](../frontend/src/i18n.js#L40-L44)
 ```js
     solverOffline: () => "Can't reach the solver. Start the backend on port 5000 and try again.",
     invalidHand: (detail) => `Check your hand: ${detail}`,
@@ -464,7 +473,7 @@ The solve errors sit together:
 
 The render calls every message the same way:
 
-📍 [`frontend/src/App.jsx:409-413`](../frontend/src/App.jsx#L409-L413)
+📍 [`frontend/src/App.jsx:470-474`](../frontend/src/App.jsx#L470-L474)
 ```jsx
           {solveError && (
             <div className="terminal-alert" role="alert">
@@ -481,9 +490,9 @@ The render calls every message the same way:
 4. **One message per code** (DESIGN.md §6). The server no longer adds its own "Invalid hand: "
    prefix, so the text is the UI's prefix plus the evaluator's message, nothing stacked.
 
-The notes drawer shows the `model` the API reported in its header ([:575](../frontend/src/App.jsx#L575))
+The notes drawer shows the `model` the API reported in its header ([:586](../frontend/src/App.jsx#L586))
 and `aiAdvice.text` if the server sent some (`??`), else a translated notice
-([:582](../frontend/src/App.jsx#L582)). Without an API key the header says
+([:593](../frontend/src/App.jsx#L593)). Without an API key the header says
 `rule-based-solver-engine (OPENROUTER_API_KEY not configured)`, and the text is the Vietnamese
 rule-based answer from `_fallback_advice` ([app.py:563](../backend/app.py#L563)), Markdown `**` and
 all, in both languages.
@@ -536,7 +545,7 @@ belongs. Comparing shapes instead of values lets the wording differ freely. The 
 [App.test.jsx](../frontend/src/App.test.jsx) renders the real component in jsdom (lesson 12) with
 `fetch` replaced:
 
-📍 [`frontend/src/App.test.jsx:55-70`](../frontend/src/App.test.jsx#L55-L70)
+📍 [`frontend/src/App.test.jsx:156-171`](../frontend/src/App.test.jsx#L156-L171)
 ```jsx
 const reply = (status, body) => ({ ok: status < 400, status, json: async () => body });
 
@@ -559,7 +568,7 @@ function mockFetch(routes) {
 `reply` fakes just the part of a `Response` the app uses (`ok`, `status`, `json()`). A route can be
 a fixed reply, an `Error` (to simulate "no answer"), or a function of the call number, which lets one
 test answer the first solve with 200 and the second with 400. `calls` records each request's path,
-parsed body and `signal`, so tests can check what was sent and what was aborted. The 14 tests find
+parsed body and `signal`, so tests can check what was sent and what was aborted. The 31 App tests find
 elements the way a user would (`getByRole("button", { name: "Run solver" })`, `findByRole("alert")`)
 rather than by class name. 8 of the first 12 fail on the `App.jsx` that came before those fixes.
 
@@ -624,7 +633,8 @@ answer.
   bookkeeping and still lets the stale requests finish.
 - **Keys in state, text at render time.** Errors and notices survive a language switch.
 - **The range model by default.** The UI assumes the opponent folds their weakest hands, the stricter
-  case for medium hands (README: real players sit between the two). The API defaults to `random`.
+  case for medium hands (README: real players fold a mix). The API and the CLI start on `range` too, so
+  one request gives the same numbers on all three surfaces.
 
 ---
 
@@ -634,10 +644,10 @@ Fixed since the first version of this course:
 
 - ✅ **Fixed: lint warnings on the mount effect.** It used to call `handleSolve()`, which set state
   synchronously and was missing from the dependency list. The effect now sets no state and calls a
-  `useEffectEvent` ([App.jsx:198-209](../frontend/src/App.jsx#L198-L209)); `npm run lint` has 0
+  `useEffectEvent` ([App.jsx:206-217](../frontend/src/App.jsx#L206-L217)); `npm run lint` has 0
   warnings and fails on any new one (lesson 12).
 - ✅ **Fixed: stale results after an error.** The verdict for the previous hand stayed next to the
-  red box. `onSolveFailed` now clears `solveData` and `aiAdvice` ([:172-179](../frontend/src/App.jsx#L172-L179)).
+  red box. `onSolveFailed` now clears `solveData` and `aiAdvice` ([:180-187](../frontend/src/App.jsx#L180-L187)).
   Pinned by "an invalid hand shows its message and clears the old verdict"
   ([App.test.jsx:80-94](../frontend/src/App.test.jsx#L80-L94)).
 - ✅ **Fixed: misleading error labels.** A 500 used to read "Invalid input: HTTP 500", and a garbled
@@ -651,19 +661,19 @@ Fixed since the first version of this course:
   text checked at [App.test.jsx:92](../frontend/src/App.test.jsx#L92).
 - ✅ **Fixed: a hard-coded model label.** The notes header always said "OpenRouter · Llama 3.1 8B
   Instruct", even for the rule-based fallback. It now shows the `model` field
-  ([:575](../frontend/src/App.jsx#L575)). Pinned by "the notes show the model the API reports"
+  ([:586](../frontend/src/App.jsx#L586)). Pinned by "the notes show the model the API reports"
   ([App.test.jsx:133-140](../frontend/src/App.test.jsx#L133-L140)).
 - ✅ **Fixed: a late analysis could overwrite a newer one.** Each run has its own `AbortController`
-  ([:187-196](../frontend/src/App.jsx#L187-L196)). Pinned by [App.test.jsx:151-172](../frontend/src/App.test.jsx#L151-L172).
+  ([:195-204](../frontend/src/App.jsx#L195-L204)). Pinned by [App.test.jsx:151-172](../frontend/src/App.test.jsx#L151-L172).
 - ✅ **Fixed: copy-pasted presets.** Five hand buttons, three bet buttons and two steppers were
   hand-written blocks. They are now data plus `.map` ([:15-23](../frontend/src/App.jsx#L15-L23)) and one
-  `Stepper` ([:93-123](../frontend/src/App.jsx#L93-L123)).
+  `Stepper` ([:101-131](../frontend/src/App.jsx#L101-L131)).
 - ✅ **Fixed: unused translation keys.** `liveSolver`, `classesLoaded`, `matrixId` and `topHandsId`
   were deleted from both languages (the 🧪 script below now finds none).
 - ✅ **Fixed: most strings outside `i18n.js`.** The bet preset labels, hand preset labels and `VND`
-  are keys now (`betPresetLabel`, `preset*`, `currency`, [i18n.js:22-28](../frontend/src/i18n.js#L22-L28)).
+  are keys now (`betPresetLabel`, `preset*`, `currency`, [i18n.js:31-37](../frontend/src/i18n.js#L31-L37)).
 - ✅ **Fixed: a wrong footnote and subtitle.** "Monte Carlo" became "Exact enumeration, 455 canonical
-  classes" ([i18n.js:38](../frontend/src/i18n.js#L38)) and "GTO solver" became "Expected-value
+  classes" ([i18n.js:42](../frontend/src/i18n.js#L42)) and "GTO solver" became "Expected-value
   solver" ([i18n.js:8](../frontend/src/i18n.js#L8)).
 - ✅ **Fixed: the Vite proxy was unused** (lesson 12).
 - ✅ **Fixed: a 4xx without a `code` was called an input problem.** Only the 5xx branch used to check
@@ -679,7 +689,7 @@ Fixed since the first version of this course:
 
 Still open:
 
-1. **Raw Markdown, in one language.** The notes ([:582](../frontend/src/App.jsx#L582)) show the
+1. **Raw Markdown, in one language.** The notes ([:593](../frontend/src/App.jsx#L593)) show the
    analysis, `**bold**` markers included, as plain text, in Vietnamese for both languages (the
    offline answer is built by `_fallback_advice`, [app.py:563-591](../backend/app.py#L563-L591)).
    *Fix:* render the bold markers (exercise 8); ask the backend for the UI's language.
@@ -691,13 +701,13 @@ Still open:
    on port 5000". That fits the dev proxy's 502, but not a production host answering `/api` with its
    own 404 page, where the backend may be running fine and the routing is what's wrong. *Fix:*
    exercise 6.
-4. **A few strings still bypass `i18n.js`.** The `k` in the pot presets ([:266](../frontend/src/App.jsx#L266))
-   and in the stepper labels ([:99](../frontend/src/App.jsx#L99), [:116](../frontend/src/App.jsx#L116)).
+4. **A few strings still bypass `i18n.js`.** The `k` in the pot presets ([:274](../frontend/src/App.jsx#L274))
+   and in the stepper labels ([:107](../frontend/src/App.jsx#L107), [:124](../frontend/src/App.jsx#L124)).
    *Fix:* exercise 7.
-5. **Two defaults for one setting.** The UI starts on `"range"` ([:133](../frontend/src/App.jsx#L133))
-   and the API defaults to `"random"` ([app.py:274](../backend/app.py#L274)): +131,876 versus +132,097
-   for the same request without the field. Deliberate (lesson 17 lists it as a design decision), but
-   it surprises anyone comparing the UI with `curl`.
+5. ✅ **Fixed: two defaults for one setting.** The UI started on `"range"` while the API defaulted to
+   `"random"` ([app.py:321](../backend/app.py#L321)), so the same request without the field showed
+   +131,876 in the UI and +132,101 from `curl`. Version 3.1.0 made `range` the default on both sides,
+   so the two now agree; `"opponent_model": "random"` still gives the +132,101 numbers.
 
 ---
 
@@ -711,7 +721,7 @@ npm test 2>&1 | grep -E 'Test Files|Tests '
 
 ```
  Test Files  3 passed (3)
-      Tests  20 passed (20)
+      Tests  37 passed (37)
 ```
 
 Call the helpers yourself, and list the translation keys that `App.jsx` never mentions:
@@ -762,13 +772,13 @@ say, and what happens to the verdict? Check in the browser.
 `onSolveFailed` clears `solveData`.
 </details>
 
-**🟢 2. Predict.** You click "At random" and run the solver with the other defaults. Which summary
-rows change, and to what?
+**🟢 2. Predict.** You click **Folds 35% regardless of hand** and run the solver with the other
+defaults. Which summary rows change, and to what?
 
 <details><summary>Solution</summary>
 
 Showdown equity becomes **99.7%** with the note "vs. a random hand"
-([:454-458](../frontend/src/App.jsx#L454-L458)), and EV becomes **+132,097** in the verdict and in
+([:463-467](../frontend/src/App.jsx#L463-L467)), and EV becomes **+132,101** in the verdict and in
 its row. Coverage (100.0%) and bluff break-even (33.3%) stay: at a half-pot bet with 35% folds,
 every hand is +EV under both models.
 </details>
@@ -782,16 +792,22 @@ Check with `node --input-type=module -e '…'` as in 🧪.
 `start === end` is printed once ([format.test.js:21](../frontend/src/format.test.js#L21)).
 </details>
 
-**🟡 4. Break the parity test.** Delete `fold: "Bỏ",` from the Vietnamese dictionary
-([i18n.js:181](../frontend/src/i18n.js#L181)) and run `npm test`. What does the failure tell you?
+**🟡 4. Break the parity test.** Delete `statusZero: "Bỏ bài",` from the Vietnamese dictionary
+([i18n.js:243](../frontend/src/i18n.js#L243)) and run `npm test`. What does the failure tell you?
 
 <details><summary>Solution</summary>
 
-`Tests  1 failed | 19 passed (20)`. "every language defines exactly the English keys" fails with
-`AssertionError: language "vi"` and a diff containing `-   "fold": "string",`: English has the key
-and Vietnamese does not. Without the test, `t.fold` would be `undefined`, which React renders as
-nothing: an empty Action cell for every unprofitable row in Vietnamese. The App tests don't notice,
-because they run in English. Undo with `git checkout -- frontend/src/i18n.js`.
+```
+ Test Files  1 failed | 2 passed (3)
+      Tests  1 failed | 36 passed (37)
+```
+
+"every language defines exactly the English keys" fails with
+`AssertionError: language "vi"` and a diff containing `-   "statusZero": "string",`: English has the
+key and Vietnamese does not. Without the test, `t.statusZero` would be `undefined`, which React
+renders as nothing: the status chip is empty for every category with no profitable combo, in
+Vietnamese. The App tests don't notice, because they run in English. Undo with
+`git checkout -- frontend/src/i18n.js`.
 </details>
 
 **🟡 5. Break the error mapping.** In `solveErrorFor`, change the last line
@@ -815,7 +831,7 @@ new message, "Something other than the solver answered (HTTP 404). Check that /a
 backend.", except for 502, 503 and 504, which a proxy sends when it can't reach the backend. Write
 the test first: in the table at [App.test.jsx:96-106](../frontend/src/App.test.jsx#L96-L106), make
 the bare-404 row expect `"Something other than the solver answered (HTTP 404)"`. See it fail, then
-make all 20 tests pass.
+make all 37 tests pass.
 
 <details><summary>Solution</summary>
 
@@ -838,14 +854,14 @@ Add the message to both languages in `i18n.js`, next to `solverOffline`:
     notSolver: (detail) => `Một máy chủ khác đã trả lời thay bộ giải (${detail}). Kiểm tra /api có dẫn tới backend không.`,
 ```
 
-(the first line in `en`, the second in `vi`). All 20 tests pass and `npm run lint` stays silent. Skip
+(the first line in `en`, the second in `vi`). All 37 tests pass and `npm run lint` stays silent. Skip
 the Vietnamese line and the parity test fails instead. Undo with
 `git checkout -- frontend/src/App.jsx frontend/src/App.test.jsx frontend/src/i18n.js`.
 </details>
 
 **🔴 7. The last `k`s.** Move the thousands suffix into `i18n.js` (both languages, one function
 such as `thousands: (n) => \`${n}k\``), and use it for the pot presets
-([:266](../frontend/src/App.jsx#L266)) and the stepper labels. Check: `npm test` and `npm run lint`
+([:274](../frontend/src/App.jsx#L274)) and the stepper labels. Check: `npm test` and `npm run lint`
 pass unchanged.
 
 <details><summary>Solution</summary>
@@ -872,7 +888,7 @@ function BoldText({ text }) {
 }
 ```
 
-and at [:582](../frontend/src/App.jsx#L582):
+and at [:593](../frontend/src/App.jsx#L593):
 
 ```jsx
 {!aiAdvice ? t.notesEmpty : aiAdvice.text ? <BoldText text={aiAdvice.text} /> : t[aiAdvice.key](aiAdvice.detail)}
@@ -918,7 +934,7 @@ test("bold markers in the analysis become <strong>", async () => {
    `await` resumes normally, and without the check the old run would call its callbacks and
    overwrite the newer run's state. And when the abort does reject, the `catch` blocks would report
    it as `solverOffline` or `aiTransportFault`; the checks keep those quiet too.
-4. The marker reads `foldEquity` state directly ([:341](../frontend/src/App.jsx#L341)). The zones
+4. The marker reads `foldEquity` state directly ([:350](../frontend/src/App.jsx#L350)). The zones
    come from `solveData`, which changes only when a new `/api/solve` answer arrives.
 5. It detects a key missing from (or added to) one language, a string where the other has a function,
    and a message that drops its parameter. It cannot detect wrong wording or unused keys.

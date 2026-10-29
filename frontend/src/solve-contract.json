@@ -12,8 +12,75 @@
     "equity_vs_random": 0.99693335,
     "ev": 131876.0,
     "call_range_percent": 65.0,
-    "decision": "RAISE",
     "sensitivity_status": "ROBUST_BET",
-    "range_coverage_percent": 100.0
+    "range_coverage_percent": 100.0,
+    "advice": {
+      "action": "ALL_IN",
+      "kind": "VALUE",
+      "reason": "ALL_IN_VALUE",
+      "amount": 100000.0,
+      "ev": 164064.0,
+      "ev_ratio": 1.64064,
+      "equity_when_called": 0.9952,
+      "win_rate_defined": true,
+      "robust": true,
+      "why": {
+        "fold_component": 35000.0,
+        "call_component": 129064.0,
+        "net": 164064.0
+      },
+      "ladder": [
+        {
+          "action": "SMALL_BET",
+          "amount": 33000.0,
+          "ev": 120932.08,
+          "ev_ratio": 1.2093208,
+          "worst_ev_ratio": 1.1763872,
+          "robust": true,
+          "eligible": true,
+          "blocked_by": null
+        },
+        {
+          "action": "LARGE_BET",
+          "amount": 75000.0,
+          "ev": 147970.0,
+          "ev_ratio": 1.4797,
+          "worst_ev_ratio": 1.4048,
+          "robust": true,
+          "eligible": true,
+          "blocked_by": null
+        },
+        {
+          "action": "ALL_IN",
+          "amount": 100000.0,
+          "ev": 164064.0,
+          "ev_ratio": 1.64064,
+          "worst_ev_ratio": 1.54076,
+          "robust": true,
+          "eligible": true,
+          "blocked_by": null
+        }
+      ]
+    },
+    "action_counts": {
+      "CHECK": 128,
+      "SMALL_BET": 175,
+      "LARGE_BET": 98,
+      "ALL_IN": 54
+    },
+    "bet_recommended_percent": 71.62,
+    "bet_ladder": [33000.0, 75000.0, 100000.0],
+    "sizing": {
+      "small_fraction": 0.33,
+      "large_fraction": 0.75,
+      "all_in_fraction": 1.0,
+      "min_edge_ratio": 0.05,
+      "all_in_min_equity": 0.85,
+      "large_min_equity": 0.5,
+      "value_equity_floor": 0.55,
+      "bluff_equity_ceiling": 0.45,
+      "fold_step": 0.1,
+      "all_in_size": 100000.0
+    }
   }
 }

@@ -31,11 +31,11 @@ request, with the web UI's default inputs: pot 100,000, bet 50,000, fold rate 0.
                                                                         calling_range.equity → 0.9952
                                                                         ev.evaluate_action → 131,876
                                                                         ev.profitable_fold_zones (101×)
-                                              _hand_payload             13 fields
-                                              _solve_range ───────────► equity_table + 455 × calculate_ev
+                                              _hand_payload             16 fields, advice included
+                                              _solve_range ─────► fold_cells + 455 × (calculate_ev + recommend)
                                               _top_hands_payload        30 rows
-   ◄── 200, 5,243 bytes JSON ◄── proxy ◄───── jsonify
- onSolved → setSolveData → re-render: "Raise / all-in", "+131,876 VND", "99.5%" …
+   ◄── 200, 7,171 bytes JSON ◄── proxy ◄───── jsonify
+ onSolved → setSolveData → re-render: "ALL IN (100,000)", "+164,064 VND", "99.5%" …
    ──POST /api/analyze (same 5 fields)► proxy ► analyze_api: recompute → no key → rule-based text
    ◄── 200 {advice, model} ◄───
  onAnalysis → setAiAdvice → notes drawer
@@ -49,16 +49,16 @@ Every hop below links to the line where it happens. Open them side by side as yo
 
 | # | Location | What happens |
 |---|----------|--------------|
-| 1 | [App.jsx:373-380](../frontend/src/App.jsx#L373-L380) | The button calls `startSolve`. |
-| 2 | [App.jsx:156-209](../frontend/src/App.jsx#L156-L209) | `startSolve` and the mount effect start a run; `runSolve` builds the body. |
-| 3 | [App.jsx:48-91](../frontend/src/App.jsx#L48-L91) | `fetchSolveAndAnalysis`: both requests, outside the component. |
+| 1 | [App.jsx:382-389](../frontend/src/App.jsx#L382-L389) | The button calls `startSolve`. |
+| 2 | [App.jsx:164-217](../frontend/src/App.jsx#L164-L217) | `startSolve` and the mount effect start a run; `runSolve` builds the body. |
+| 3 | [App.jsx:48-99](../frontend/src/App.jsx#L48-L99) | `fetchSolveAndAnalysis`: both requests, outside the component. |
 | 4 | [vite.config.js:7-14](../frontend/vite.config.js#L7-L14) | The `/api` proxy that forwards the request to Flask. |
 | 5 | [app.py:424-442](../backend/app.py#L424-L442) | `solve_api`: the whole server side in a dozen lines. |
 | 6 | [app.py:226-296](../backend/app.py#L226-L296) | The body, the numbers, the model and the hand are parsed. |
 | 7 | [app.py:302-347](../backend/app.py#L302-L347) | Your hand: `_evaluate_hand`, then `_hand_payload`. |
 | 8 | [app.py:350-396](../backend/app.py#L350-L396) | The whole range: `_solve_range`, then `_top_hands_payload`. |
-| 9 | [App.jsx:166-184](../frontend/src/App.jsx#L166-L184), [:211-221](../frontend/src/App.jsx#L211-L221) and [:408-473](../frontend/src/App.jsx#L408-L473) | The response becomes React state, derived values, then numbers on screen. |
-| 10 | [App.jsx:76-90](../frontend/src/App.jsx#L76-L90) | The follow-up `POST /api/analyze`. |
+| 9 | [App.jsx:174-192](../frontend/src/App.jsx#L174-L192), [:219-229](../frontend/src/App.jsx#L219-L229) and [:417-482](../frontend/src/App.jsx#L417-L482) | The response becomes React state, derived values, then numbers on screen. |
+| 10 | [App.jsx:76-98](../frontend/src/App.jsx#L76-L98) | The follow-up `POST /api/analyze`. |
 
 ---
 
@@ -66,16 +66,16 @@ Every hop below links to the line where it happens. Open them side by side as yo
 
 ### Hop 1. The click
 
-The button at [App.jsx:373-380](../frontend/src/App.jsx#L373-L380) has `onClick={startSolve}`
+The button at [App.jsx:382-389](../frontend/src/App.jsx#L382-L389) has `onClick={startSolve}`
 and is disabled while `isLoading` is true. `startSolve`
-([App.jsx:188-196](../frontend/src/App.jsx#L188-L196)) first aborts the run that may still be in
+([App.jsx:196-204](../frontend/src/App.jsx#L196-L204)) first aborts the run that may still be in
 flight (`currentRun.current?.abort()`), creates a new `AbortController`, remembers it in a ref,
 switches on both loading flags, and calls `runSolve`. So at most one run can ever change the
 screen: the newest.
 
 You do not even need to click the first time: the mount effect at
-[App.jsx:204-209](../frontend/src/App.jsx#L204-L209) starts a run through `startFirstRun`
-([App.jsx:199-202](../frontend/src/App.jsx#L199-L202)), a `useEffectEvent` that reads the current
+[App.jsx:212-217](../frontend/src/App.jsx#L212-L217) starts a run through `startFirstRun`
+([App.jsx:207-210](../frontend/src/App.jsx#L207-L210)), a `useEffectEvent` that reads the current
 inputs without making them dependencies of the effect. In development, React's StrictMode mounts
 the component twice; the effect's cleanup aborts the first run, so only the second one gets to
 update the page or send an analysis. `App.test.jsx` pins that ("StrictMode's double mount aborts
@@ -83,7 +83,7 @@ the duplicate first request").
 
 ### Hop 2. Building the request
 
-📍 [`frontend/src/App.jsx:156-187`](../frontend/src/App.jsx#L156-L187)
+📍 [`frontend/src/App.jsx:215-246`](../frontend/src/App.jsx#L215-L246)
 ```jsx
   // Start one run with the current inputs; every state change happens in a callback, after the
   // matching response has arrived. The API takes one opponent assumption: fold_equity. The
@@ -120,7 +120,7 @@ the duplicate first request").
 ```
 
 The five values come from React state, whose defaults are at
-[App.jsx:129-133](../frontend/src/App.jsx#L129-L133). The body on the wire is:
+[App.jsx:137-141](../frontend/src/App.jsx#L137-L141). The body on the wire is:
 
 ```json
 {"pot": 100000, "bet_size": 50000, "fold_equity": 0.35, "hand": "As Kh Qd", "opponent_model": "range"}
@@ -130,7 +130,7 @@ The five values come from React state, whose defaults are at
 `onAnalysis`) to `fetchSolveAndAnalysis`, a plain function defined *outside* the component. It
 holds no state; it only reports what happened:
 
-📍 [`frontend/src/App.jsx:48-52`](../frontend/src/App.jsx#L48-L52)
+📍 [`frontend/src/App.jsx:107-111`](../frontend/src/App.jsx#L107-L111)
 ```jsx
 // One solve + analysis round trip. It holds no state: it reports each step through the callbacks
 // and stops calling them as soon as `signal` is aborted (a newer run started, or the page unmounted).
@@ -169,14 +169,14 @@ the API, or `VITE_API_URL` points at the API and `CORS_ORIGINS` must list the pa
 
 Werkzeug matches `POST /api/solve` to `solve_api` in the `api` blueprint:
 
-📍 [`backend/app.py:504-524`](../backend/app.py#L504-L524)
+📍 [`backend/app.py:593-613`](../backend/app.py#L593-L613)
 ```python
 @api.post("/api/solve")
 def solve_api() -> Response:
     """Rank all 455 hands and, if ``hand`` is given, evaluate that hand too.
 
     JSON body (all optional): pot (> 0), bet_size (> 0), fold_equity in [0, 1],
-    opponent_model ('random' default, or 'range'), hand (e.g. 'As Kh Qd'). A blank or missing
+    opponent_model ('range' default, or 'random'), hand (e.g. 'As Kh Qd'). A blank or missing
     hand is legal: the answer is then the range itself.
     """
     services = _services()
@@ -273,8 +273,10 @@ one frozen `HandResult`.
 
 ### Hop 6. Packing `hand_evaluation`
 
-📍 [`backend/app.py:370-392`](../backend/app.py#L370-L392)
+📍 [`backend/app.py:442-465`](../backend/app.py#L442-L465)
 ```python
+    record = solution.record
+    is_random = equities.opponent_model is OpponentModel.RANDOM
     return {
         "hand": str(solution.hand),
         "score_name": str(solution.hand.score),
@@ -295,57 +297,111 @@ one frozen `HandResult`.
         "profitable_from_fold_equity": solution.zones[-1][0],
         "profitable_fold_zones": [[start, end] for start, end in solution.zones],
         "is_profitable": record.is_raise_profitable,
-        "decision": _decision(record.is_raise_profitable),
-        "recommended_action": "BET" if record.is_raise_profitable else "NO BET",
+        "advice": _advice_payload(record.advice),
     }
 ```
 
 `_hand_payload` gives `break_even_fold_equity: null` (range model) and
-`profitable_from_fold_equity: 0.0` (the start of the last zone), and `decision` comes from
-`_decision` ([app.py:321-322](../backend/app.py#L321-L322)). Note the two equities side by side:
+`profitable_from_fold_equity: 0.0` (the start of the last zone). Note the two equities side by side:
 `showdown_equity` 0.9952 is against the calling range, `equity_vs_random` 0.9969 is from
-`winrates.json`. `/api/evaluate` sends exactly the same 13 fields (lesson 10).
+`winrates.json`. `/api/evaluate` sends exactly the same 16 fields (lesson 10).
+
+The last line is the 3.0.0 change. `record.advice` was built inside `solve_range` (hop 7), and
+`_advice_payload` ([app.py:390-408](../backend/app.py#L390-L408)) flattens it, adding thirteen
+values to the answer in one key: the action, the kind, the reason, the amount, the advice's own EV
+and ratio, the equity when called, the two flags, the `why` split and the three-row `ladder`. On
+this spot it is:
+
+```json
+"advice": {
+  "action": "ALL_IN", "amount": 100000.0, "equity_when_called": 0.9952, "ev": 164064.0,
+  "ev_ratio": 1.64064, "kind": "VALUE", "reason": "ALL_IN_VALUE", "robust": true,
+  "why": {"call_component": 129064.0, "fold_component": 35000.0, "net": 164064.0},
+  "win_rate_defined": true,
+  "ladder": [
+    {"action": "SMALL_BET", "amount": 33000.0, "blocked_by": null, "eligible": true, "ev": 120932.07999999999,
+     "ev_ratio": 1.2093208, "robust": true, "worst_ev_ratio": 1.1763872},
+    {"action": "LARGE_BET", "amount": 75000.0, "blocked_by": null, "eligible": true, "ev": 147970.0,
+     "ev_ratio": 1.4797, "robust": true, "worst_ev_ratio": 1.4048},
+    {"action": "ALL_IN", "amount": 100000.0, "blocked_by": null, "eligible": true, "ev": 164064.0,
+     "ev_ratio": 1.64064, "robust": true, "worst_ev_ratio": 1.54076}
+  ]
+}
+```
+
+Read the `why` split: 35,000 of the 164,064 comes from folds (0.35 × 100,000) and 129,064 from the
+showdown against a caller. `ev` at the top of the hand block is still 131,876, the EV of the 50,000
+bet the request asked about.
 
 ### Hop 7. The whole range
 
-📍 [`backend/app.py:395-400`](../backend/app.py#L395-L400)
+📍 [`backend/app.py:478-502`](../backend/app.py#L478-L502)
 ```python
-def _solve(services: Services, params: GameParams) -> tuple[OpponentEquities, list[HandEVRecord], Json]:
-    """Score all 455 classes from one equity source; return it, the records, and the summary."""
-
     equities = services.range_finder.equities(params.fold_equity, params.opponent_model)
-    records = services.range_finder.solve_range(params.pot, params.bet_size, equities)
+    records = services.range_finder.solve_range(
+        params.pot, params.bet_size, equities, services.advice_thresholds
+    )
     profitable = [r for r in records if r.is_raise_profitable]
+    betting = [r for r in records if r.advice.action is not Action.CHECK]
+    summary: Json = {
+        "pot": params.pot,
+        "bet_size": params.bet_size,
+        "fold_equity": params.fold_equity,
+        "opponent_model": params.opponent_model.value,
+        "call_range_percent": equities.calling_percentile,
+        "final_pot": final_pot(params.pot, params.bet_size),
+        "pure_bluff_break_even_fold_equity": calculate_break_even_fold_equity(params.pot, params.bet_size, 0.0),
+        "total_canonical_classes": len(records),
+        "profitable_classes": len(profitable),
+        "total_combinations": TOTAL_COMBINATIONS,
+        "profitable_combinations": sum(r.multiplicity for r in profitable),
+        "range_coverage_percent": services.range_finder.calculate_range_coverage(profitable),
+        "action_counts": _action_counts(records),
+        "bet_recommended_percent": round(
+            sum(r.multiplicity for r in betting) / TOTAL_COMBINATIONS * 100.0, 2
+        ),
+        "bet_ladder": list(ladder(params.pot, services.advice_thresholds)),
+        "sizing": _sizing_payload(services.advice_thresholds, params.pot),
 ```
 
-- `solve_range` ([range_finder.py:53](../backend/src/range_finder.py#L53)) copies the 455 records
-  (`all_items`, [db.py:150](../backend/src/db.py#L150)), builds **one** equity table for f = 0.35
-  (`equity_table`, [calling_range.py:127](../backend/src/calling_range.py#L127)), calls
-  `calculate_ev` 455 times and sorts by `(ev, equity, strength)`
-  ([range_finder.py:104](../backend/src/range_finder.py#L104)). First: A-A-A, EV 132,500. Last:
-  4-3-3, EV 2,500.
-- All 455 classes are profitable here, because 35% folds is above the 33.3% a pure bluff needs at
-  a half-pot bet. So `calculate_range_coverage` ([range_finder.py:118](../backend/src/range_finder.py#L118))
-  returns 22,100 / 22,100 = **100.0**.
-- The summary adds `final_pot()` (200,000) and the pure-bluff break-even, `50,000 / 150,000`
-  rounded to **0.3333** ([app.py:359-360](../backend/app.py#L359-L360), lesson 07), the
-  highest-EV and threshold hands, and `category_breakdown` from
-  [range_finder.py:150-161](../backend/src/range_finder.py#L150-L161) (lesson 08).
+- `fold_cells` ([range_finder.py:146-183](../backend/src/range_finder.py#L146-L183)) builds the three
+  equity tables the advice needs before the loop: at f = 0.25, 0.35 and 0.45. That is three
+  `equity_table` reads for all 455 classes, not 1,365 single lookups.
+- `solve_range` ([range_finder.py:185-232](../backend/src/range_finder.py#L185-L232)) then calls
+  `calculate_ev` **and** `recommend` 455 times, and sorts by `(ev, equity, strength)`. First: A-A-A,
+  EV 132,500. Last: 4-3-3, EV 2,500.
+- All 455 classes are profitable at the caller's 50,000 bet here, because 35% folds is above the
+  33.3% a pure bluff needs at a half-pot bet. So `calculate_range_coverage`
+  ([range_finder.py:291-311](../backend/src/range_finder.py#L291-L311)) returns 22,100 / 22,100 =
+  **100.0**.
+- The four 3.0.0 fields answer a different question. `action_counts` is
+  `{"CHECK": 128, "SMALL_BET": 175, "LARGE_BET": 98, "ALL_IN": 54}`, `bet_recommended_percent` is
+  71.62 because the checking classes stand for 6,272 of the 22,100 hands, `bet_ladder` is
+  `[33000.0, 75000.0, 100000.0]`, and `sizing` is the ten effective thresholds.
+- The summary also carries `final_pot()` (200,000), the pure-bluff break-even `50,000 / 150,000` =
+  **0.3333** ([app.py:495-496](../backend/app.py#L495-L496), lesson 07), the highest-EV and
+  threshold hands, and `category_breakdown` from
+  [range_finder.py:307-326](../backend/src/range_finder.py#L307-L326) (lesson 08).
 
-Then `_top_hands_payload` ([app.py:383-396](../backend/app.py#L383-L396)) keeps the first 30
-records, each with `showdown_equity` and `decision`, and `jsonify`
-([app.py:438-442](../backend/app.py#L438-L442)) serialises it all: status 200, 5,243 bytes.
+Then `_top_hands_payload` ([app.py:544-558](../backend/app.py#L544-L558)) keeps the first 30
+records, each with `showdown_equity` and the advice's `action`, `kind` and `amount`, and `jsonify`
+([app.py:614-618](../backend/app.py#L614-L618)) serialises it all: status 200, 7,171 bytes.
 Trimmed:
 
 ```json
 {
   "hand_evaluation": {
-    "break_even_fold_equity": null, "canonical_id": "Q-K-A", "category": "LIENG",
-    "category_name": "Liêng", "decision": "RAISE", "equity_vs_random": 0.9969, "ev": 131876.0,
+    "advice": { "action": "ALL_IN", "amount": 100000.0, "ev": 164064.0, "kind": "VALUE",
+                "reason": "ALL_IN_VALUE", "robust": true, "win_rate_defined": true },
+    "break_even_fold_equity": null, "call_range_percent": 65.0, "canonical_id": "Q-K-A",
+    "category": "LIENG", "category_name": "Liêng", "equity_vs_random": 0.99693335, "ev": 131876.0,
     "hand": "As Kh Qd", "is_profitable": true, "profitable_fold_zones": [[0.0, 1.0]],
-    "profitable_from_fold_equity": 0.0, "score_name": "Liêng Q-K-A", "showdown_equity": 0.9952
+    "profitable_from_fold_equity": 0.0, "random_hand_equity": 0.99693335,
+    "score_name": "Liêng Q-K-A", "showdown_equity": 0.9952
   },
   "summary": {
+    "action_counts": {"ALL_IN": 54, "CHECK": 128, "LARGE_BET": 98, "SMALL_BET": 175},
+    "bet_ladder": [33000.0, 75000.0, 100000.0], "bet_recommended_percent": 71.62,
     "bet_size": 50000.0, "category_breakdown": [
       {"category": "SAP", "classes": 13, "combos": 52, "profitable_combos": 52},
       {"category": "LIENG", "classes": 12, "combos": 768, "profitable_combos": 768},
@@ -359,16 +415,17 @@ Trimmed:
     "total_canonical_classes": 455, "total_combinations": 22100
   },
   "top_hands": [
-    {"canonical_id": "A-A-A", "category": "SAP", "decision": "RAISE", "ev": 132500.0, "is_profitable": true, "multiplicity": 4, "showdown_equity": 1.0},
-    {"canonical_id": "K-K-K", "category": "SAP", "decision": "RAISE", "ev": 132461.0, "is_profitable": true, "multiplicity": 4, "showdown_equity": 0.9997},
+    {"action": "ALL_IN", "amount": 100000.0, "canonical_id": "A-A-A", "category": "SAP", "ev": 132500.0, "kind": "VALUE", "multiplicity": 4, "showdown_equity": 1.0},
+    {"action": "ALL_IN", "amount": 100000.0, "canonical_id": "K-K-K", "category": "SAP", "ev": 132461.0, "kind": "VALUE", "multiplicity": 4, "showdown_equity": 0.9997},
     "… 28 more, down to Q-Q-J (DI, showdown_equity 0.9386, EV 124,518)"
   ]
 }
 ```
 
-(The real body has no spaces and escapes "ê" as `\u00ea`; `JSON.parse` turns it back.) The
-response grew from 4,403 to 5,243 bytes when every top hand's `equity` became `showdown_equity`
-and gained a `decision` next to `is_profitable` (the one-vocabulary change of lesson 10).
+(The real body has no spaces and escapes "ê" as `\u00ea`; `JSON.parse` turns it back. `sizing` is
+cut from the block above to keep it readable.) The response grew from 5,243 to 7,171 bytes: three
+ladder rows per hand answer, `action`, `kind` and `amount` in every top-hands row, and four new
+summary fields.
 
 Where the time goes, measured per call on the course machine (machine-dependent):
 
@@ -389,7 +446,7 @@ Flask. The 54 ms `CallingRangeModel` build never shows up: it happened once, in 
 
 ### Hop 8. Back in the browser: state
 
-📍 [`frontend/src/App.jsx:54-74`](../frontend/src/App.jsx#L54-L74)
+📍 [`frontend/src/App.jsx:113-133`](../frontend/src/App.jsx#L113-L133)
 ```jsx
   let solveJson;
   try {
@@ -434,7 +491,7 @@ development (the Vite proxy answers `502` with an empty body), or when the page 
 other server that answers `404`. It used to look at the status too, and a code-less 404 came out
 as `Check your inputs: HTTP 404`.
 
-The callbacks live in `runSolve` ([App.jsx:166-184](../frontend/src/App.jsx#L166-L184)).
+The callbacks live in `runSolve` ([App.jsx:174-192](../frontend/src/App.jsx#L174-L192)).
 `onSolveFailed` clears the old verdict, tables and analysis, since they belong to other inputs.
 `onSolved` stores the whole JSON in `solveData` and sets `isLoading` to false, which re-enables the
 button **before** the analysis starts.
@@ -442,47 +499,43 @@ button **before** the analysis starts.
 `setSolveData` makes React run `App()` again. On that render the derived values pick the response
 apart:
 
-📍 [`frontend/src/App.jsx:212-217`](../frontend/src/App.jsx#L212-L217)
+📍 [`frontend/src/App.jsx:271-277`](../frontend/src/App.jsx#L271-L277)
 ```jsx
   const handEval = solveData?.hand_evaluation;
   const summary = solveData?.summary;
-  const isRaise = handEval?.decision === "RAISE";
+  const advice = handEval?.advice;
+  const actionCounts = summary?.action_counts;
 
   const zones = handEval?.profitable_fold_zones;
 
 ```
 
-### Hop 9. Numbers on the screen
+### Hop 9. What the page does with the answer
 
-Each JSON value and where it lands (English UI; Vietnamese uses `vi-VN` number formatting, so
-131,876 becomes 131.876):
+The page reads the advice object, not a boolean, and the whole card is lesson 13. What matters for
+the trace is which fields survive contact with the client:
 
-| JSON value | Rendered at | You see |
-|------------|-------------|---------|
-| `decision` "RAISE" | [App.jsx:409-413](../frontend/src/App.jsx#L409-L413) | green banner, "Raise / all-in" |
-| `hand`, `canonical_id`, `score_name` | [:416-420](../frontend/src/App.jsx#L416-L420) | "As Kh Qd · Q-K-A · Liêng Q-K-A" |
-| `ev` 131876.0 | [:427](../frontend/src/App.jsx#L427) (via `formatMoney`) | "+131,876 VND" |
-| `profitable_fold_zones` [[0,1]] | [:430](../frontend/src/App.jsx#L430) (via `formatZones`) and the bar at [:330-343](../frontend/src/App.jsx#L330-L343) | "Raising is +EV when the opponent folds 0%–100%" |
-| `range_coverage_percent` 100.0 | [:441](../frontend/src/App.jsx#L441) | "100.0%" |
-| `profitable_combinations` 22100 | [:444](../frontend/src/App.jsx#L444) | "22,100 of 22,100 combos are +EV" |
-| `showdown_equity` 0.9952 | [:451](../frontend/src/App.jsx#L451) | "99.5%" |
-| `fold_equity`, `equity_vs_random` | [:454-457](../frontend/src/App.jsx#L454-L457) | "vs. the top 65% that call · 99.7% vs. a random hand" |
-| `ev` again | [:465](../frontend/src/App.jsx#L465) | "+131,876" |
-| `pure_bluff_break_even_fold_equity` 0.3333 | [:473](../frontend/src/App.jsx#L473) | "33.3%" |
-| `category_breakdown` | [:499-514](../frontend/src/App.jsx#L499-L514) | four rows, each "100.0%", "Raise all" |
-| `top_hands` (30 sent) | [:540-552](../frontend/src/App.jsx#L540-L552) | the first 10: A-A-A "100.0%" "+132,500 VND" "4 combos" "Raise" … 5-5-5 |
+| Read by `App.jsx` | Where it came from |
+|-------------------|--------------------|
+| `advice.action`, `.kind`, `.amount`, `.reason`, `.why`, `.ladder`, `.win_rate_defined` | built in `solve_range` (hop 7) and flattened by `_advice_payload` (hop 6) |
+| `canonical_id`, `score_name`, `showdown_equity`, `equity_vs_random` | the table row and the database, unchanged from 2.0.0 |
+| `call_range_percent`, `profitable_fold_zones` | derived from `fold_equity` and the zone scan |
+| `summary.opponent_model`, `.fold_equity`, `.pure_bluff_break_even_fold_equity`, `.bet_recommended_percent`, `.action_counts`, `.category_breakdown`, `.sizing` | `_solve` (hop 7) |
+| `top_hands[].canonical_id`, `.showdown_equity`, `.ev`, `.multiplicity`, `.action`, `.kind`, `.amount` | `_top_hands_payload` |
 
-`formatMoney` and `formatZones` live in [format.js](../frontend/src/format.js) (lesson 13). The
-top-hands table reads `showdown_equity` ([:544](../frontend/src/App.jsx#L544)) and
-`is_profitable` ([:549](../frontend/src/App.jsx#L549)); its `decision` is not used. Fifteen of the
-29 keys in `summary` and `hand_evaluation` are never read by the page either, for example
-`break_even_fold_equity`, `profitable_from_fold_equity`, `category_name`, `final_pot`,
-`highest_ev_hand` and `threshold_hand`. They exist for other clients, such as scripts that call
-`/api/evaluate` or `/api/range`, which share the same fields.
+Sent and never read: `hand_evaluation.is_profitable`, `random_hand_equity`, `category`,
+`category_name`, `break_even_fold_equity`, `profitable_from_fold_equity`; `summary.pot`,
+`bet_size`, `final_pot`, `range_coverage_percent`, `profitable_classes`,
+`profitable_combinations`, `total_canonical_classes`, `total_combinations`, `bet_ladder`,
+`highest_ev_*`, `threshold_*`; and `advice.robust`. They exist for other clients, such as scripts
+that call `/api/evaluate` or `/api/range`, which share the same fields.
+
+`formatMoney` and `formatZones` live in [format.js](../frontend/src/format.js): the Vietnamese
+locale turns 131,876 into 131.876.
 
 ### Hop 10. The follow-up: `POST /api/analyze`
 
-📍 [`frontend/src/App.jsx:76-90`](../frontend/src/App.jsx#L76-L90)
+📍 [`frontend/src/App.jsx:135-149`](../frontend/src/App.jsx#L135-L149)
 ```jsx
   // The server recomputes everything for the analysis from the same inputs.
   let advice;
@@ -516,9 +569,9 @@ for this click is:
 Back in the browser, `advice` becomes `{text, model}`, or a notice key: `aiRateLimited` for a 429,
 `aiUnreachable` for any other error status (such as the 502 of a failed OpenRouter call),
 `aiTransportFault` if the request itself threw. `onAnalysis`
-([App.jsx:180-183](../frontend/src/App.jsx#L180-L183)) stores it and clears `isAiLoading`. The
-notes drawer shows the text at [App.jsx:582](../frontend/src/App.jsx#L582) and the model the API
-reported at [App.jsx:575](../frontend/src/App.jsx#L575), only when you open the drawer.
+([App.jsx:188-191](../frontend/src/App.jsx#L188-L191)) stores it and clears `isAiLoading`. The
+notes drawer shows the text at [App.jsx:593](../frontend/src/App.jsx#L593) and the model the API
+reported at [App.jsx:586](../frontend/src/App.jsx#L586), only when you open the drawer.
 
 ---
 
@@ -594,11 +647,11 @@ parts of the page that changed. Nothing in this file touches the DOM directly.
    `hand_evaluation` and `range_coverage_percent` back, and the server believed them. Now the page
    sends only the inputs and the server recomputes. Pinned on both sides:
    `test_analyze_recomputes_instead_of_trusting_the_client`
-   ([test_api.py:273-283](../backend/tests/test_api.py#L273-L283)) and the "analysis requests send
+   ([test_api.py:275-285](../backend/tests/test_api.py#L275-L285)) and the "analysis requests send
    only the inputs" test in [App.test.jsx](../frontend/src/App.test.jsx) (exercise 5).
 3. **Unused payload.** Still open. 30 `top_hands` are sent and 10 shown
-   ([App.jsx:540](../frontend/src/App.jsx#L540)); 15 summary and evaluation keys, and every
-   `top_hands[].decision`, are never read by the page. *Fix:* a `limit` parameter, and document
+   ([App.jsx:550](../frontend/src/App.jsx#L550)); 15 summary and evaluation keys, and every
+   `top_hands[].is_profitable`, are never read by the page. *Fix:* a `limit` parameter, and document
    which keys are for other clients.
 4. ✅ **Fixed: stacked error prefixes.** A bad hand used to read `Invalid input: Invalid hand:
    Invalid rank 'X'. …`, with one prefix from `i18n.js` and one from `app.py`. Now the server sends
@@ -608,12 +661,12 @@ parts of the page that changed. Nothing in this file touches the DOM directly.
    `test_invalid_hand_message_has_no_stacked_prefix` ([test_api.py:108-110](../backend/tests/test_api.py#L108-L110))
    and the "an invalid hand shows its message" test in `App.test.jsx`.
 5. ✅ **Fixed: two requests on page load in development.** StrictMode still mounts twice, but the
-   cleanup of the effect at [App.jsx:204-209](../frontend/src/App.jsx#L204-L209) aborts the first
+   cleanup of the effect at [App.jsx:212-217](../frontend/src/App.jsx#L212-L217) aborts the first
    run: its solve is cancelled and it never sends an analysis. Pinned by "StrictMode's double mount
    aborts the duplicate first request" in `App.test.jsx`. Production builds mount once.
 6. ✅ **Fixed: a misleading label.** The drawer used to say "OpenRouter · Llama 3.1 8B Instruct"
    even for the offline fallback. Now it shows the `model` string the API reported
-   ([App.jsx:575](../frontend/src/App.jsx#L575)). Pinned by "the notes show the model the API
+   ([App.jsx:586](../frontend/src/App.jsx#L586)). Pinned by "the notes show the model the API
    reports" in `App.test.jsx`.
 7. **Every solve also runs an analysis.** New, and open. The analysis request is sent after every
    solve, even when the notes drawer stays closed, and `/api/analyze` is rate-limited to 10 per
@@ -638,7 +691,7 @@ c = create_app(config={"TESTING": True}).test_client()
 body = {"pot": 100000, "bet_size": 50000, "fold_equity": 0.35, "hand": "As Kh Qd", "opponent_model": "range"}
 r = c.post("/api/solve", json=body)
 d = r.get_json(); e, s = d["hand_evaluation"], d["summary"]
-print(r.status_code, len(r.data), e["decision"], e["ev"], e["showdown_equity"], e["equity_vs_random"])
+print(r.status_code, len(r.data), e["advice"]["action"], e["advice"]["amount"], e["ev"])
 print(e["profitable_fold_zones"], s["range_coverage_percent"], s["profitable_combinations"], s["pure_bluff_break_even_fold_equity"])
 print([h["canonical_id"] for h in d["top_hands"][:3]], len(d["top_hands"]), sorted(d["top_hands"][0]))
 a = c.post("/api/analyze", json=body)
@@ -649,7 +702,7 @@ print(a.status_code, a.get_json()["model"])
 ```
 200 5243 RAISE 131876.0 0.9952 0.9969
 [[0.0, 1.0]] 100.0 22100 0.3333
-['A-A-A', 'K-K-K', 'Q-Q-Q'] 30 ['canonical_id', 'category', 'decision', 'ev', 'is_profitable', 'multiplicity', 'showdown_equity']
+['A-A-A', 'K-K-K', 'Q-Q-Q'] 30 ['action', 'amount', 'canonical_id', 'category', 'ev', 'kind', 'multiplicity', 'showdown_equity']
 200 rule-based-solver-engine (OPENROUTER_API_KEY not configured)
 ```
 
@@ -729,9 +782,9 @@ in `App.test.jsx`'s "shows the matching message" table.
 </details>
 
 **🟡 4. Remove the abort guards.** In the analysis half of `fetchSolveAndAnalysis`, delete
-`if (!signal.aborted)` in front of `onAnalysis(advice)` ([App.jsx:90](../frontend/src/App.jsx#L90))
+`if (!signal.aborted)` in front of `onAnalysis(advice)` ([App.jsx:98](../frontend/src/App.jsx#L98))
 and run `npm test`. Then also delete `if (signal.aborted) return;` at
-[App.jsx:80](../frontend/src/App.jsx#L80) and run it again. Predict both results.
+[App.jsx:88](../frontend/src/App.jsx#L88) and run it again. Predict both results.
 
 <details><summary>Solution</summary>
 

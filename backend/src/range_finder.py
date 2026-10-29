@@ -1,7 +1,8 @@
 """Liêng Stealer - Range Solver & Opportunity Scanner.
 
 Evaluates all 455 canonical hands against current game parameters (Pot, Bet, Fold Equity),
-filtering for positive expected value (EV > 0) and measuring total range coverage.
+filtering for positive expected value (EV > 0), measuring total range coverage, and carrying the
+betting advice each hand earns at the three ladder sizes.
 """
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from types import MappingProxyType
 
+from src.advice import DEFAULT_THRESHOLDS, AdviceThresholds, FoldCell, Recommendation, fold_grid, recommend
 from src.calling_range import CallingRangeModel, OpponentModel
 from src.db import WinRateDB
 from src.ev import calculate_ev, is_profitable, profitable_fold_zones
@@ -21,13 +23,19 @@ from src.hands import generate_all_canonical_hands, to_canonical
 
 @dataclass(frozen=True)
 class HandEVRecord:
-    """Immutable valuation record for a canonical hand under specific game state."""
+    """Immutable valuation record for a canonical hand under specific game state.
+
+    ``ev`` is the EV at the caller's ``bet_size``; ``advice`` is what the policy says to do with
+    the ladder.
+    """
+
     canonical_id: str
     category: HandCategory
     equity: float
     ev: float
     multiplicity: int
     is_raise_profitable: bool
+    advice: Recommendation
 
 
 @dataclass(frozen=True)
@@ -80,11 +88,7 @@ class OpponentEquities:
 
 @dataclass(frozen=True)
 class HandSolution:
-    """One hand's answer: its row of the 455-class table, plus where raising pays.
-
-    ``record.equity`` and ``record.ev`` are the reported ``showdown_equity`` and ``ev``.
-    They are not recomputed, so they cannot drift from the table.
-    """
+    """One hand's answer: its row of the 455-class table, plus where raising pays."""
 
     hand: Hand
     record: HandEVRecord
@@ -113,7 +117,7 @@ class RangeFinder:
         self._strength = {h.canonical_id: h.score.score_tuple for h in generate_all_canonical_hands()}
 
     def equities(self, fold_equity: float, opponent_model: OpponentModel) -> OpponentEquities:
-        """The one equity source for a request: 455 numbers under one opponent assumption.
+        """Build the 455-class equity table for this request.
 
         Args:
             fold_equity: Opponent fold frequency in [0.0, 1.0]. Under RANGE it also fixes the
@@ -135,24 +139,68 @@ class RangeFinder:
             opponent_model, fold_equity, {cid: stats.equity for cid, stats in self._db.all_items().items()}
         )
 
+    def fold_cells(
+        self,
+        fold_equity: float,
+        opponent_model: OpponentModel,
+    ) -> Mapping[str, tuple[FoldCell, ...]]:
+        """Hero's equity for every class in the three fold-rate cells the advice policy stresses.
+
+        Under RANGE a different fold frequency is also a different calling range, so each cell is
+        its own equity table; under RANDOM the equity does not depend on the fold rate, so every
+        cell reuses the stored number. The centre cell is ``equities(fold_equity, model).of(cid)``.
+
+        Args:
+            fold_equity: The user's fold frequency in [0.0, 1.0].
+            opponent_model: RANDOM or RANGE; picks where the per-cell equity comes from.
+
+        Returns:
+            Mapping of canonical ID to two or three cells, sorted by fold frequency.
+
+        Raises:
+            ModelError: If RANGE is requested and no CallingRangeModel was injected.
+            InvalidGameParamsError: If fold_equity is outside [0.0, 1.0] (also a ValueError).
+        """
+        grid = fold_grid(fold_equity)
+        if opponent_model is OpponentModel.RANGE:
+            model = self._calling_model
+            if model is None:
+                raise ModelError("OpponentModel.RANGE requires a CallingRangeModel.")
+            columns = [(cell, model.equity_table(cell)) for cell in grid]
+            return MappingProxyType({
+                cid: tuple(FoldCell(cell, by_class[cid]) for cell, by_class in columns)
+                for cid in self._db.all_items()
+            })
+        random_equities = self.equities(fold_equity, opponent_model)
+        return MappingProxyType({
+            cid: tuple(FoldCell(cell, random_equities.of(cid)) for cell in grid)
+            for cid in self._db.all_items()
+        })
+
     def solve_range(
         self,
         pot: float,
         bet_size: float,
         equities: OpponentEquities,
+        thresholds: AdviceThresholds = DEFAULT_THRESHOLDS,
     ) -> list[HandEVRecord]:
         """Evaluate and rank all 455 canonical hands sorted descending by EV.
 
         Args:
             pot: Dead pot size before hero's bet (must be > 0).
             bet_size: Additional bet / raise amount (must be > 0).
-            equities: The request's single equity source; it also owns the fold rate used in
-                the EV formula, so the table and the formula cannot be handed different ones.
+            equities: The equities to value every class under; it also carries the fold rate the
+                EV formula uses.
+            thresholds: The advice policy's numbers.
 
         Returns:
             List of all 455 HandEVRecord instances sorted by EV descending.
+
+        Raises:
+            ModelError: If the equities came from RANGE and no CallingRangeModel was injected.
         """
         fold_equity = equities.fold_equity
+        board = self.fold_cells(fold_equity, equities.opponent_model)
         records: list[HandEVRecord] = []
         for cid, stats in self._db.all_items().items():
             equity = equities.of(cid)
@@ -170,6 +218,7 @@ class RangeFinder:
                     ev=ev,
                     multiplicity=stats.multiplicity,
                     is_raise_profitable=is_profitable(ev),
+                    advice=recommend(pot, FoldCell(fold_equity, equity), board[cid], thresholds),
                 )
             )
 
@@ -187,12 +236,10 @@ class RangeFinder:
     ) -> HandSolution:
         """Answer one hand from the table: the matching row, plus the fold rates where raising pays.
 
-        The reported equity and EV are the row's stored values, not a second computation.
-
         Args:
             hand: Hero's three cards.
             records: The 455 records produced by ``solve_range`` for the same equities.
-            equities: The same equity source those records came from.
+            equities: The equities those records came from.
             pot: Dead pot size before hero's bet (must be > 0).
             bet_size: Additional bet / raise amount (must be > 0).
 
@@ -214,7 +261,6 @@ class RangeFinder:
         raise ModelError(f"Canonical hand '{canonical_id}' is missing from the 455-class table.")
 
     def _equity_scan(self, equities: OpponentEquities, canonical_id: str) -> Callable[[float], float]:
-        """Map a hypothetical fold frequency to Hero's equity there, under the same assumption."""
         if equities.opponent_model is OpponentModel.RANGE:
             model = self._calling_model
             if model is None:
@@ -228,9 +274,10 @@ class RangeFinder:
         pot: float,
         bet_size: float,
         equities: OpponentEquities,
+        thresholds: AdviceThresholds = DEFAULT_THRESHOLDS,
     ) -> list[HandEVRecord]:
         """Return only hands where Raise / All-in has positive expected value (EV > 0)."""
-        arms = self.solve_range(pot, bet_size, equities)
+        arms = self.solve_range(pot, bet_size, equities, thresholds)
         return [r for r in arms if r.is_raise_profitable]
 
     def calculate_range_coverage(

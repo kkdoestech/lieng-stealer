@@ -145,7 +145,7 @@ platform which one to use.
 
 Every backend setting has a default in code:
 
-📍 [`backend/app.py:61-74`](../backend/app.py#L61-L74)
+📍 [`backend/app.py:62-77`](../backend/app.py#L62-L77)
 ```python
 # Settings and their defaults. create_app() reads each one from the environment when it is set,
 # and an explicit ``config`` argument overrides both (tests use that).
@@ -160,10 +160,17 @@ DEFAULT_CONFIG: Final[dict[str, Any]] = {
     "OPENROUTER_API_KEY": "",
     "OPENROUTER_MODEL": "meta-llama/llama-3.1-8b-instruct:free",
     "OPENROUTER_TIMEOUT": 15.0,
+    # One ADVICE_* setting per policy threshold, so the nine numbers are defined in one place.
+    **{f"ADVICE_{field.name.upper()}": field.default for field in fields(AdviceThresholds)},
 }
 ```
 
-`_settings_from_env` ([app.py:159-175](../backend/app.py#L159-L175)) reads each of these names
+The last line is the 3.0.0 addition: the nine advice thresholds are settings like any other, named
+`ADVICE_SMALL_FRACTION`, `ADVICE_MIN_EDGE_RATIO`, `ADVICE_FOLD_STEP` and so on, generated from the
+frozen `AdviceThresholds` so a name can never drift from the field it sets. They are listed in
+`backend/.env.example` with their defaults.
+
+`_settings_from_env` ([app.py:174-190](../backend/app.py#L174-L190)) reads each of these names
 from the environment and converts it to the default's type: `"1"`, `"true"`, `"yes"` or `"on"` for a
 bool, `int()` or `float()` for a number, the raw text otherwise. A number that doesn't parse stops
 start-up with a message naming the variable, for example
@@ -311,7 +318,7 @@ Two details matter once it runs under gunicorn:
   address from `X-Forwarded-For` before the limiter sees it. With a 2-per-minute limit, three
   visitors with different `X-Forwarded-For` headers from the same `REMOTE_ADDR` got `200, 200, 429`
   with the default 0 and `200, 200, 200` with 1 (🧪 below; pinned by
-  `test_proxy_fix_counts_each_forwarded_client`, [test_api.py:430-442](../backend/tests/test_api.py#L430-L442)).
+  `test_proxy_fix_counts_each_forwarded_client`, [test_api.py:433-445](../backend/tests/test_api.py#L433-L445)).
   Leave it at 0 when nothing sits in front of the app: `X-Forwarded-For` is just a header, and a
   client could send a new value with every request to get a fresh bucket each time.
 
@@ -426,7 +433,7 @@ Fixed since the first version of this course:
 - ✅ **Fixed: CORS `"*"` with a paid key.** Origins come from `CORS_ORIGINS`
   ([app.py:141-142](../backend/app.py#L141-L142)) and `/api/analyze` is rate-limited
   ([app.py:144-151](../backend/app.py#L144-L151)). Pinned by `test_cors_allows_only_configured_origins`
-  and `test_analyze_is_rate_limited` ([test_api.py:363-380](../backend/tests/test_api.py#L363-L380)).
+  and `test_analyze_is_rate_limited` ([test_api.py:366-383](../backend/tests/test_api.py#L366-L383)).
 - ✅ **Fixed: a silent localhost fallback.** A build without `VITE_API_URL` now calls `/api` on its
   own origin ([App.jsx:8](../frontend/src/App.jsx#L8)) instead of each visitor's `127.0.0.1:5000`.
 - ✅ **Fixed: `.env` files were not ignored.** [.gitignore:12-15](../.gitignore#L12-L15) ignores
@@ -442,11 +449,11 @@ Fixed since the first version of this course:
   the router's. The opt-in `PROXY_FIX_X_FOR` wraps the app in Werkzeug's `ProxyFix`
   ([app.py:132-133](../backend/app.py#L132-L133)), so each visitor gets their own bucket (section 6).
   Pinned by `test_proxy_fix_counts_each_forwarded_client`
-  ([test_api.py:430-442](../backend/tests/test_api.py#L430-L442)), both with 0 and with 1.
+  ([test_api.py:433-445](../backend/tests/test_api.py#L433-L445)), both with 0 and with 1.
 - ✅ **Fixed: a 429 didn't say when to retry.** `headers_enabled=True`
   ([app.py:149](../backend/app.py#L149)) adds `Retry-After` and `X-RateLimit-*`, and the message
   names the limit ([app.py:213](../backend/app.py#L213)). Pinned by
-  `test_rate_limit_response_says_when_to_retry` ([test_api.py:399-408](../backend/tests/test_api.py#L399-L408)).
+  `test_rate_limit_response_says_when_to_retry` ([test_api.py:402-411](../backend/tests/test_api.py#L402-L411)).
 - ✅ **Fixed: `backend/.env` looked as if it were loaded.** The example used to say only "Copy to
   backend/.env for local use". Its header now says that nothing loads the file and how to export it
   ([.env.example:1-5](../backend/.env.example#L1-L5)), and values with spaces are quoted so the file
@@ -457,7 +464,7 @@ Fixed since the first version of this course:
 - ✅ **Fixed: a typo in a numeric setting gave a bare error.** `OPENROUTER_TIMEOUT=abc` now fails
   with a message naming the variable ([app.py:168-172](../backend/app.py#L168-L172)). Pinned by
   `test_non_numeric_setting_in_the_environment_is_a_clear_error`
-  ([test_api.py:423-427](../backend/tests/test_api.py#L423-L427)).
+  ([test_api.py:426-430](../backend/tests/test_api.py#L426-L430)).
 
 Still open:
 

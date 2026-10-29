@@ -24,6 +24,7 @@ The system strictly adheres to:
 - **No Global Mutable State**: Do not use global variables to store game state or cached databases. State must be injected via constructors or parameters (Dependency Injection). The Flask app is built by `create_app(db=..., calling_model=..., config=...)`, which keeps its services in `app.extensions`; the module-level `app` object exists only as the entry point for gunicorn and `python app.py`.
 - **Immutability**: Card and Hand instances must be hashable and immutable so they can serve as dictionary keys and set members. `Hand` equality means equal strength (the hands would tie), and its hash agrees with it.
 - **One opponent assumption, one equity source**: `fold_equity` is the only caller assumption the API accepts; under the `range` model the calling range is derived, `(1 - f) × 100%`, and only echoed back as `call_range_percent` (never sent). A request builds one `OpponentEquities` and answers a hand as `HandSolution.record`, i.e. the matching row of the 455-class table, so a second equity implementation cannot exist again. `src/opponent_model.py` was deleted in 2.0.0 for exactly that reason; `git log` has the history.
+- **One recommendation, one policy object**: the advice is one frozen `Recommendation` built by `src/advice.py`, and `HandEVRecord.advice` carries it into both the single-hand answer and the 455-class table, so the card and the table row are the same object and cannot disagree. The policy walks down a three-rung ladder (33%, 75% and 100% of the pot) and a rung may be the answer only when its EV is at least 5% of the pot in the centre fold cell and in the worst cell at the fold rate ±10 points; `ALL_IN` also requires a win rate of at least 85%, and a bluff may never use anything but the small rung. The nine numbers live in one frozen `AdviceThresholds`, are injected through `create_app(thresholds=...)` or the `ADVICE_*` settings, and are echoed as `summary.sizing` so no client has to hard-code one.
 
 ---
 
@@ -118,7 +119,7 @@ Where:
 - $P(\text{Win} \mid \text{Call})$: Player's showdown equity against opponent's calling range.
 - $\text{FinalPot} = P + B + C_{\text{opp}}$, where $C_{\text{opp}}$ is opponent's call contribution. The code assumes $C_{\text{opp}} = B$: `ev.final_pot(P, B)` returns $P + 2B$.
 - Showdown Value: $[P(\text{Win} \mid \text{Call}) \times \text{FinalPot}] - B$.
-- **Decision Rule**: Execute Raise if and only if $\text{EV} > 0$.
+- **Decision Rule** (3.0.0): $\text{EV} > 0$ is necessary, not sufficient. `src/advice.py` prices the three rungs and answers with the first one that clears the 5%-of-pot floor in the centre cell and in the worst $\pm 0.10$ cell, starting from the largest rung the win rate allows; `ALL_IN` also needs a win rate of at least 0.85. See §2.2.
 
 ---
 

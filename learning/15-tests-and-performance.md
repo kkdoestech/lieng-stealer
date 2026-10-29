@@ -1,6 +1,6 @@
 # Lesson 15 — Tests and performance
 
-> **Goal:** know what the 172 backend tests and 20 frontend tests check, how their fixtures and
+> **Goal:** know what the 267 backend tests and 37 frontend tests check, how their fixtures and
 > imports work, what ruff, mypy and CI add, which performance budgets from AGENTS.md §6 the code
 > meets, and where the gaps are so you can add the next test yourself.
 > **Files:** [`backend/tests/`](../backend/tests), [`backend/pyproject.toml`](../backend/pyproject.toml),
@@ -38,7 +38,7 @@ organised, what keeps it fast and offline, what it measures, and what it does no
 | 1 | [tests/__init__.py](../backend/tests/__init__.py) and [pyproject.toml:21-22](../backend/pyproject.toml#L21-L22) | One docstring line that decides how imports work, and the only pytest setting. |
 | 2 | [test_api.py:18-33](../backend/tests/test_api.py#L18-L33) | Module-scoped services, an app built by `create_app`, a function-scoped client. |
 | 3 | [test_dynamic_scenarios.py:29-41](../backend/tests/test_dynamic_scenarios.py#L29-L41) | Module-scoped fixtures and an absolute data path. |
-| 4 | [test_cli.py:39-42](../backend/tests/test_cli.py#L39-L42) and [test_api.py:324-335](../backend/tests/test_api.py#L324-L335) | `monkeypatch`: a fake keyboard and a fake OpenRouter. |
+| 4 | [test_cli.py:88-91](../backend/tests/test_cli.py#L88-L91) and [test_api.py:326-337](../backend/tests/test_api.py#L326-L337) | `monkeypatch`: a fake keyboard and a fake OpenRouter. |
 | 5 | [tests/perf.py](../backend/tests/perf.py), [test_evaluator.py:302-306](../backend/tests/test_evaluator.py#L302-L306), [test_db.py:50-62](../backend/tests/test_db.py#L50-L62), [test_calling_range.py:76-80](../backend/tests/test_calling_range.py#L76-L80) | The three timing tests and the factor that scales them. |
 | 6 | [AGENTS.md:124-130](../AGENTS.md#L124-L130) | The five performance budgets, with measurements. |
 | 7 | [pyproject.toml:1-19](../backend/pyproject.toml#L1-L19) and [ci.yml](../.github/workflows/ci.yml) | ruff, strict mypy, and the three CI jobs. |
@@ -50,10 +50,9 @@ organised, what keeps it fast and offline, what it measures, and what it does no
 
 ### 1. The test map
 
-Counted with `python -m pytest --collect-only -q`. Six test functions are parametrised (four in
-`test_api.py`, for example [test_api.py:216-220](../backend/tests/test_api.py#L216-L220), one in
-[test_cli.py:31](../backend/tests/test_cli.py#L31) and one in
-[test_exceptions.py:23](../backend/tests/test_exceptions.py#L23)), so 154 test functions make 172 tests.
+Counted with `python -m pytest --collect-only -q`. 215 test functions make 267 tests, because 13 of
+them are parametrised and their 65 cases count separately (`test_kind_bands_at_their_boundaries`
+alone runs four times, once per band edge). The map below counts the tests, not the functions:
 
 | File | Tests | Fixtures (scope) | What it pins | Lesson |
 |------|------:|------------------|--------------|--------|
@@ -62,13 +61,14 @@ Counted with `python -m pytest --collect-only -q`. Six test functions are parame
 | [test_hands.py](../backend/tests/test_hands.py) | 8 | none | 455 classes, multiplicities summing to 22,100, suit invariance, duplicate cards, `<=` / `>=` | 03 |
 | [test_generator.py](../backend/tests/test_generator.py) | 15 | `canonical_map` (module), `tmp_path`, `monkeypatch` | exact equities, rate invariants, Monte Carlo within 1.5%, JSON schema, flags, local RNG, atomic write, file permissions, a failed write leaves no temp file | 04 |
 | [test_db.py](../backend/tests/test_db.py) | 13 | `loaded_db` (function), `real_records` (module), `tmp_path`, `monkeypatch` | loading, **lookup latency**, errors, malformed and implausible files, a failed reload, any working directory | 05 |
-| [test_calling_range.py](../backend/tests/test_calling_range.py) | 12 | `model`, `db` (module) | rows ending at 18,424, f = 0 equals `winrates.json`, monotonicity, **table latency**, refuses partial or tied hand lists with `ModelError` | 06 |
-| [test_ev.py](../backend/tests/test_ev.py) | 15 | none | EV boundaries, bluff arithmetic, break-even, profit zones, folds that hurt the nuts | 07 |
-| [test_range_finder.py](../backend/tests/test_range_finder.py) | 9 | `loaded_finder`, `finder_with_model` (module) | 455 sorted records, coverage, 387 vs 250 classes, tie order, category totals, `RANGE` without a model | 08 |
-| [test_cli.py](../backend/tests/test_cli.py) | 12 | `capsys`, `monkeypatch`, `tmp_path` (built-in) | decisions per model, exit codes 1 and 2, no output before an error, interactive mode, the plain-text EV sign, a broken model exits 1 | 09 |
-| [test_api.py](../backend/tests/test_api.py) | 46 | `shared_services`, `app` (module), `client`, `keyed_client` (function), `monkeypatch` | every route, one vocabulary, JSON errors, NaN, odd and non-JSON bodies, analysis recomputed and OpenRouter faked, rate limit and `Retry-After`, the proxy fix, an exported key ignored, a bad numeric setting, CORS, injection | 10 |
+| [test_calling_range.py](../backend/tests/test_calling_range.py) | 13 | `model`, `db` (module) | rows ending at 18,424, f = 0 equals `winrates.json`, monotonicity, **table latency**, refuses partial or tied hand lists with `ModelError` | 06 |
+| [test_ev.py](../backend/tests/test_ev.py) | 19 | none | EV boundaries, bluff arithmetic, break-even, profit zones, folds that hurt the nuts, non-finite inputs | 07 |
+| [test_advice.py](../backend/tests/test_advice.py) | 32 | none | threshold ordering, the fold grid, the three rungs, the floor in the centre and worst cell, the band edges, bluffs capped at the small rung, the all-in gate, nobody calling | 07 |
+| [test_range_finder.py](../backend/tests/test_range_finder.py) | 28 | `loaded_finder`, `finder_with_model` (module) | 455 sorted records, coverage, 387 vs 250 classes, tie order, the fold cells and their centre column, category totals, `RANGE` without a model | 08 |
+| [test_cli.py](../backend/tests/test_cli.py) | 16 | `capsys`, `monkeypatch`, `tmp_path` (built-in) | the ladder per model and its markers, a check that quotes the refused rungs, exit codes 1 and 2, no output before an error, interactive mode, the plain-text EV sign, a broken model exits 1 | 09 |
+| [test_api.py](../backend/tests/test_api.py) | 81 | `shared_services`, `app` (module), `client`, `keyed_client` (function), `monkeypatch` | every route, the advice block, injected thresholds and `sizing`, the removed fields, one vocabulary, JSON errors, NaN, odd and non-JSON bodies, analysis recomputed and OpenRouter faked, rate limit and `Retry-After`, the proxy fix, an exported key ignored, a bad numeric setting, CORS, injection | 10 |
 | [test_dynamic_scenarios.py](../backend/tests/test_dynamic_scenarios.py) | 6 | `client`, `solver` (module) | six player stories end to end | 11 |
-| [App.test.jsx](../frontend/src/App.test.jsx) | 14 | `mockFetch` helper | verdict, error messages, language, stepper, model label, cancelled runs, StrictMode | 13 |
+| [App.test.jsx](../frontend/src/App.test.jsx) | 31 | `mockFetch` helper | the recommendation, error messages, language, stepper, model label, cancelled runs, StrictMode | 13 |
 | [format.test.js](../frontend/src/format.test.js) | 4 | — | money per locale, rounding, zones text | 13 |
 | [i18n.test.js](../frontend/src/i18n.test.js) | 2 | — | EN and VI have the same keys and kinds of values | 13 |
 
@@ -97,9 +97,9 @@ Tested in a scratch copy with the file deleted:
 
 | How you run it | With `__init__.py` | Without |
 |----------------|--------------------|---------|
-| `python -m pytest` from `backend/` | 172 collected | 172 collected (`-m` also adds the current folder to `sys.path`) |
-| `pytest` from `backend/` | 172 collected | 11 collection errors: 9 × `No module named 'src'`, 2 × `No module named 'app'` |
-| `python -m pytest backend/tests` from the repo root | 172 passed | 11 collection errors |
+| `python -m pytest` from `backend/` | 267 collected | 267 collected (`-m` also adds the current folder to `sys.path`) |
+| `pytest` from `backend/` | 267 collected | 11 collection errors: 9 × `No module named 'src'`, 2 × `No module named 'app'` |
+| `python -m pytest backend/tests` from the repo root | 267 collected | 11 collection errors |
 
 There is no `conftest.py` or `pytest.ini`. `pyproject.toml` has a two-line pytest section,
 `testpaths = ["tests"]` ([pyproject.toml:21-22](../backend/pyproject.toml#L21-L22)), which only says
@@ -112,7 +112,7 @@ while the newer tests use the absolute `DEFAULT_DB_PATH` from `src/paths.py`.
 A fixture is a function whose return value pytest passes to any test that names it as a
 parameter. The scope decides how often it runs.
 
-📍 [`backend/tests/test_api.py:30-45`](../backend/tests/test_api.py#L30-L45)
+📍 [`backend/tests/test_api.py:31-46`](../backend/tests/test_api.py#L31-L46)
 ```python
 @pytest.fixture(scope="module")
 def shared_services():
@@ -160,7 +160,7 @@ def solver():
 - **The app factory makes the app a value.** `create_app(db=…, calling_model=…, config=…)`
   (lesson 10) builds a new app with exactly the services and settings a test wants. Tests that need
   something different build their own app: one with a key (`keyed_client`,
-  [test_api.py:315-321](../backend/tests/test_api.py#L315-L321)), one with the rate limiter on, one
+  [test_api.py:317-323](../backend/tests/test_api.py#L317-L323)), one with the rate limiter on, one
   with a broken range finder. `TESTING: True` also switches the rate limiter off and ignores any
   `OPENROUTER_API_KEY` your shell exports, unless the config names one
   ([app.py:127-129](../backend/app.py#L127-L129)), so the analysis takes the offline branch. The
@@ -170,24 +170,24 @@ def solver():
 
 Two built-in fixtures do most of the faking in this suite:
 
-- **`monkeypatch.setattr("builtins.input", …)`** ([test_cli.py:39-42](../backend/tests/test_cli.py#L39-L42))
+- **`monkeypatch.setattr("builtins.input", …)`** ([test_cli.py:88-91](../backend/tests/test_cli.py#L88-L91))
   replaces the keyboard with a list of answers (lesson 09).
-- **`monkeypatch.setattr(requests, "post", fake_post)`** ([test_api.py:324-335](../backend/tests/test_api.py#L324-L335))
+- **`monkeypatch.setattr(requests, "post", fake_post)`** ([test_api.py:326-337](../backend/tests/test_api.py#L326-L337))
   replaces OpenRouter. The fake records the prompt and returns a canned answer, so the test can
   check that the server sent "As Kh Qd" and not the client's fake `hand_evaluation`. A parametrised
   test feeds four kinds of failure through the same seam: a 500, an odd JSON shape, a body that
-  isn't JSON, and a `ConnectionError` ([test_api.py:338-357](../backend/tests/test_api.py#L338-L357)).
+  isn't JSON, and a `ConnectionError` ([test_api.py:340-360](../backend/tests/test_api.py#L340-L360)).
 - **`monkeypatch.setattr(app.extensions["lieng"].range_finder, "solve_range", boom)`**
-  ([test_api.py:247-257](../backend/tests/test_api.py#L247-L257)) makes one service crash, to check
+  ([test_api.py:249-259](../backend/tests/test_api.py#L249-L259)) makes one service crash, to check
   that the 500 says "Internal server error." and nothing more.
 - **`monkeypatch.chdir(tmp_path)`** ([test_db.py:140-141](../backend/tests/test_db.py#L140-L141))
   runs a test from another folder, to prove the default database path doesn't depend on it.
 - **`monkeypatch.setenv(…)`** sets an environment variable for one test, to check how `create_app`
   reads the environment: an exported key is ignored by a test app, with `requests.post` replaced by
   a function that fails the test if anything calls it
-  ([test_api.py:411-420](../backend/tests/test_api.py#L411-L420)), and `OPENROUTER_TIMEOUT=abc` is a
-  clear `ValueError` ([test_api.py:423-427](../backend/tests/test_api.py#L423-L427)).
-- **`capsys.readouterr()`** ([test_cli.py:21-23](../backend/tests/test_cli.py#L21-L23)) returns
+  ([test_api.py:414-423](../backend/tests/test_api.py#L414-L423)), and `OPENROUTER_TIMEOUT=abc` is a
+  clear `ValueError` ([test_api.py:426-430](../backend/tests/test_api.py#L426-L430)).
+- **`capsys.readouterr()`** ([test_cli.py:20-22](../backend/tests/test_cli.py#L20-L22)) returns
   what was printed, as `.out` and `.err`.
 
 Every change `monkeypatch` makes is undone after the test. Files are written only under `tmp_path`,
@@ -202,9 +202,9 @@ report for each. pytest captures output by default, so you only see it with `-s`
 [Scenario 2: Junk Hand Forced Fold]
   Hand: 2s 3h 5d (5-3-2)
   Showdown Equity: 0.24%
-  Net EV: -42,044 VND
+  Net EV: -42,051 VND
   Break-Even FE: 33.12%
-  Decision: CHECK/FOLD -> PASS
+  Advice: CHECK -> PASS
 .
 [Scenario 4: Range Coverage Sensitivity Sweep]
   f = 0.00 (Calling Station): 75.17% coverage
@@ -215,15 +215,16 @@ report for each. pytest captures output by default, so you only see it with `-s`
 .
 [Scenario 6: Same Hand, Both Opponent Models]
   Hand: Ks Qh 3d (K-Q-3)
-  Random caller:  equity 36.00%, EV +40,200 VND -> RAISE
-  Calling range:  equity 1.08%, EV -27,894 VND -> CHECK/FOLD
-  Decision flips with the opponent model -> PASS
+  Random caller:  equity 36.00%, EV +40,199 VND -> SMALL_BET at 33,000
+  Calling range:  equity 1.08%, EV -27,894 VND -> SMALL_BET at 33,000
+  The ladder's priced rungs follow the opponent model -> PASS
 ```
 
 The "-> PASS" in the text is printed before pytest has finished the test, so it is decoration:
 the real verdict is the `.` after it. These stories make good documentation, and every number in
-them is pinned by an `assert` (for example `abs(ev - (-42044.0)) < 100.0` at
-[test_dynamic_scenarios.py:103](../backend/tests/test_dynamic_scenarios.py#L103)).
+them is pinned by an `assert`. Scenario 6 is the interesting one since 3.0.0: the same hand takes the
+same size against both opponents, because a bluff is capped at the small rung either way, while the
+EV behind that rung moves with the model.
 
 ### 6. Timing tests against the budgets
 
@@ -356,12 +357,12 @@ lessons fails).
 Most of the gaps this lesson used to list are closed: `Hand` hashing, the cached score and the
 tie-break house rules ([test_evaluator.py:253-289](../backend/tests/test_evaluator.py#L253-L289)), malformed and
 implausible database files ([test_db.py:106-150](../backend/tests/test_db.py#L106-L150)), the
-OpenRouter branch, HTTP errors and odd bodies ([test_api.py:216-257](../backend/tests/test_api.py#L216-L257)),
+OpenRouter branch, HTTP errors and odd bodies ([test_api.py:218-259](../backend/tests/test_api.py#L218-L259)),
 and the React component. What is left:
 
 | Gap | Where | Why it matters |
 |-----|-------|----------------|
-| Most of the CLI's plain-text fallback | [cli.py:54-61](../backend/src/cli.py#L54-L61) and every `else:` branch after `if HAS_RICH:` | `rich` is a dev dependency, so on a production install the CLI prints this branch. One test now runs it ([test_cli.py:89-94](../backend/tests/test_cli.py#L89-L94)) but checks only the EV line; the overview and the action line are unchecked. Section 10 adds the test. |
+| Most of the CLI's plain-text fallback | [cli.py:57-64](../backend/src/cli.py#L57-L64) and every `else:` branch after `if HAS_RICH:` | `rich` is a dev dependency, so on a production install the CLI prints this branch. One test now runs it ([test_cli.py:142-149](../backend/tests/test_cli.py#L142-L149)) but checks only the EV line; the overview and the action line are unchecked. Section 10 adds the test. |
 | The CLI and memory budgets | [AGENTS.md:129-130](../AGENTS.md#L129-L130) | Measured, not asserted. A slow import or a bigger table would go unnoticed. |
 | Rounded rates | `data/winrates.json` | 151 of the 455 records have win + tie + loss = 1.0001 (lesson 04). The database accepts this within a tolerance; nothing records it as a known issue. |
 | Line coverage | — | Neither `pytest-cov` nor a Vitest coverage provider is installed, so there is no coverage number. The list above comes from reading the tests against the code. |
@@ -426,7 +427,7 @@ def test_plain_text_fallback_shows_the_same_totals(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "--- SOLVER OVERVIEW ---" in out
     assert "Combos in Range:      18,708 / 22,100 combinations" in out
-    assert ">>> ACTION: RAISE / ALL-IN RECOMMENDED <<<" in out
+    assert ">>> ACTION: SMALL BET (33,000) — BLUFF <<<" in out
 ```
 
 ```python
@@ -448,9 +449,9 @@ python -m pytest -q
 .x                                                                       [100%]
 =========================== short test summary info ============================
 XFAIL tests/test_db.py::test_stored_rates_sum_to_exactly_one - rates are rounded one by one, so some sums are 1.0001 (lesson 04)
-1 passed, 25 deselected, 1 xfailed in 0.11s
+1 passed, 29 deselected, 1 xfailed in 0.20s
 ...
-173 passed, 1 xfailed in 1.92s
+266 passed, 2 failed, 1 xfailed in 3.29s
 ```
 
 `monkeypatch.setattr("src.cli.HAS_RICH", False)` swaps the flag for this test only, without
@@ -517,7 +518,7 @@ Fixed since the first version of this course:
 - ✅ **Fixed: a shared global app.** API tests used to mutate the module-level app. They now build
   their own with `create_app` ([test_api.py:18-33](../backend/tests/test_api.py#L18-L33)), and one
   test checks that an injected database is the one used
-  ([test_api.py:383-386](../backend/tests/test_api.py#L383-L386)).
+  ([test_api.py:386-389](../backend/tests/test_api.py#L386-L389)).
 - ✅ **Fixed: no CI.** [ci.yml](../.github/workflows/ci.yml) runs ruff, mypy, pytest, lint, Vitest,
   the build and the course checker on every push.
 - ✅ **Fixed: a misleading docstring.** `test_ev.py` no longer claims more folds always raise EV
@@ -528,9 +529,9 @@ Fixed since the first version of this course:
   OpenRouter (spending credits), and without network the test failed with
   `assert [502, 502, 429] == [200, 200, 429]`. Now a `TESTING` app ignores the environment's key
   unless the config names one ([app.py:127-129](../backend/app.py#L127-L129)), the rate-limit test
-  states the empty key anyway ([test_api.py:367](../backend/tests/test_api.py#L367)), and
+  states the empty key anyway ([test_api.py:370](../backend/tests/test_api.py#L370)), and
   `test_testing_apps_ignore_a_key_in_the_environment`
-  ([test_api.py:411-420](../backend/tests/test_api.py#L411-L420)) exports a key and fails if
+  ([test_api.py:414-423](../backend/tests/test_api.py#L414-L423)) exports a key and fails if
   anything calls `requests.post`. Exercise 5 takes the guard out again.
 - ✅ **Fixed: a cache test that couldn't fail.** `test_score_is_computed_once` asserted
   `hand.score is hand.score`, which also holds for a plain `@property`, because `evaluate_hand`
@@ -542,14 +543,14 @@ Still open:
 
 1. **Two budgets are measured but not asserted.** The CLI (0.12–0.18 s vs 300 ms) and memory
    (about 1.2 MiB vs 10 MB), [AGENTS.md:129-130](../AGENTS.md#L129-L130). *Fix:* exercises 6 and 7.
-2. **The CLI's plain-text fallback is barely tested** ([cli.py:54-61](../backend/src/cli.py#L54-L61)).
+2. **The CLI's plain-text fallback is barely tested** ([cli.py:57-64](../backend/src/cli.py#L57-L64)).
    One test runs it, but only for its "+" sign on the EV line
-   ([test_cli.py:89-94](../backend/tests/test_cli.py#L89-L94)). *Fix:* section 10.
+   ([test_cli.py:142-149](../backend/tests/test_cli.py#L142-L149)). *Fix:* section 10.
 3. **Single-shot timing.** [test_calling_range.py:76-80](../backend/tests/test_calling_range.py#L76-L80)
    times one call. `PERF_BUDGET_FACTOR` widens the limit, but a single pause can still fail it.
    *Fix:* take the best of several runs with `timeit.repeat`, as the evaluation test does.
 4. **Decorative "-> PASS".** The scenario narratives print PASS before the test has finished
-   ([test_dynamic_scenarios.py:76](../backend/tests/test_dynamic_scenarios.py#L76)).
+   ([test_dynamic_scenarios.py:77](../backend/tests/test_dynamic_scenarios.py#L77)).
 5. **No coverage number**, for either half (section 8).
 
 ---
@@ -563,11 +564,15 @@ python -m pytest -q
 ```
 
 ```
-........................................................................ [ 41%]
-........................................................................ [ 83%]
-............................                                             [100%]
-172 passed in 2.06s
+........................................................................ [ 27%]
+........................................................................ [ 54%]
+........................................................................ [ 81%]
+...........................                                              [ 99%]
+2 failed, 265 passed in 3.18s
 ```
+
+Two of them fail on Windows only: `test_generator.py`'s two file-permission tests, because
+`os.chmod` there does not change the `0o640` bits the tests assert. On Linux and macOS all 267 pass.
 
 Count tests per file:
 
@@ -576,17 +581,18 @@ python -m pytest --collect-only -q | grep '::' | cut -d: -f1 | sort | uniq -c
 ```
 
 ```
-     46 tests/test_api.py
-     12 tests/test_calling_range.py
-     12 tests/test_cli.py
+     32 tests/test_advice.py
+     81 tests/test_api.py
+     13 tests/test_calling_range.py
+     16 tests/test_cli.py
      13 tests/test_db.py
       6 tests/test_dynamic_scenarios.py
+     19 tests/test_ev.py
      27 tests/test_evaluator.py
-     15 tests/test_ev.py
       9 tests/test_exceptions.py
      15 tests/test_generator.py
       8 tests/test_hands.py
-      9 tests/test_range_finder.py
+     28 tests/test_range_finder.py
 ```
 
 Run just the timing tests, by name:
@@ -641,10 +647,10 @@ npm test 2>&1 | grep -E 'Test Files|Tests '
 
 ```
  Test Files  3 passed (3)
-      Tests  20 passed (20)
+      Tests  37 passed (37)
 ```
 
-(`npx vitest run --reporter=verbose` lists all 20 by name; lesson 12 shows the list.)
+(`npx vitest run --reporter=verbose` lists all 37 by name; lesson 12 shows the list.)
 
 ---
 
@@ -657,7 +663,7 @@ Exercises marked 🟡 or 🔴 change code. Undo them afterwards with `git checko
 
 <details><summary>Solution</summary>
 
-`python -m pytest` still passes all 172, because `-m` adds the current folder (`backend/`) to
+`python -m pytest` still collects all 267, because `-m` adds the current folder (`backend/`) to
 `sys.path`. Plain `pytest` gets 11 collection errors, one per file: nine
 `ModuleNotFoundError: No module named 'src'` and two `No module named 'app'` (the two files that
 import the app first). Restore it with `git checkout -- tests/__init__.py`.
@@ -686,7 +692,7 @@ make room, and you can use a small factor to check that a timing test can fail a
 </details>
 
 **🟡 4. Add the worked example.** Add the two tests from section 10. Check: `python -m pytest -q`
-reports `173 passed, 1 xfailed`, and `ruff check .` still passes.
+reports `266 passed, 2 failed, 1 xfailed`, and `ruff check .` still passes.
 
 <details><summary>Solution</summary>
 
@@ -778,7 +784,7 @@ a cold start for real.
 
 ## ❓ Quiz
 
-1. Why do 154 test functions produce 172 tests?
+1. Why do 215 test functions produce 267 tests?
 2. What does the empty `tests/__init__.py` change?
 3. Why is the API `app` module-scoped while the `client` is function-scoped?
 4. Which AGENTS.md §6 budgets are met, which are tested, and what does `PERF_BUDGET_FACTOR` change?
@@ -787,8 +793,10 @@ a cold start for real.
 
 <details><summary>Answers</summary>
 
-1. Six functions are parametrised: four in `test_api.py` (5, 3, 4 and 2 cases), one in `test_cli.py`
-   (2 cases) and one in `test_exceptions.py` (8 cases). 154 + 4 + 2 + 3 + 1 + 1 + 7 = 172.
+1. Because 13 of the 215 test functions carry `@pytest.mark.parametrize`, and each of their cases
+   becomes its own test: `test_kind_bands_at_their_boundaries` runs once per band edge,
+   `test_blank_hand_is_a_range_only_answer` once per model and blank-hand spelling, and so on. Those
+   13 functions produce 65 cases, so 215 − 13 + 65 = 267.
 2. It makes `tests/` a package, so pytest puts its parent `backend/` on `sys.path`, which makes
    `import src`, `from app import create_app` and `from tests.perf import budget` work however
    pytest is started.
@@ -812,7 +820,7 @@ a cold start for real.
 
 ## Recap
 
-- 172 backend tests in 11 files (one per module, plus CLI, API and stories) and 20 frontend tests
+- 267 backend tests in 12 files (one per module, plus CLI, API and stories) and 37 frontend tests
   in 3 files; the backend suite runs in about 2 s.
 - `tests/__init__.py` puts `backend/` on `sys.path`; `pyproject.toml` adds only `testpaths`.
 - Fixtures share expensive objects per module; `create_app(config=…)` gives each test the app it

@@ -42,8 +42,8 @@ once at start-up; then every query is a few array lookups.
 | 5 | [calling_range.py:142-150](../backend/src/calling_range.py#L142-L150) | `_calling_boundary`: where the calling range ends, with `bisect_right`. |
 | 6 | [calling_range.py:152-170](../backend/src/calling_range.py#L152-L170) | `_equity_at`: count what you beat and tie. |
 | 7 | [calling_range.py:107-140](../backend/src/calling_range.py#L107-L140) | The public API: `equity` and `equity_table`. |
-| 8 | [test_calling_range.py](../backend/tests/test_calling_range.py) | 12 tests, including an exact cross-check against `winrates.json` and the two invariant checks. |
-| 9 | [opponent_model.py](../backend/src/opponent_model.py) and [test_opponent_model.py](../backend/tests/test_opponent_model.py) | A manually selected caller-strength percentile, independent of fold frequency. |
+| 8 | [test_calling_range.py](../backend/tests/test_calling_range.py) | 13 tests, including an exact cross-check against `winrates.json` and the two invariant checks. |
+| 9 | [app.py:290-298](../backend/app.py#L290-L298) | `_reject_removed_fields`: the `call_range_percent` field that used to hand the caller its own range, and the message that names its replacement (section 9). |
 
 ---
 
@@ -357,7 +357,7 @@ Whether this module is used at all is decided by the `OpponentModel` enum
 `RANGE = "range"`. It is a `StrEnum` (Python 3.11+), whose members are also `str`s, so
 `OpponentModel.RANGE == "range"` is `True`, `str(OpponentModel.RANGE)` is `"range"`, and
 `OpponentModel("range")` turns the text of a web request into the enum. It is switched on in
-[range_finder.py:79](../backend/src/range_finder.py#L79), [cli.py:260](../backend/src/cli.py#L260)
+[range_finder.py:79](../backend/src/range_finder.py#L79), [cli.py:262](../backend/src/cli.py#L262)
 and [app.py:306](../backend/app.py#L306).
 
 The same module re-exports the two state-space sizes from `hands.py` (lesson 03):
@@ -389,16 +389,20 @@ callers, the ones you beat ([test_calling_range.py:49-53](../backend/tests/test_
 21 values of `f`; I also checked all 101 grid values). Lesson 07 builds on this: since `w` falls as
 `f` rises, EV is no longer a straight line in `f`.
 
-### 9. A fixed caller-range percentile
+### 9. The second model that was deleted
 
 `CallingRangeModel` derives caller strength from fold frequency: if the opponent folds 35%, the
-strongest 65% call. The separate [`opponent_model.py`](../backend/src/opponent_model.py) function
-lets the user select a caller-range size directly, such as the strongest 30%, independently of the
-fold-frequency estimate. It removes the hero's cards before counting legal hands and returns exact
-win-plus-half-tie equity. The API accepts `call_range_percent` only for a request with a hand;
-its full-range coverage still follows `opponent_model`. The
-[`test_opponent_model.py`](../backend/tests/test_opponent_model.py) cases pin the selected-percent
-behavior and card removal.
+strongest 65% call. Until 2.0.0 there was a second module, `opponent_model.py`, whose function let a
+caller pick the caller-range size directly, say the strongest 30%, independently of the fold
+estimate. It removed Hero's cards before counting legal hands and returned exact win-plus-half-tie
+equity, and the API accepted that as a `call_range_percent` request field.
+
+Both are gone. Two assumptions in one answer meant a request could compute the hand from one of them
+and the 455-class table from the other: send `call_range_percent: 30` next to `fold_equity: 0.35`
+and the verdict card said one thing while the table said another. Now `fold_equity` is the only
+caller assumption, the calling range is derived from it, and `call_range_percent` is rejected with a
+400 that names the replacement ([app.py:290-298](../backend/app.py#L290-L298)). `AGENTS.md` §2.2
+records the rule, and `git log` has the removal commit.
 
 ---
 
@@ -501,15 +505,15 @@ the fix introduced one small new problem, which commit `a9d9ce9` fixed.
    class to have a distinct strength.` and exited 2, although the user typed nothing wrong. Now both
    checks raise `ModelError` ([calling_range.py:65-68](../backend/src/calling_range.py#L65-L68)), a
    new `LiengError` subclass ([exceptions.py:37-38](../backend/src/exceptions.py#L37-L38)), and the
-   CLI catches it before the catch-all ([cli.py:370-372](../backend/src/cli.py#L370-L372)): the same
+   CLI catches it before the catch-all ([cli.py:372-374](../backend/src/cli.py#L372-L374)): the same
    command now prints
    `Internal model error: The calling-range model needs every canonical class to have a distinct strength.`
-   and exits 1, like a database problem. (With the default `random` model the CLI never builds the
+   and exits 1, like a database problem. (With `--opponent-model random` the CLI never builds the
    calling-range model, so it still runs and exits 0.) The API, which builds the model in
    `create_app()`, fails at start-up, which is right. Pinned by `test_rejects_a_subset_of_hands` and
    `test_rejects_classes_with_equal_strength`, which now expect `ModelError`, and by
    `test_a_broken_model_is_an_internal_error_not_invalid_input`
-   ([test_cli.py:97-108](../backend/tests/test_cli.py#L97-L108)).
+   ([test_cli.py:100-111](../backend/tests/test_cli.py#L100-L111)).
 
 ---
 

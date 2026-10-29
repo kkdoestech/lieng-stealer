@@ -5,7 +5,8 @@ strength-ordered model that single number also fixes the calling range (the oppo
 weakest ``f`` share of the 22,100 pre-deal combinations), so this module stresses ``f`` alone and
 reports the derived calling range in each cell.
 
-The result is a 3-point grid around the user's assumption. ``ROBUST_BET`` means raising stays
+The result is the fold cells around the user's assumption: two or three of them, because a cell
+clamps onto the centre at either end of the range. ``ROBUST_BET`` means raising stays
 profitable in every cell, ``ROBUST_NO_BET`` means it never is, and ``ASSUMPTION_SENSITIVE`` means
 the recommendation flips somewhere inside the grid.
 """
@@ -14,15 +15,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Final
 
+from src.advice import FOLD_EQUITY_STEP, fold_grid
 from src.calling_range import CallingRangeModel, OpponentModel
 from src.ev import evaluate_action
 from src.exceptions import ModelError
 from src.range_finder import OpponentEquities
-
-# How far the stress grid reaches to either side of the user's fold frequency.
-FOLD_EQUITY_STEP: Final[float] = 0.10
 
 
 class Verdict(StrEnum):
@@ -45,17 +43,12 @@ class Scenario:
 
 @dataclass(frozen=True)
 class Sensitivity:
-    """The 3-point assumption grid around the user's fold frequency."""
+    """The stress cells around the user's fold frequency."""
 
     fold_equity_range: tuple[float, float]
     central_equity_when_called: float
     status: Verdict
     scenarios: tuple[Scenario, ...]
-
-
-def _grid_around(center: float, step: float, *, low: float, high: float) -> tuple[float, ...]:
-    """Three sorted, de-duplicated values around ``center``, clamped to [low, high]."""
-    return tuple(sorted({round(max(low, center - step), 10), round(center, 10), round(min(high, center + step), 10)}))
 
 
 def stress_test(
@@ -78,7 +71,7 @@ def stress_test(
         fold_step: How far either side of the central fold frequency each cell reaches.
 
     Returns:
-        The three scenarios, their EV range, and the verdict classification.
+        The scenarios, their EV range, and the verdict classification.
 
     Raises:
         ModelError: If RANGE is requested and no CallingRangeModel was supplied.
@@ -86,13 +79,13 @@ def stress_test(
     if equities.opponent_model is OpponentModel.RANGE and calling_model is None:
         raise ModelError("OpponentModel.RANGE requires a CallingRangeModel.")
 
-    fold_rates = _grid_around(equities.fold_equity, fold_step, low=0.0, high=1.0)
+    fold_rates = fold_grid(equities.fold_equity, fold_step)
     scenarios: list[Scenario] = []
     for fold_equity in fold_rates:
         if equities.opponent_model is OpponentModel.RANGE:
             # Under RANGE the fold frequency is also the cut: a tighter assumption means a
             # stronger caller and lower equity. Under RANDOM equity is constant.
-            assert calling_model is not None  # guarded above; narrows the type for mypy
+            assert calling_model is not None
             equity = calling_model.equity(canonical_id, fold_equity)
             percentile: float | None = round((1.0 - fold_equity) * 100.0, 4)
         else:

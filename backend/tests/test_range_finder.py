@@ -6,8 +6,11 @@ Verifies:
 - When fold equity is 0%, only hands exceeding the required pot odds threshold are profitable
 - Monotonicity: Increasing fold equity strictly increases or maintains range coverage
 - Opponent models: the inequity source honours the model; equal-EV hands are ordered by strength
-- One answer per hand: the single-hand solution IS the matching row of the 455-class table
+- One answer per hand: hand_solution returns the record solve_range built for that class
+- The advice board: the centre cell of fold_cells is the reported equity, for every class
 """
+
+from typing import cast
 
 import pytest
 
@@ -20,7 +23,6 @@ from src.range_finder import OpponentEquities, RangeFinder, category_breakdown
 
 
 def _equities(finder: RangeFinder, fold_equity: float, model: OpponentModel = OpponentModel.RANDOM) -> OpponentEquities:
-    """The one equity source a request would build for these inputs."""
     return finder.equities(fold_equity, model)
 
 
@@ -130,10 +132,10 @@ class TestOpponentModels:
 
 
 class TestOneAnswerPerHand:
-    """The single-hand answer must be the table's own row, by construction."""
+    """The single-hand answer is read from the 455-class solve."""
 
     def test_hand_solution_is_the_table_row_for_every_class(self, finder_with_model: RangeFinder) -> None:
-        """One answer per hand: hand_solution's record IS the matching element of solve_range."""
+        """hand_solution returns the record solve_range built for that class."""
         equities = _equities(finder_with_model, 0.35, OpponentModel.RANGE)
         records = finder_with_model.solve_range(100000.0, 50000.0, equities)
         by_class = {record.canonical_id: record for record in records}
@@ -151,7 +153,7 @@ class TestOneAnswerPerHand:
     def test_equity_table_is_immutable(self, finder_with_model: RangeFinder) -> None:
         equities = _equities(finder_with_model, 0.35, OpponentModel.RANGE)
         with pytest.raises(TypeError):
-            equities.table()["Q-K-A"] = 0.0  # type: ignore[index]
+            cast("dict[str, float]", equities.table())["Q-K-A"] = 0.0
 
     def test_hand_solution_zones_stay_inside_the_fold_grid(self, finder_with_model: RangeFinder) -> None:
         equities = _equities(finder_with_model, 0.35, OpponentModel.RANGE)
@@ -161,6 +163,41 @@ class TestOneAnswerPerHand:
         )
         assert solution.zones, "EV at fold_equity=1.0 is the pot, so a profitable zone always exists"
         assert all(0.0 <= start <= end <= 1.0 for start, end in solution.zones)
+
+
+class TestFoldCells:
+    """The ladder prices the same class under each fold cell, one cell at a time."""
+
+    @pytest.mark.parametrize("fold_equity", [0.0, 0.2, 0.35, 0.5, 0.75, 1.0])
+    @pytest.mark.parametrize("model", [OpponentModel.RANGE, OpponentModel.RANDOM])
+    def test_centre_column_equals_equities(
+        self, finder_with_model: RangeFinder, fold_equity: float, model: OpponentModel
+    ) -> None:
+        board = finder_with_model.fold_cells(fold_equity, model)
+        equities = _equities(finder_with_model, fold_equity, model)
+
+        assert len(board) == 455
+        for canonical in generate_all_canonical_hands():
+            cells = board[canonical.canonical_id]
+            centre = next(cell for cell in cells if cell.fold_equity == round(fold_equity, 10))
+            assert centre.equity_when_called == equities.of(canonical.canonical_id), canonical.canonical_id
+
+    def test_grid_is_a_step_either_side_and_clamps_at_the_ends(self, finder_with_model: RangeFinder) -> None:
+        def rates(fold_equity: float) -> list[float]:
+            return [cell.fold_equity for cell in finder_with_model.fold_cells(fold_equity, OpponentModel.RANGE)["Q-K-A"]]
+
+        assert rates(0.35) == [0.25, 0.35, 0.45]
+        assert rates(0.0) == [0.0, 0.1]
+        assert rates(1.0) == [0.9, 1.0]
+
+    def test_range_cells_price_the_calling_range_at_each_fold_rate(self, finder_with_model: RangeFinder) -> None:
+        """A tighter fold assumption is a stronger caller, so the off-centre cells are priced too."""
+        cells = finder_with_model.fold_cells(0.35, OpponentModel.RANGE)["5-3-2"]
+        assert [(cell.fold_equity, cell.equity_when_called) for cell in cells] == [(0.25, 0.0), (0.35, 0.0), (0.45, 0.0)]
+
+    def test_random_cells_reuse_one_stored_equity(self, finder_with_model: RangeFinder) -> None:
+        cells = finder_with_model.fold_cells(0.35, OpponentModel.RANDOM)["5-3-2"]
+        assert [cell.equity_when_called for cell in cells] == [0.00236105, 0.00236105, 0.00236105]
 
 
 class TestConstructionAndSummaries:
