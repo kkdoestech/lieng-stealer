@@ -252,12 +252,16 @@ format the same rung differently — the same "one object, one row" invariant th
 
 ### 3.4 i18n keys
 
-**Reused unchanged (21):** `recommendedAction`, `expectedValueTag`, `showdownEquity`, `vsCallingRange`,
+**Reused unchanged (20):** `recommendedAction`, `expectedValueTag`, `showdownEquity`, `vsCallingRange`,
 `vsRandomShort`, `evAtRecommendedSize`, `evTag`, `currency`, `actionLabel`, `kindLabel`, `blocked`,
-`winRateUndefined`, `assumptionSensitivity`, `betRecommended`, `combosWorthBet`, `bluffThreshold`,
-`bluffThresholdSub`, `thresholdNote`, `noHandTitle`, `noHandBody`, `actionCountsLine`. Every existing
-why/assumption sentence (`whyLine`, `assumptionLine`, `profitableWhen`) is untouched, so the pinned copy
-in `App.test.jsx` cannot drift.
+`winRateUndefined`, `betRecommended`, `combosWorthBet`, `bluffThreshold`, `bluffThresholdSub`,
+`thresholdNote`, `noHandTitle`, `noHandBody`, `actionCountsLine`. Every existing why and assumption
+sentence (`whyLine`, `assumptionLine`) is untouched, so the pinned copy in `App.test.jsx` cannot drift.
+
+**Retired from the render tree but kept in `i18n.js` (2):** `profitableWhen` (its sentence becomes the
+`paysWhenTag` label plus the mono zone figure, so the fact is no longer buried in prose) and
+`assumptionSensitivity` (a label/value split is needed for the footnote strip; the raw status value it
+printed is flagged in §8, question 6). No test asserts either string.
 
 **New (12) — names and EN gloss only; VI wording needs a native pass:**
 
@@ -464,12 +468,12 @@ stays on the argument.
 ### 5.4 Surfaces, hairlines, spacing
 
 - Band and ledger: no fill, no border, `border-radius: 0`, no shadow. The three `--line-strong` rules are
-  the only structural line at 1px-plus-nothing weight; there are no 2px *rules* except the chosen row's
-  accent on its left edge.
-- Band internal rhythm: headline `20px 16px 16px`; why line `margin-top: 12`; evidence row
-  `padding: 12px 16px` with `border-top: 1px solid var(--line)`.
-- Ledger: caption `10px 16px`, rows `10px 16px`, `border-bottom: 1px solid var(--line)`, last row none;
-  the ledger closes with `--line-strong`.
+  the statement's only structural lines; nothing inside them is heavier than 1px except the chosen row's
+  2px `--kind` accent on its left edge.
+- Band internal rhythm: `padding: 20px 16px 16px` for the headline; why line `margin-top: 12px`; evidence
+  row `padding: 12px 16px` with `border-top: 1px solid var(--line)`.
+- Ledger: caption `padding: 10px 16px`, rows `padding: 10px 16px`, `border-bottom: 1px solid var(--line)`
+  with the last row having none; the ledger closes with `--line-strong`.
 - Alignment is produced by **one shared right inset (`--col-pad`) + right-aligned tabular mono**, never by
   shared grid tracks and never by decimal padding. Locale separators differ (`.` vs `,`), so
   digit-grid alignment via tabular figures is the only correct mechanism.
@@ -603,9 +607,9 @@ plan also prints "−16,094 vs chosen". I keep the numbers and drop the column.
 7. **The appendix tables still colour EV by sign** (`positive-ev`/`negative-ev`) while their Action column
    colours by kind — the same table says emerald twice. Neutralising the two sign classes is a two-line
    change; should it ride along or stay out of scope?
-8. **The masthead's win-rate sub-line** ("vs. the top 65% that call · 99.7% vs. a random hand") is 48
-   characters in a narrow slot. Is it evidence worth the band's width, or should it move to the footnote
-   strip and leave the band with four words?
+8. **The masthead's win-rate sub-line** ("vs. the top 65% that call · 99.7% vs. a random hand") is about
+   50 characters in a narrow slot. Is it evidence worth the band's width, or should it move to the
+   footnote strip and leave the band with four words?
 9. **Full-bleed rules at ≤1024px**: the statement's rules then run to the page edges and the block becomes
    a mid-page divider between controls and results. Acceptable, or should the block be inset at that
    width alone?
@@ -616,8 +620,7 @@ plan also prints "−16,094 vs chosen". I keep the numbers and drop the column.
 
 Extract `Verdict`, `VerdictMasthead`, `SizingLedger`, `LedgerRow`, `MastheadEmpty` and `EvidenceStrip`
 inside `App.jsx` behind the data already on screen — keeping every pinned hook (`.verdict-card`,
-`.ladder-rung`, `chosen`, `rung-blocked`, `●`/`○`, the literal `EV <signed>`, `.hud-card`) and the twelve
-new `t.*` keys in §3.4 — then rewrite `App.css`'s verdict block against §5.5 and delete the fifteen
-retired
-classes, in the order `App.jsx` → `App.css` → `index.css` (spacing/type steps) → `i18n.js`, with the
-backend untouched.
+`.ladder-rung`, `chosen`, `rung-blocked`, `●`/`○`, the literal `EV <signed>`, `.hud-card`) and adding
+the twelve `t.*` keys of §3.4 — then rewrite `App.css`'s verdict block against §5.5 and delete the
+fifteen retired classes, in the order `App.jsx` → `App.css` → `index.css` (spacing and type steps) →
+`i18n.js`, with the backend untouched.

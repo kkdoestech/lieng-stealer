@@ -95,6 +95,9 @@ Rejected and why:
 - The worst-case attribution rule was verified against `backend/src/advice.py`: `worst` is
   `min(calculate_ev(...) for cell in cells)` with `cells = fold_grid(centre)`, so the response carries
   a minimum over two or three cells, never a named cell.
+- Candidate A's tautology finding was verified against `advice.py`: eligibility requires
+  `worst_ev_ratio >= min_edge_ratio` (0.05 > 0), so `Recommendation.robust` is `true` for every
+  response; it is never displayed (`DESIGN.md` §2.5).
 - The delta-monotonicity argument was checked against `advice.py`: `_start_rung` gates on win rate and
   `_blocker` blocks every rung above the start, so "eligible but not chosen" rungs are always below the
   chosen size in a `win > 0.5` regime.

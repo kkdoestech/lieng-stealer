@@ -160,6 +160,12 @@ Rules:
 | Fake status ("LIVE", "AI-powered") | Nothing that checks nothing. The notes drawer shows its model name because the server returned it. |
 | Raw enum codes in copy | Map every code to a sentence or a label (e.g. sensitivity status must not print `ROBUST_BET`). |
 
+One specific instance of fake status, verified in `advice.py`: **`Recommendation.robust` is always
+`true` by construction** — an eligible rung must clear `min_edge_ratio` (0.05) in its worst stress
+cell, and a check is constructed with `robust=True`. It is therefore never displayed. Per-rung risk
+is carried by the worst-of-three number; `Rung.robust` can be `false` for a blocked rung, but the
+number that produced it is already on screen, so no badge is needed there either.
+
 ### 2.6 The numeral law
 
 All numbers, without exception, are `--font-mono`, tabular, and right-aligned in their column.
