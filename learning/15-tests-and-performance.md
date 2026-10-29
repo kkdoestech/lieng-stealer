@@ -112,7 +112,7 @@ while the newer tests use the absolute `DEFAULT_DB_PATH` from `src/paths.py`.
 A fixture is a function whose return value pytest passes to any test that names it as a
 parameter. The scope decides how often it runs.
 
-📍 [`backend/tests/test_api.py:18-33`](../backend/tests/test_api.py#L18-L33)
+📍 [`backend/tests/test_api.py:30-45`](../backend/tests/test_api.py#L30-L45)
 ```python
 @pytest.fixture(scope="module")
 def shared_services():
@@ -132,7 +132,7 @@ def client(app):
         yield client
 ```
 
-📍 [`backend/tests/test_dynamic_scenarios.py:29-41`](../backend/tests/test_dynamic_scenarios.py#L29-L41)
+📍 [`backend/tests/test_dynamic_scenarios.py:30-42`](../backend/tests/test_dynamic_scenarios.py#L30-L42)
 ```python
 DB_PATH = Path(__file__).resolve().parent.parent / "data" / "winrates.json"
 
@@ -275,7 +275,7 @@ without anyone editing a test. The tests themselves:
         assert avg_latency_us < budget(5.0), f"Lookup latency too high: {avg_latency_us:.3f} us"
 ```
 
-📍 [`backend/tests/test_calling_range.py:76-80`](../backend/tests/test_calling_range.py#L76-L80)
+📍 [`backend/tests/test_calling_range.py:87-91`](../backend/tests/test_calling_range.py#L87-L91)
 ```python
     def test_full_table_within_latency_budget(self, model: CallingRangeModel) -> None:
         start = time.perf_counter()

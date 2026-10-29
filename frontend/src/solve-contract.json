@@ -1,0 +1,19 @@
+{
+  "request": {
+    "pot": 100000,
+    "bet_size": 50000,
+    "fold_equity": 0.35,
+    "hand": "As Kh Qd",
+    "opponent_model": "range"
+  },
+  "solve_ok": {
+    "canonical_id": "Q-K-A",
+    "showdown_equity": 0.9952,
+    "equity_vs_random": 0.99693335,
+    "ev": 131876.0,
+    "call_range_percent": 65.0,
+    "decision": "RAISE",
+    "sensitivity_status": "ROBUST_BET",
+    "range_coverage_percent": 100.0
+  }
+}

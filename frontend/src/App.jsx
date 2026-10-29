@@ -130,7 +130,6 @@ export default function App() {
   const [betSize, setBetSize] = useState(50000);
   const [hand, setHand] = useState("As Kh Qd");
   const [foldEquity, setFoldEquity] = useState(0.35);
-  const [callRangePercent, setCallRangePercent] = useState(30);
   const [opponentModel, setOpponentModel] = useState("range");
 
   // Both start true: the first solve begins as soon as the page mounts.
@@ -155,13 +154,13 @@ export default function App() {
   }, [lang]);
 
   // Start one run with the current inputs; every state change happens in a callback, after the
-  // matching response has arrived.
+  // matching response has arrived. The API takes one opponent assumption: fold_equity. The
+  // calling range the UI shows next to it is derived from that same number, never sent.
   const runSolve = (controller) => {
     const body = JSON.stringify({
       pot: Number(pot),
       bet_size: Number(betSize),
       fold_equity: Number(foldEquity),
-      call_range_percent: Number(callRangePercent),
       hand: hand.trim(),
       opponent_model: opponentModel,
     });
@@ -215,6 +214,10 @@ export default function App() {
   const isRaise = handEval?.decision === "RAISE";
 
   const zones = handEval?.profitable_fold_zones;
+
+  // The API's single opponent assumption is fold_equity; the calling range is derived from it, so
+  // the second slider is a view/controller of the same value and can never disagree with it.
+  const callingRangePercent = Math.round((1 - foldEquity) * 100);
 
   // Category Matrix Statistics (computed by the solver per category)
   const categoryMatrix = (summary?.category_breakdown || []).map((row) => ({
@@ -332,20 +335,20 @@ export default function App() {
             <div className="form-group">
               <div className="slider-label-row">
                 <label className="form-label" htmlFor="call-range-input">{t.callRangeLabel}</label>
-                <span className="slider-value-badge">{callRangePercent}%</span>
+                <span className="slider-value-badge">{callingRangePercent}%</span>
               </div>
               <input
                 id="call-range-input"
                 type="range"
-                min="1"
+                min="0"
                 max="100"
                 step="1"
-                value={callRangePercent}
-                onChange={(e) => setCallRangePercent(Number(e.target.value))}
+                value={callingRangePercent}
+                onChange={(e) => setFoldEquity(1 - Number(e.target.value) / 100)}
                 className="radar-slider"
               />
               <div className="slider-calibrations">
-                <span>1%</span>
+                <span>0%</span>
                 <span>{t.callRangeSub}</span>
                 <span>100%</span>
               </div>
@@ -462,6 +465,17 @@ export default function App() {
             </div>
           )}
 
+          {/* No hand entered: the range tables below still answer the question */}
+          {solveData && !handEval && (
+            <div className="verdict-banner verdict-empty" role="status">
+              <div>
+                <span className="verdict-label">{t.recommendedAction}</span>
+                <h2 className="verdict-title">{t.noHandTitle}</h2>
+                <div className="verdict-meta">{t.noHandBody}</div>
+              </div>
+            </div>
+          )}
+
           {/* Summary figures */}
           <div className="hud-metrics-grid">
             <div className="hud-card">
@@ -484,11 +498,9 @@ export default function App() {
                   ? `${t.vsCallingRange(Math.round(handEval.call_range_percent))} · ${t.vsRandomShort(
                       `${(handEval.equity_vs_random * 100).toFixed(1)}%`
                     )}`
-                  : handEval && summary.opponent_model === "range"
-                    ? `${t.vsCallingRange(Math.round((1 - summary.fold_equity) * 100))} · ${t.vsRandomShort(
-                      `${(handEval.equity_vs_random * 100).toFixed(1)}%`
-                    )}`
-                    : t.showdownEquitySub}
+                  : handEval
+                    ? t.showdownEquitySub
+                    : t.notAvailable}
               </div>
             </div>
 

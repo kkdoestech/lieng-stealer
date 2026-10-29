@@ -23,14 +23,13 @@ from src.ev import (
     DEFAULT_FOLD_EQUITY,
     DEFAULT_POT,
     calculate_break_even_fold_equity,
-    evaluate_action,
     final_pot,
 )
 from src.evaluator import Hand, HandCategory
 from src.exceptions import DatabaseError, InvalidGameParamsError, LiengError, ModelError
-from src.hands import TOTAL_COMBINATIONS, to_canonical
+from src.hands import TOTAL_COMBINATIONS
 from src.paths import DEFAULT_DB_PATH
-from src.range_finder import HandEVRecord, RangeFinder, category_breakdown
+from src.range_finder import HandEVRecord, HandSolution, OpponentEquities, RangeFinder, category_breakdown
 
 MODEL_DESCRIPTIONS = {
     OpponentModel.RANDOM: "folds at random (random)",
@@ -85,17 +84,25 @@ def format_currency(val: float) -> str:
 def render_banner(
     pot: float,
     bet_size: float,
-    fold_equity: float,
+    equities: OpponentEquities,
     be_bluff_fe: float,
-    opponent_model: OpponentModel = OpponentModel.RANDOM,
 ) -> None:
     """Render the game state banner."""
+    fold_equity = equities.fold_equity
+    opponent_model = equities.opponent_model
+    percentile = equities.calling_percentile
+    calling_value = (
+        f"strongest {percentile:.1f}% of the 22,100 hands"
+        if percentile is not None
+        else "n/a (calls with a random hand)"
+    )
     if HAS_RICH:
         content = (
             f"[bold cyan]Pot Size (Dead Money):[/] {format_currency(pot)}\n"
             f"[bold cyan]Bet / Raise Sizing:[/] {format_currency(bet_size)}\n"
             f"[bold cyan]Opponent Fold Equity:[/] {fold_equity * 100:.1f}%\n"
             f"[bold cyan]Opponent Model:[/] {MODEL_DESCRIPTIONS[opponent_model]}\n"
+            f"[bold cyan]Opponent Calling Range:[/] {calling_value}\n"
             f"[bold yellow]Pure Bluff Break-Even Fold Equity:[/] {be_bluff_fe * 100:.1f}%\n"
             f"[bold cyan]Final Pot (if called):[/] {format_currency(final_pot(pot, bet_size))}"
         )
@@ -108,6 +115,7 @@ def render_banner(
         print(f" Bet / Raise Sizing:          {format_currency(bet_size)}")
         print(f" Opponent Fold Equity:        {fold_equity * 100:.1f}%")
         print(f" Opponent Model:              {MODEL_DESCRIPTIONS[opponent_model]}")
+        print(f" Opponent Calling Range:      {calling_value}")
         print(f" Pure Bluff Break-Even FE:    {be_bluff_fe * 100:.1f}%")
         print(f" Final Pot (if called):       {format_currency(final_pot(pot, bet_size))}")
         print("=" * 60)
@@ -147,36 +155,36 @@ def render_solver_overview(
 
 
 def render_single_hand_decision(
-    hand: Hand,
-    db: WinRateDB,
+    solution: HandSolution,
+    equities: OpponentEquities,
     pot: float,
     bet_size: float,
-    fold_equity: float,
-    calling_model: CallingRangeModel | None = None,
 ) -> None:
-    """Evaluate and render recommendation for a specific player hand.
+    """Render the recommendation for one hand, straight from its 455-class table row.
 
-    With a calling_model, equity is measured against the opponent's calling range;
-    otherwise against a random hand.
+    With a strength-ordered opponent EV is not monotonic in fold equity, so no single break-even
+    point exists; otherwise the exact closed form is shown.
     """
-    canonical_id = to_canonical(hand.cards).canonical_id
-    stats = db.get(canonical_id)
-    equity = calling_model.equity(canonical_id, fold_equity) if calling_model else stats.equity
-    ev_result = evaluate_action(pot, bet_size, fold_equity, equity)
-    # Under the range model EV is not monotonic in fold equity, so no single break-even exists
+    hand = solution.hand
+    record = solution.record
+    canonical_id = record.canonical_id
+    equity = record.equity
+    ev = record.ev
     break_even_text = (
-        f"{ev_result.break_even_fold_equity * 100:.2f}%" if calling_model is None else "n/a (range model)"
+        f"{calculate_break_even_fold_equity(pot, bet_size, equity) * 100:.2f}%"
+        if equities.opponent_model is OpponentModel.RANDOM
+        else "n/a (range model)"
     )
 
-    status_color = "green" if ev_result.is_profitable else "red"
-    action_text = "BET +EV" if ev_result.is_profitable else "NO BET (+EV NOT ESTABLISHED)"
+    status_color = "green" if record.is_raise_profitable else "red"
+    action_text = "BET +EV" if record.is_raise_profitable else "NO BET (+EV NOT ESTABLISHED)"
 
     if HAS_RICH:
         content = (
             f"[bold]Hand Evaluated:[/] {hand} ([italic]{hand.score}[/])\n"
-            f"[bold]Canonical Class:[/] {canonical_id} ([cyan]{stats.category.display_name}[/])\n"
+            f"[bold]Canonical Class:[/] {canonical_id} ([cyan]{record.category.display_name}[/])\n"
             f"[bold]Showdown Equity:[/] {equity * 100:.2f}%\n"
-            f"[bold]Expected Value (EV):[/] [{status_color}]{'+' if ev_result.ev > 0 else ''}{format_currency(ev_result.ev)}[/]\n"
+            f"[bold]Expected Value (EV):[/] [{status_color}]{'+' if ev > 0 else ''}{format_currency(ev)}[/]\n"
             f"[bold]Break-Even Fold Equity:[/] {break_even_text}\n\n"
             f"[bold {status_color} reverse] >>> ACTION: {action_text} <<< [/]"
         )
@@ -184,9 +192,9 @@ def render_single_hand_decision(
     else:
         print("\n================ HAND EVALUATION ================")
         print(f" Hand:               {hand} ({hand.score})")
-        print(f" Canonical Class:    {canonical_id} ({stats.category.display_name})")
+        print(f" Canonical Class:    {canonical_id} ({record.category.display_name})")
         print(f" Showdown Equity:    {equity * 100:.2f}%")
-        print(f" Expected Value:     {'+' if ev_result.ev > 0 else ''}{format_currency(ev_result.ev)}")
+        print(f" Expected Value:     {'+' if ev > 0 else ''}{format_currency(ev)}")
         print(f" Break-Even FE:      {break_even_text}")
         print(f" >>> ACTION: {action_text} <<<")
         print("=================================================\n")
@@ -256,19 +264,21 @@ def run_solver(
     be_bluff = calculate_break_even_fold_equity(pot, bet_size, win_rate_when_called=0.0)
 
     db = WinRateDB(db_path)
-    # Build the calling-range tables (~50 ms) only when the range model is requested
+    # Build the calling-range tables (~40 ms) only when the range model is requested
     calling_model = CallingRangeModel() if opponent_model is OpponentModel.RANGE else None
     finder = RangeFinder(db, calling_model)
-    records = finder.solve_range(pot, bet_size, fold_equity, opponent_model)
+    equities = finder.equities(fold_equity, opponent_model)
+    records = finder.solve_range(pot, bet_size, equities)
     profitable = [r for r in records if r.is_raise_profitable]
     coverage = finder.calculate_range_coverage(profitable)
 
-    render_banner(pot, bet_size, fold_equity, be_bluff, opponent_model)
+    render_banner(pot, bet_size, equities, be_bluff)
     render_solver_overview(records, coverage)
     render_categorized_heatmap(records)
 
     if hand is not None:
-        render_single_hand_decision(hand, db, pot, bet_size, fold_equity, calling_model)
+        solution = finder.hand_solution(hand, records, equities, pot, bet_size)
+        render_single_hand_decision(solution, equities, pot, bet_size)
 
 
 def interactive_mode(

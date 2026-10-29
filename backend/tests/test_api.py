@@ -2,9 +2,14 @@
 
 Each module builds its own app with create_app(config={"TESTING": True}), which also turns the
 rate limiter off; the one rate-limit test builds a separate app with the limiter on.
+
+The UI's default request body lives in frontend/src/solve-contract.json and is read by BOTH this
+suite and App.test.jsx, so the two packages cannot drift apart silently.
 """
 
+import json
 import math
+from pathlib import Path
 
 import pytest
 import requests
@@ -12,7 +17,14 @@ import requests
 from app import create_app
 from src.calling_range import CallingRangeModel
 from src.db import WinRateDB
+from src.ev import calculate_ev
 from src.paths import DEFAULT_DB_PATH
+
+# The one shared contract with the web UI: its default request body and the numbers it should get.
+CONTRACT_PATH = Path(__file__).resolve().parents[2] / "frontend" / "src" / "solve-contract.json"
+CONTRACT = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
+UI_REQUEST = CONTRACT["request"]
+UI_EXPECTED = CONTRACT["solve_ok"]
 
 
 @pytest.fixture(scope="module")
@@ -51,6 +63,7 @@ def test_health_endpoint(client):
     assert data["status"] == "healthy"
     assert data["database_loaded"] is True
     assert data["classes_loaded"] == 455
+    assert data["version"] == "2.0.0"
 
 
 # --- /api/solve -----------------------------------------------------------------------------
@@ -85,54 +98,172 @@ def test_solve_endpoint_with_hand(client):
     assert data["hand_evaluation"]["ev"] > 0
 
 
-def test_solve_uses_explicit_call_range_and_reports_sensitivity(client):
+# --- One answer per hand (DEFECT 1) ---------------------------------------------------------
+
+def test_hand_equity_equals_the_table_equity_for_the_same_class(client):
+    """DEFECT 1: the verdict card and the 455-class table must report the same equity and EV.
+
+    On the pre-unification code this read 0.9897793053545586 / 131171.30969609262 from the card
+    (the percentile engine) and 0.9952 / 131876.0 from the table (the fold-equity engine).
+    """
+    data = client.post("/api/solve", json=UI_REQUEST).get_json()
+    hand = data["hand_evaluation"]
+    rows = {row["canonical_id"]: row for row in data["top_hands"]}
+    assert UI_EXPECTED["canonical_id"] in rows, "the assertion below needs the class inside TOP_HANDS_LIMIT"
+    row = rows[UI_EXPECTED["canonical_id"]]
+    assert hand["showdown_equity"] == row["showdown_equity"] == UI_EXPECTED["showdown_equity"]
+    assert hand["ev"] == row["ev"] == UI_EXPECTED["ev"]
+
+
+def test_one_equity_per_hand_at_every_fold_rate(client):
+    """The reported equity is the table's number and the EV is reproducible from it."""
+    for fold_equity in (0.0, 0.2, 0.35, 0.6, 0.9):
+        body = {**UI_REQUEST, "fold_equity": fold_equity}
+        data = client.post("/api/solve", json=body).get_json()
+        hand = data["hand_evaluation"]
+        table = {row["canonical_id"]: row for row in data["top_hands"]}
+        if hand["canonical_id"] in table:
+            assert hand["showdown_equity"] == table[hand["canonical_id"]]["showdown_equity"]
+        expected_ev = calculate_ev(
+            body["pot"], body["bet_size"], fold_equity, hand["showdown_equity"]
+        )
+        assert hand["ev"] == pytest.approx(expected_ev, abs=1e-6)
+
+
+def test_ev_is_reproducible_from_the_reported_equity(client):
+    """A regression guard against a second equity source creeping back into the hand path."""
+    hand = client.post("/api/solve", json=UI_REQUEST).get_json()["hand_evaluation"]
+    expected = calculate_ev(
+        UI_REQUEST["pot"], UI_REQUEST["bet_size"], UI_REQUEST["fold_equity"], hand["showdown_equity"]
+    )
+    assert hand["ev"] == pytest.approx(expected, abs=1e-6)
+
+
+def test_zero_fold_equity_matches_the_random_model(client):
+    """At f = 0 the strength-ordered caller calls with every hand: the two models must agree."""
+    base = {"pot": 100000, "bet_size": 50000, "fold_equity": 0.0, "hand": "As Kh Qd"}
+    vs_random = client.post("/api/solve", json={**base, "opponent_model": "random"}).get_json()["hand_evaluation"]
+    vs_range = client.post("/api/solve", json={**base, "opponent_model": "range"}).get_json()["hand_evaluation"]
+    assert vs_range["showdown_equity"] == pytest.approx(vs_random["showdown_equity"], abs=1e-4)
+
+
+# --- Derived calling range and the 3-point sensitivity grid ---------------------------------
+
+def test_calling_range_percent_is_derived_from_fold_equity(client):
+    """fold_equity is the primitive; the calling range is (1 - f) * 100, never a second input."""
+    data = client.post("/api/solve", json=UI_REQUEST).get_json()
+    assert data["hand_evaluation"]["call_range_percent"] == UI_EXPECTED["call_range_percent"]
+    assert data["summary"]["call_range_percent"] == UI_EXPECTED["call_range_percent"]
+
+    random_body = {**UI_REQUEST, "opponent_model": "random"}
+    random_hand = client.post("/api/solve", json=random_body).get_json()["hand_evaluation"]
+    assert random_hand["call_range_percent"] is None
+
+
+def test_sensitivity_uses_the_derived_calling_range(client):
+    """The stress grid varies fold_equity only; each cell reports the range that fold rate implies."""
     response = client.post("/api/solve", json={
         "pot": 100000,
         "bet_size": 50000,
         "fold_equity": 0.35,
-        "call_range_percent": 30,
         "hand": "2s 3h 5d",
+        "opponent_model": "range",
     })
 
     assert response.status_code == 200
     hand_eval = response.get_json()["hand_evaluation"]
-    assert hand_eval["call_range_percent"] == 30
+    assert hand_eval["call_range_percent"] == 65.0
     assert hand_eval["showdown_equity"] == 0.0
     assert hand_eval["random_hand_equity"] == hand_eval["equity_vs_random"]
-    assert hand_eval["sensitivity"]["status"] == "ASSUMPTION_SENSITIVE"
-    assert len(hand_eval["sensitivity"]["scenarios"]) == 9
+    sensitivity = hand_eval["sensitivity"]
+    assert sensitivity["status"] == "ASSUMPTION_SENSITIVE"
+    assert sensitivity["fold_equity_range"] == [0.25, 0.45]
+    assert sensitivity["call_range_percent_range"] == [55.0, 75.0]
+    assert len(sensitivity["scenarios"]) == 3
+    centre = next(cell for cell in sensitivity["scenarios"] if cell["fold_equity"] == 0.35)
+    assert centre["call_range_percent"] == 65.0
+    assert centre["equity_when_called"] == 0.0
+    assert centre["ev"] == pytest.approx(2500.0)
 
 
-@pytest.mark.parametrize("call_range_percent", [0, -1, 100.1, "NaN", "Infinity"])
-def test_solve_rejects_invalid_call_range_percent(client, call_range_percent):
-    response = client.post("/api/solve", json={
-        "call_range_percent": call_range_percent,
-        "hand": "2s 3h 5d",
-    })
+def test_sensitivity_is_present_for_the_random_model_too(client):
+    hand_eval = client.post("/api/solve", json={
+        "pot": 100000, "bet_size": 50000, "fold_equity": 0.35, "hand": "As Kh Qd",
+    }).get_json()["hand_evaluation"]
+    assert hand_eval["sensitivity"]["status"] == "ROBUST_BET"
+    assert len(hand_eval["sensitivity"]["scenarios"]) == 3
+    assert all(cell["call_range_percent"] is None for cell in hand_eval["sensitivity"]["scenarios"])
+
+
+# --- Removed field and the blank-hand request (DEFECTS 2 and 3) -----------------------------
+
+@pytest.mark.parametrize("value", [30, 0, -1, 100.1, "NaN", None])
+def test_removed_field_is_a_400_that_names_its_replacement(client, value):
+    """DEFECT 2's old companion: the redundant opponent knob is rejected loudly, not ignored."""
+    response = client.post("/api/solve", json={"call_range_percent": value, "hand": "2s 3h 5d"})
 
     assert response.status_code == 400
-    assert "call_range_percent" in response.get_json()["error"].lower()
+    body = response.get_json()
+    assert body["code"] == "invalid_params"
+    assert "fold_equity" in body["error"]
+    assert "call_range_percent" in body["error"]
 
 
 @pytest.mark.parametrize("endpoint", ["/api/solve", "/api/range", "/api/analyze"])
-def test_call_range_percent_requires_a_hand(client, endpoint):
-    response = client.post(endpoint, json={"call_range_percent": 30})
-
+def test_removed_field_is_rejected_on_every_solver_endpoint(client, endpoint):
+    response = client.post(endpoint, json=UI_REQUEST | {"call_range_percent": 30})
     assert response.status_code == 400
     assert response.get_json()["code"] == "invalid_params"
-    assert "requires a hand" in response.get_json()["error"]
 
 
-def test_solve_default_ui_request_numbers(client):
-    """The web UI's first request: Q-K-A against a calling range. Renames must not move numbers."""
-    payload = {"pot": 100000, "bet_size": 50000, "fold_equity": 0.35, "hand": "As Kh Qd", "opponent_model": "range"}
-    hand_eval = client.post("/api/solve", json=payload).get_json()["hand_evaluation"]
-    assert (
-        hand_eval["ev"],
-        hand_eval["showdown_equity"],
-        hand_eval["equity_vs_random"],
-    ) == pytest.approx((131876.0, 0.9952, 0.9969), abs=0.00005)
+@pytest.mark.parametrize("blank", ["", "   ", None])
+@pytest.mark.parametrize("model", ["range", "random"])
+def test_blank_hand_is_a_range_only_answer(client, blank, model):
+    """DEFECT 3: clearing the hand input must answer the range, never raise a 400."""
+    body = {"pot": 100000, "bet_size": 50000, "fold_equity": 0.35, "opponent_model": model}
+    if blank is not None:
+        body["hand"] = blank
+    response = client.post("/api/solve", json=body)
 
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["hand_evaluation"] is None
+    assert data["summary"]["total_canonical_classes"] == 455
+    assert len(data["top_hands"]) == 30
+
+
+def test_blank_hand_on_analyze_still_answers(client):
+    response = client.post("/api/analyze", json={"pot": 100000, "hand": ""})
+    assert response.status_code == 200
+    assert response.get_json()["advice"]
+
+
+def test_evaluate_still_requires_a_hand(client):
+    """A single-hand endpoint without a hand has nothing to answer; that rule is not a cross-field one."""
+    res = client.post("/api/evaluate", json={"pot": 100000})
+    assert res.status_code == 400
+    assert res.get_json() == {"error": "Field 'hand' is required.", "code": "invalid_params"}
+
+
+# --- The shared UI contract (DEFECT 3) ------------------------------------------------------
+
+def test_ui_contract_fixture_has_exactly_the_documented_fields(client):
+    """The fixture IS the UI's request: a field added on one side without the other breaks this."""
+    assert set(UI_REQUEST) == {"pot", "bet_size", "fold_equity", "hand", "opponent_model"}
+    response = client.post("/api/solve", json=UI_REQUEST)
+    assert response.status_code == 200
+    hand = response.get_json()["hand_evaluation"]
+    assert hand["canonical_id"] == UI_EXPECTED["canonical_id"]
+    assert hand["showdown_equity"] == UI_EXPECTED["showdown_equity"]
+    assert hand["ev"] == UI_EXPECTED["ev"]
+    assert hand["call_range_percent"] == UI_EXPECTED["call_range_percent"]
+    assert hand["decision"] == UI_EXPECTED["decision"]
+    assert hand["sensitivity"]["status"] == UI_EXPECTED["sensitivity_status"]
+    assert hand["equity_vs_random"] == pytest.approx(UI_EXPECTED["equity_vs_random"], abs=1e-8)
+    assert response.get_json()["summary"]["range_coverage_percent"] == UI_EXPECTED["range_coverage_percent"]
+
+
+# --- Other solver behaviour -----------------------------------------------------------------
 
 def test_solve_endpoint_invalid_inputs(client):
     res = client.post("/api/solve", json={"pot": -100, "bet_size": 50})
@@ -202,7 +333,7 @@ def test_break_even_fields_random_model(client):
     assert hand_eval["profitable_from_fold_equity"] == 0.34
 
 
-# --- One vocabulary across endpoints (M3) ----------------------------------------------------
+# --- One vocabulary across endpoints (M3) ---------------------------------------------------
 
 HAND_KEYS = {
     "hand", "score_name", "category", "category_name", "canonical_id", "showdown_equity", "equity_vs_random",
@@ -242,19 +373,13 @@ def test_endpoints_share_one_vocabulary(client):
 
 
 def test_evaluate_reports_both_break_even_fields(client):
-    payload = {"pot": 100000, "bet": 100000, "fold_equity": 0.35, "hand": "Ks Qh 3d", "opponent_model": "range"}
+    payload = {"pot": 100000, "bet_size": 100000, "fold_equity": 0.35, "hand": "Ks Qh 3d", "opponent_model": "range"}
     evaluated = client.post("/api/evaluate", json=payload).get_json()
     assert evaluated["break_even_fold_equity"] is None
     assert evaluated["profitable_from_fold_equity"] == 0.51
 
 
-def test_evaluate_requires_a_hand(client):
-    res = client.post("/api/evaluate", json={"pot": 100000})
-    assert res.status_code == 400
-    assert res.get_json() == {"error": "Field 'hand' is required.", "code": "invalid_params"}
-
-
-# --- Validation and JSON errors (H2, H3, M4) -------------------------------------------------
+# --- Validation and JSON errors (H2, H3, M4) ------------------------------------------------
 
 @pytest.mark.parametrize(
     "body",
@@ -300,7 +425,7 @@ def test_unexpected_errors_are_json_without_details(shared_services, monkeypatch
     assert res.get_json() == {"error": "Internal server error.", "code": "internal_error"}
 
 
-# --- /api/analyze (H4) -----------------------------------------------------------------------
+# --- /api/analyze (H4) ----------------------------------------------------------------------
 
 ANALYZE_PAYLOAD = {"pot": 100000, "bet_size": 50000, "fold_equity": 0.35, "hand": "As Kh Qd"}
 
@@ -379,6 +504,22 @@ def test_analyze_uses_openrouter_when_a_key_is_set(keyed_client, monkeypatch):
     assert sent["timeout"] == 15.0
 
 
+def test_analyze_prompt_reports_the_same_calling_range_as_the_response(keyed_client, monkeypatch):
+    """The prompt used to say 'top 65%' (derived from f) while the numbers used a separate 30%."""
+    sent = {}
+
+    def fake_post(url, headers, json, timeout):
+        sent["prompt"] = json["messages"][1]["content"]
+        return _FakeResponse(200, {"choices": [{"message": {"content": "Tố."}}]})
+
+    monkeypatch.setattr(requests, "post", fake_post)
+    body = {**UI_REQUEST, "pot": 100000, "bet_size": 50000}
+    keyed_client.post("/api/analyze", json=body).get_json()
+    assert f"top {UI_EXPECTED['call_range_percent']:.1f}%" in sent["prompt"]
+    assert f"strongest {UI_EXPECTED['call_range_percent']:.1f}%" in sent["prompt"]
+    assert "30.0%" not in sent["prompt"]
+
+
 @pytest.mark.parametrize(
     "outcome",
     [
@@ -402,7 +543,7 @@ def test_analyze_upstream_failures_are_502_without_details(keyed_client, monkeyp
     assert "secret" not in body["error"] and "network" not in body["error"]
 
 
-# --- Rate limit, CORS, dependency injection (H5, M1) -----------------------------------------
+# --- Rate limit, CORS, dependency injection (H5, M1) ----------------------------------------
 
 def test_analyze_is_rate_limited(shared_services):
     db, model = shared_services
@@ -430,7 +571,7 @@ def test_create_app_uses_the_injected_database(shared_services):
     assert app.extensions["lieng"].db is db
 
 
-# --- Follow-up fixes --------------------------------------------------------------------------
+# --- Follow-up fixes ------------------------------------------------------------------------
 
 def test_body_that_is_not_json_is_rejected(client):
     broken = client.post("/api/solve", data="{not json", content_type="application/json")

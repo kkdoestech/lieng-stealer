@@ -219,16 +219,16 @@ spot 3).
 The component's side of a run is three small functions. `runSolve` builds the body and turns each
 callback into state changes:
 
-📍 [`frontend/src/App.jsx:157-186`](../frontend/src/App.jsx#L157-L186)
+📍 [`frontend/src/App.jsx:156-187`](../frontend/src/App.jsx#L156-L187)
 ```jsx
   // Start one run with the current inputs; every state change happens in a callback, after the
-  // matching response has arrived.
+  // matching response has arrived. The API takes one opponent assumption: fold_equity. The
+  // calling range the UI shows next to it is derived from that same number, never sent.
   const runSolve = (controller) => {
     const body = JSON.stringify({
       pot: Number(pot),
       bet_size: Number(betSize),
       fold_equity: Number(foldEquity),
-      call_range_percent: Number(callRangePercent),
       hand: hand.trim(),
       opponent_model: opponentModel,
     });
@@ -251,12 +251,14 @@ callback into state changes:
         setIsAiLoading(false);
       },
     });
+  };
+
 ```
 
 As soon as the numbers are in, `isLoading` goes false and the page renders them; the analysis is
 still on its way. `startSolve` is what the button calls:
 
-📍 [`frontend/src/App.jsx:189-198`](../frontend/src/App.jsx#L189-L198)
+📍 [`frontend/src/App.jsx:188-197`](../frontend/src/App.jsx#L188-L197)
 ```jsx
   // Start a run from a click: cancel any run still in flight, then show the loading state.
   const startSolve = () => {
@@ -278,7 +280,7 @@ run" never appears ([App.test.jsx:151-172](../frontend/src/App.test.jsx#L151-L17
 
 The first run starts on mount:
 
-📍 [`frontend/src/App.jsx:200-223`](../frontend/src/App.jsx#L200-L223)
+📍 [`frontend/src/App.jsx:199-217`](../frontend/src/App.jsx#L199-L217)
 ```jsx
   // The first run on mount. It reads the current inputs without making them effect dependencies.
   const startFirstRun = useEffectEvent((controller) => {
@@ -299,11 +301,6 @@ The first run starts on mount:
 
   const zones = handEval?.profitable_fold_zones;
 
-  // Category Matrix Statistics (computed by the solver per category)
-  const categoryMatrix = (summary?.category_breakdown || []).map((row) => ({
-    ...row,
-    pct: ((row.profitable_combos / row.combos) * 100).toFixed(1),
-  }));
 ```
 
 - The effect solves once when the page opens, so the page is never empty. It sets no state itself
@@ -425,7 +422,7 @@ from `t.betPresetLabel(...)` with the multiple formatted for the locale: "0.5x p
 
 The profit map draws each zone with inline percentages:
 
-📍 [`frontend/src/App.jsx:354-368`](../frontend/src/App.jsx#L354-L368)
+📍 [`frontend/src/App.jsx:357-371`](../frontend/src/App.jsx#L357-L371)
 ```jsx
             {zones && (
               <div className="profit-map">
@@ -456,7 +453,7 @@ Twelve values are functions. Six take a parameter (`betPresetLabel`, `invalidHan
 (`solverOffline`, `serverError`, `badResponse`, `aiNoAdvice`, `aiUnreachable`, `aiRateLimited`).
 The solve errors sit together:
 
-📍 [`frontend/src/i18n.js:34-38`](../frontend/src/i18n.js#L34-L38)
+📍 [`frontend/src/i18n.js:36-40`](../frontend/src/i18n.js#L36-L40)
 ```js
     solverOffline: () => "Can't reach the solver. Start the backend on port 5000 and try again.",
     invalidHand: (detail) => `Check your hand: ${detail}`,
@@ -467,7 +464,7 @@ The solve errors sit together:
 
 The render calls every message the same way:
 
-📍 [`frontend/src/App.jsx:406-410`](../frontend/src/App.jsx#L406-L410)
+📍 [`frontend/src/App.jsx:409-413`](../frontend/src/App.jsx#L409-L413)
 ```jsx
           {solveError && (
             <div className="terminal-alert" role="alert">
@@ -539,7 +536,7 @@ belongs. Comparing shapes instead of values lets the wording differ freely. The 
 [App.test.jsx](../frontend/src/App.test.jsx) renders the real component in jsdom (lesson 12) with
 `fetch` replaced:
 
-📍 [`frontend/src/App.test.jsx:40-55`](../frontend/src/App.test.jsx#L40-L55)
+📍 [`frontend/src/App.test.jsx:55-70`](../frontend/src/App.test.jsx#L55-L70)
 ```jsx
 const reply = (status, body) => ({ ok: status < 400, status, json: async () => body });
 

@@ -374,6 +374,22 @@
   color: var(--bad);
 }
 
+/* No hand entered: a neutral banner that explains the range-only view. */
+.verdict-empty {
+  padding: 12px 0;
+  border-top: 1px dashed var(--line-control);
+  border-bottom: 1px dashed var(--line-control);
+}
+
+.verdict-empty .verdict-title {
+  color: var(--text);
+  font-size: 1.05rem;
+}
+
+.verdict-empty .verdict-meta {
+  color: var(--muted);
+}
+
 .verdict-meta {
   display: flex;
   flex-wrap: wrap;

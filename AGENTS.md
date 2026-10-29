@@ -23,6 +23,7 @@ The system strictly adheres to:
 - **Pure Functions**: `evaluator.py` and `ev.py` must be completely deterministic and free of side effects or external I/O.
 - **No Global Mutable State**: Do not use global variables to store game state or cached databases. State must be injected via constructors or parameters (Dependency Injection). The Flask app is built by `create_app(db=..., calling_model=..., config=...)`, which keeps its services in `app.extensions`; the module-level `app` object exists only as the entry point for gunicorn and `python app.py`.
 - **Immutability**: Card and Hand instances must be hashable and immutable so they can serve as dictionary keys and set members. `Hand` equality means equal strength (the hands would tie), and its hash agrees with it.
+- **One opponent assumption, one equity source**: `fold_equity` is the only caller assumption the API accepts; under the `range` model the calling range is derived, `(1 - f) × 100%`, and only echoed back as `call_range_percent` (never sent). A request builds one `OpponentEquities` and answers a hand as `HandSolution.record`, i.e. the matching row of the 455-class table, so a second equity implementation cannot exist again. `src/opponent_model.py` was deleted in 2.0.0 for exactly that reason; `git log` has the history.
 
 ---
 

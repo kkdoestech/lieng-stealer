@@ -318,7 +318,7 @@ The four summary figures used to be glowing "HUD cards". The container
 ([App.css:429-431](../frontend/src/App.css#L429-L431)) draws a line on top, and each figure is a row
 with a 1px line underneath:
 
-📍 [`frontend/src/App.css:433-447`](../frontend/src/App.css#L433-L447)
+📍 [`frontend/src/App.css:449-463`](../frontend/src/App.css#L449-L463)
 ```css
 .hud-card {
   display: grid;

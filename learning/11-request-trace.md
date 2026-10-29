@@ -83,17 +83,40 @@ the duplicate first request").
 
 ### Hop 2. Building the request
 
-📍 [`frontend/src/App.jsx:159-167`](../frontend/src/App.jsx#L159-L167)
+📍 [`frontend/src/App.jsx:156-187`](../frontend/src/App.jsx#L156-L187)
 ```jsx
+  // Start one run with the current inputs; every state change happens in a callback, after the
+  // matching response has arrived. The API takes one opponent assumption: fold_equity. The
+  // calling range the UI shows next to it is derived from that same number, never sent.
   const runSolve = (controller) => {
     const body = JSON.stringify({
       pot: Number(pot),
       bet_size: Number(betSize),
       fold_equity: Number(foldEquity),
-      call_range_percent: Number(callRangePercent),
       hand: hand.trim(),
       opponent_model: opponentModel,
     });
+    fetchSolveAndAnalysis(body, controller.signal, {
+      onSolved: (data) => {
+        setSolveError(null);
+        setSolveData(data);
+        setIsLoading(false);
+      },
+      onSolveFailed: (error) => {
+        // Clear the old results: they belong to different inputs than the ones on screen now.
+        setSolveError(error);
+        setSolveData(null);
+        setAiAdvice(null);
+        setIsLoading(false);
+        setIsAiLoading(false);
+      },
+      onAnalysis: (advice) => {
+        setAiAdvice(advice);
+        setIsAiLoading(false);
+      },
+    });
+  };
+
 ```
 
 The five values come from React state, whose defaults are at
@@ -146,27 +169,29 @@ the API, or `VITE_API_URL` points at the API and `CORS_ORIGINS` must list the pa
 
 Werkzeug matches `POST /api/solve` to `solve_api` in the `api` blueprint:
 
-📍 [`backend/app.py:532-550`](../backend/app.py#L532-L550)
+📍 [`backend/app.py:504-524`](../backend/app.py#L504-L524)
 ```python
 @api.post("/api/solve")
 def solve_api() -> Response:
     """Rank all 455 hands and, if ``hand`` is given, evaluate that hand too.
 
     JSON body (all optional): pot (> 0), bet_size (> 0), fold_equity in [0, 1],
-    opponent_model ('random' default, or 'range'), hand (e.g. 'As Kh Qd').
+    opponent_model ('random' default, or 'range'), hand (e.g. 'As Kh Qd'). A blank or missing
+    hand is legal: the answer is then the range itself.
     """
     services = _services()
     data = _request_body()
     params = _parse_game_params(data)
     hand = _parse_hand(data, required=False)
-    _validate_call_range_context(params, hand)
 
-    hand_evaluation = _hand_payload(_evaluate_hand(services, hand, params), params.opponent_model) if hand else None
-    records, summary = _solve_range(services, params)
+    equities, records, summary = _solve(services, params)
+    hand_evaluation = _hand_fields(services, hand, params, equities, records)[0] if hand else None
     return jsonify({
         "summary": summary,
         "hand_evaluation": hand_evaluation,
         "top_hands": _top_hands_payload(records),
+    })
+
 ```
 
 - `_services()` ([app.py:178-180](../backend/app.py#L178-L180)) fetches the app's database,
@@ -248,23 +273,31 @@ one frozen `HandResult`.
 
 ### Hop 6. Packing `hand_evaluation`
 
-📍 [`backend/app.py:413-427`](../backend/app.py#L413-L427)
+📍 [`backend/app.py:370-392`](../backend/app.py#L370-L392)
 ```python
     return {
-        "fold_equity_range": [fold_scenarios[0], fold_scenarios[-1]],
-        "call_range_percent_range": [
-            call_range_scenarios[0],
-            call_range_scenarios[-1],
-        ],
-        "central_equity_when_called": equities[call_range_percent],
-        "status": status,
-        "scenarios": scenarios,
+        "hand": str(solution.hand),
+        "score_name": str(solution.hand.score),
+        "category": stats.category.name,
+        "category_name": stats.category.display_name,
+        "canonical_id": record.canonical_id,
+        "showdown_equity": record.equity,
+        "equity_vs_random": stats.equity,
+        "random_hand_equity": stats.equity,
+        "call_range_percent": equities.calling_percentile,
+        "sensitivity": _sensitivity_payload(sensitivity) if sensitivity is not None else None,
+        "ev": record.ev,
+        "break_even_fold_equity": (
+            calculate_break_even_fold_equity(params.pot, params.bet_size, record.equity)
+            if is_random
+            else None
+        ),
+        "profitable_from_fold_equity": solution.zones[-1][0],
+        "profitable_fold_zones": [[start, end] for start, end in solution.zones],
+        "is_profitable": record.is_raise_profitable,
+        "decision": _decision(record.is_raise_profitable),
+        "recommended_action": "BET" if record.is_raise_profitable else "NO BET",
     }
-
-
-def _decision(is_profitable: bool) -> str:
-    return "RAISE" if is_profitable else "CHECK/FOLD"
-
 ```
 
 `_hand_payload` gives `break_even_fold_equity: null` (range model) and
@@ -275,11 +308,13 @@ def _decision(is_profitable: bool) -> str:
 
 ### Hop 7. The whole range
 
-📍 [`backend/app.py:458-461`](../backend/app.py#L458-L461)
+📍 [`backend/app.py:395-400`](../backend/app.py#L395-L400)
 ```python
-def _solve_range(services: Services, params: GameParams) -> tuple[list[HandEVRecord], Json]:
-    """Score all 455 classes; return the records (best first) and the summary payload."""
-    records = services.range_finder.solve_range(params.pot, params.bet_size, params.fold_equity, params.opponent_model)
+def _solve(services: Services, params: GameParams) -> tuple[OpponentEquities, list[HandEVRecord], Json]:
+    """Score all 455 classes from one equity source; return it, the records, and the summary."""
+
+    equities = services.range_finder.equities(params.fold_equity, params.opponent_model)
+    records = services.range_finder.solve_range(params.pot, params.bet_size, equities)
     profitable = [r for r in records if r.is_raise_profitable]
 ```
 
@@ -407,7 +442,7 @@ button **before** the analysis starts.
 `setSolveData` makes React run `App()` again. On that render the derived values pick the response
 apart:
 
-📍 [`frontend/src/App.jsx:213-223`](../frontend/src/App.jsx#L213-L223)
+📍 [`frontend/src/App.jsx:212-217`](../frontend/src/App.jsx#L212-L217)
 ```jsx
   const handEval = solveData?.hand_evaluation;
   const summary = solveData?.summary;
@@ -415,11 +450,6 @@ apart:
 
   const zones = handEval?.profitable_fold_zones;
 
-  // Category Matrix Statistics (computed by the solver per category)
-  const categoryMatrix = (summary?.category_breakdown || []).map((row) => ({
-    ...row,
-    pct: ((row.profitable_combos / row.combos) * 100).toFixed(1),
-  }));
 ```
 
 ### Hop 9. Numbers on the screen

@@ -283,7 +283,7 @@ POST http://localhost:5173/api/analyze    answered
 The production build, served by `vite preview`, made one `/api/solve` and one `/api/analyze`. The
 difference comes from StrictMode and this effect:
 
-📍 [`frontend/src/App.jsx:200-211`](../frontend/src/App.jsx#L200-L211)
+📍 [`frontend/src/App.jsx:199-210`](../frontend/src/App.jsx#L199-L210)
 ```jsx
   // The first run on mount. It reads the current inputs without making them effect dependencies.
   const startFirstRun = useEffectEvent((controller) => {

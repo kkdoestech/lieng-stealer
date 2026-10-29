@@ -61,7 +61,7 @@ python app.py
 ```
 
 Check it: `curl -s http://127.0.0.1:5000/health` →
-`{"classes_loaded":455,"database_loaded":true,"status":"healthy","version":"1.1.0"}`
+`{"classes_loaded":455,"database_loaded":true,"status":"healthy","version":"2.0.0"}`
 
 **2. Frontend** (in a second terminal):
 
@@ -130,6 +130,11 @@ hands collapse into C(15, 3) = **455 canonical hand types** (rank multisets). Ea
   can't be in the opponent's hand), using one prefix-sum table per hand type (built once in ≈ 50 ms).
   At *f* = 0 it reproduces `winrates.json` exactly.
 
+`fold_equity` is the API's **single** opponent assumption. The calling range it implies,
+`(1 − f) × 100%`, is reported back as `call_range_percent` (read-only, derived). The same engine powers
+the single-hand answer and the 455-class table, so one request has exactly one equity per hand — the
+verdict card and the table row cannot disagree.
+
 The difference matters for medium hands: `K-Q-3` (3 points) wins **36%** against a random hand, but only
 **1.1%** against an opponent who folds their weakest 35% and calls with the rest.
 
@@ -159,11 +164,13 @@ Inputs on the left, results on the right.
 
 - **Inputs:** pot and bet (with −/+ steppers and presets such as *100k* or *0.5x pot*), the opponent's fold
   frequency (slider), how the opponent folds (**Weakest hands** = `range`, the default; **At random** =
-  `random`), and your hand (e.g. `As Kh Qd`, or one of the presets).
+  `random`), and your hand (e.g. `As Kh Qd`, or one of the presets). The calling-range slider is a second
+  view of the same assumption: it shows the strongest `(1 − f) × 100%` of hands and moving it moves the
+  fold frequency, so the page always sends the API one opponent assumption.
 - **Results:** the recommended action and EV; *where raising pays*, a bar showing the profitable fold
   ranges with a marker at your current estimate; range coverage, showdown equity, EV and bluff break-even;
   coverage by category; the most profitable hands; and optional **analysis notes** (see
-  [`/api/analyze`](#http-api)).
+  [`/api/analyze`](#http-api)). Clearing the hand keeps the range tables on screen and says so.
 - **EN / VI** switch in the header; the choice is remembered in the browser. Numbers follow the language
   (`131,876` in English, `131.876` in Vietnamese).
 
@@ -227,20 +234,24 @@ origins in `CORS_ORIGINS` (by default the Vite dev server; see [Configuration](#
 | :--- | :--- | :--- | :--- |
 | `pot` | number | 100000 | > 0 |
 | `bet_size` (`bet` is still accepted) | number | 50000 | > 0 |
-| `fold_equity` | number | 0.35 | 0–1 |
+| `fold_equity` | number | 0.35 | 0–1; the single opponent assumption. Under `range` it also fixes the calling range, `(1 − f) × 100%` |
 | `opponent_model` | `"random"` \| `"range"` | `"random"` | the web app sends `"range"` |
-| `call_range_percent` | number | — | optional, 0 < value ≤ 100; evaluates the entered hand against the strongest selected percentage of legal hands |
 | `hand` | string | — | optional for `/api/solve`, required for `/api/evaluate` |
 
 The body must be a JSON object, and numbers must be real, finite numbers (`"nan"`, `"inf"` and `true` are
 rejected). Missing fields take the defaults above.
+
+**Removed in 2.0.0:** `call_range_percent`. It encoded the same opponent assumption as `fold_equity`
+(a caller holding the strongest 30% folds 70% of the time), so sending both let one answer be computed
+from one value and the table from the other. The API now rejects it with `400` and tells the caller to
+send `fold_equity = 1 - call_range_percent / 100`.
 
 **Errors.** Every error, including unknown URLs, is JSON with a stable `code`:
 `{"error": "A Liêng hand cannot have duplicate cards.", "code": "invalid_hand"}`.
 
 | `code` | Status | When |
 | :--- | :--- | :--- |
-| `invalid_params` | 400 | A body that isn't valid JSON or isn't an object, a bad number, an unknown `opponent_model`, a missing `hand` on `/api/evaluate` |
+| `invalid_params` | 400 | A body that isn't valid JSON or isn't an object, a bad number, an unknown `opponent_model`, the removed `call_range_percent` field, a missing `hand` on `/api/evaluate` |
 | `invalid_hand` | 400 | The hand text isn't three valid, different cards |
 | `not_found` / `method_not_allowed` | 404 / 405 | Unknown URL / wrong HTTP method |
 | `rate_limited` | 429 | Too many `/api/analyze` calls (the `Retry-After` header says when to try again) |
@@ -249,15 +260,21 @@ rejected). Missing fields take the defaults above.
 
 **One vocabulary.** The three solver endpoints use the same field names with the same meanings:
 `bet_size`, `showdown_equity` (equity when called, under the chosen model), `decision` (`"RAISE"` or
-`"CHECK/FOLD"`), `is_profitable`. When `call_range_percent` is supplied, the single-hand result
-uses the exact strength-percentile caller range and includes a 3-by-3 sensitivity grid; range
-coverage and the top-hands table continue to use `opponent_model`.
+`"CHECK/FOLD"`), `is_profitable`. The single-hand answer is the matching row of the 455-class table, so
+`showdown_equity` and `ev` are identical in both places for the same hand. `call_range_percent` is a
+derived readout of the fold frequency (`null` under `random`), and `sensitivity` stresses that one
+assumption by ±10 percentage points, reporting the calling range each cell implies.
+
+**No hand is not an error.** A cleared or absent `hand` on `/api/solve` or `/api/analyze` returns
+`200` with `hand_evaluation: null` plus the full range. Only `/api/evaluate` requires a hand.
 
 **When does raising pay?** Single-hand results contain:
 
 | Field | Meaning |
 | :--- | :--- |
 | `showdown_equity` | Equity used by the chosen model; `equity_vs_random` is always included for comparison |
+| `call_range_percent` | The calling range implied by `fold_equity`, `(1 − f) × 100`; `null` under `random` |
+| `sensitivity` | Three stress cells (`f ∓ 0.10`), each reporting its EV, equity and implied calling range, plus `ROBUST_BET` / `ROBUST_NO_BET` / `ASSUMPTION_SENSITIVE` |
 | `break_even_fold_equity` | Exact fold frequency where EV = 0 (`random` model). `null` under `range`, where no single break-even exists |
 | `profitable_from_fold_equity` | First fold frequency (1% grid) from which raising stays +EV up to 100% |
 | `profitable_fold_zones` | Every `[start, end]` interval where raising is +EV |
@@ -280,11 +297,18 @@ Response (shortened: `top_hands` has 30 entries and `category_breakdown` has 4):
     "category_name": "Điểm",
     "score_name": "3 điểm",
     "showdown_equity": 0.0108,
-    "equity_vs_random": 0.36,
+    "equity_vs_random": 0.3599924,
+    "call_range_percent": 65.0,
     "ev": -27894.0,
     "break_even_fold_equity": null,
     "profitable_from_fold_equity": 0.51,
     "profitable_fold_zones": [[0.0, 0.08], [0.51, 1.0]],
+    "sensitivity": {
+      "fold_equity_range": [0.25, 0.45],
+      "call_range_percent_range": [55.0, 75.0],
+      "central_equity_when_called": 0.0108,
+      "status": "ROBUST_NO_BET"
+    },
     "is_profitable": false,
     "decision": "CHECK/FOLD"
   },
@@ -293,6 +317,7 @@ Response (shortened: `top_hands` has 30 entries and `category_breakdown` has 4):
     "bet_size": 100000.0,
     "fold_equity": 0.35,
     "opponent_model": "range",
+    "call_range_percent": 65.0,
     "final_pot": 300000.0,
     "pure_bluff_break_even_fold_equity": 0.5,
     "total_canonical_classes": 455,
@@ -336,9 +361,10 @@ The game parameters plus exactly the `hand_evaluation` fields of `/api/solve`:
   "canonical_id": "Q-K-A",
   "category": "LIENG",
   "category_name": "Liêng",
-  "showdown_equity": 0.9969,
-  "equity_vs_random": 0.9969,
-  "ev": 132097.0,
+  "showdown_equity": 0.99693335,
+  "equity_vs_random": 0.99693335,
+  "call_range_percent": null,
+  "ev": 132101.34,
   "break_even_fold_equity": 0.0,
   "profitable_from_fold_equity": 0.0,
   "profitable_fold_zones": [[0.0, 1.0]],
@@ -392,17 +418,19 @@ lieng-stealer/
 │   │   ├── db.py               WinRateDB: loads winrates.json for O(1) lookups
 │   │   ├── calling_range.py    OpponentModel, CallingRangeModel (equity vs a calling range)
 │   │   ├── ev.py               EV, break-even fold equity, profitable fold zones
-│   │   ├── range_finder.py     EV of all 455 types, sorting, coverage
+│   │   ├── range_finder.py     the request's one equity source, EV of all 455 types, sorting, coverage
+│   │   ├── sensitivity.py      the 3-point assumption stress grid behind `sensitivity`
 │   │   └── cli.py              command-line interface
-│   └── tests/                  pytest suite (172 tests)
+│   └── tests/                  pytest suite (205 tests)
 ├── frontend/
 │   ├── index.html, vite.config.js, package.json, .oxlintrc.json
 │   └── src/
 │       ├── main.jsx, App.jsx   the web app
+│       ├── solve-contract.json the UI's default request + expected numbers, read by both test suites
 │       ├── i18n.js             English and Vietnamese UI text
 │       ├── format.js           money and fold-zone formatting
 │       ├── index.css, App.css  colour tokens and layout
-│       └── *.test.js(x)        Vitest tests (20 tests)
+│       └── *.test.js(x)        Vitest tests (24 tests)
 ├── .github/workflows/ci.yml    CI: backend, frontend and course checks on every push
 ├── learning/                   guided tour of the codebase: 18 lessons, start at COURSE.md
 ├── AGENTS.md                   engineering spec: rules, data model, maths, performance budgets
@@ -436,13 +464,13 @@ budgets by `PERF_BUDGET_FACTOR` (CI sets 3, because shared runners are slower).
 | `test_exceptions.py` | 9 | The exception hierarchy callers rely on |
 | `test_generator.py` | 15 | Exact equities, rate invariants, Monte Carlo convergence, data-file schema, CLI flags, atomic write, file permissions, private RNG |
 | `test_db.py` | 13 | Loading, lookup latency, error handling, validation of malformed or incomplete files |
-| `test_calling_range.py` | 12 | Card removal, exact match with `winrates.json` at 0% folds, monotonicity, latency, model invariants |
+| `test_calling_range.py` | 13 | Card removal, exact match with `winrates.json` at 0% folds, monotonicity, one implementation for single queries and the full table, latency, model invariants |
 | `test_ev.py` | 15 | EV boundaries, bluffing, break-even, profitable fold zones, strong hands |
-| `test_range_finder.py` | 9 | Range scan, coverage, opponent models, tie ordering, category breakdown |
+| `test_range_finder.py` | 13 | Range scan, coverage, opponent models, tie ordering, one answer per hand (identity), category breakdown |
 | `test_cli.py` | 12 | Decisions per model, interactive mode, exit codes, validation before output, plain-text fallback |
-| `test_api.py` | 46 | Every endpoint, both models, one shared vocabulary, JSON errors, validation, `/api/analyze` (OpenRouter mocked), rate limit and `Retry-After`, proxy handling, CORS, settings |
+| `test_api.py` | 70 | Every endpoint, both models, one answer per hand, the shared UI contract, the removed field, blank hands, JSON errors, `/api/analyze` (OpenRouter mocked), rate limit and `Retry-After`, proxy handling, CORS, settings |
 | `test_dynamic_scenarios.py` | 6 | End-to-end player stories (value raise, junk fold, pure bluff, coverage sweep, both models) |
-| frontend `App.test.jsx` | 14 | Rendering, error messages, stale results cleared, language toggle, steppers, request cancelling |
+| frontend `App.test.jsx` | 18 | Rendering, the shared contract body, the linked sliders, the blank-hand range view, error messages, stale results cleared, language toggle, steppers, request cancelling |
 | frontend `format.test.js`, `i18n.test.js` | 6 | Locale-aware money formatting, zone formatting, EN/VI dictionary parity |
 
 The tests never call the internet: the LLM calls are mocked or use the offline fallback.

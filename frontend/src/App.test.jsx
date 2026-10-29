@@ -3,14 +3,17 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import App from "./App.jsx";
+import solveContract from "./solve-contract.json";
 
 // A trimmed /api/solve response for the default inputs (As Kh Qd, range model).
+// The numbers match the shared contract with the backend (solve-contract.json).
 const SOLVE_OK = {
   summary: {
     pot: 100000,
     bet_size: 50000,
     fold_equity: 0.35,
     opponent_model: "range",
+    call_range_percent: 65.0,
     range_coverage_percent: 100.0,
     profitable_combinations: 22100,
     pure_bluff_break_even_fold_equity: 0.3333,
@@ -26,8 +29,16 @@ const SOLVE_OK = {
     score_name: "Liêng Q-K-A",
     canonical_id: "Q-K-A",
     showdown_equity: 0.9952,
-    equity_vs_random: 0.9969,
+    equity_vs_random: 0.99693335,
     ev: 131876.0,
+    call_range_percent: 65.0,
+    sensitivity: {
+      fold_equity_range: [0.25, 0.45],
+      call_range_percent_range: [55.0, 75.0],
+      central_equity_when_called: 0.9952,
+      status: "ROBUST_BET",
+      scenarios: [],
+    },
     profitable_fold_zones: [[0.0, 1.0]],
     decision: "RAISE",
   },
@@ -35,6 +46,10 @@ const SOLVE_OK = {
     { canonical_id: "A-A-A", category: "SAP", showdown_equity: 1.0, ev: 132500.0, multiplicity: 4, is_profitable: true, decision: "RAISE" },
   ],
 };
+
+// The same response when the hand field is empty: the range answers, no verdict card.
+const SOLVE_OK_NO_HAND = { ...SOLVE_OK, hand_evaluation: null };
+
 const ANALYZE_OK = { advice: "Tố lớn.", model: "rule-based-solver-engine (OPENROUTER_API_KEY not configured)" };
 
 const reply = (status, body) => ({ ok: status < 400, status, json: async () => body });
@@ -70,19 +85,38 @@ describe("App", () => {
     expect(screen.getAllByText(/\+131,876/).length).toBeGreaterThan(0);
   });
 
-  test("sends the selected caller-range percentage to the solver", async () => {
+  test("the solve body matches the shared contract with the backend", async () => {
+    const calls = mockFetch({ "/api/solve": reply(200, SOLVE_OK), "/api/analyze": reply(200, ANALYZE_OK) });
+    render(<App />);
+    await screen.findByRole("heading", { name: "Raise / all-in" });
+    expect(calls[0].body).toEqual(solveContract.request);
+  });
+
+  test("the calling-range slider writes fold_equity and never sends its own field", async () => {
     const calls = mockFetch({ "/api/solve": reply(200, SOLVE_OK), "/api/analyze": reply(200, ANALYZE_OK) });
     render(<App />);
     await screen.findByRole("heading", { name: "Raise / all-in" });
 
     const slider = screen.getByRole("slider", { name: "Estimated calling range" });
-    fireEvent.change(slider, { target: { value: "31" } });
+    fireEvent.change(slider, { target: { value: "30" } });
     fireEvent.click(screen.getByRole("button", { name: "Run solver" }));
 
     await waitFor(() => {
       const solveCalls = calls.filter((call) => call.path === "/api/solve");
-      expect(solveCalls.at(-1).body.call_range_percent).toBe(31);
+      const body = solveCalls.at(-1).body;
+      expect(body.fold_equity).toBeCloseTo(0.7, 10);
+      expect("call_range_percent" in body).toBe(false);
     });
+  });
+
+  test("the fold slider moves the calling-range slider with it", async () => {
+    mockFetch({ "/api/solve": reply(200, SOLVE_OK), "/api/analyze": reply(200, ANALYZE_OK) });
+    render(<App />);
+    await screen.findByRole("heading", { name: "Raise / all-in" });
+
+    expect(screen.getByRole("slider", { name: "Estimated calling range" })).toHaveValue("65");
+    fireEvent.change(screen.getByRole("slider", { name: "Opponent fold frequency" }), { target: { value: "0.2" } });
+    expect(screen.getByRole("slider", { name: "Estimated calling range" })).toHaveValue("80");
   });
 
   test("the top-hands table reads showdown_equity", async () => {
@@ -90,6 +124,24 @@ describe("App", () => {
     render(<App />);
     const row = (await screen.findByText("A-A-A")).closest("tr");
     expect(row).toHaveTextContent("100.0%");
+  });
+
+  test("clearing the hand shows the range instead of an error", async () => {
+    const user = userEvent.setup();
+    const calls = mockFetch({
+      "/api/solve": (n) => (n === 0 ? reply(200, SOLVE_OK) : reply(200, SOLVE_OK_NO_HAND)),
+      "/api/analyze": reply(200, ANALYZE_OK),
+    });
+    render(<App />);
+    await screen.findByRole("heading", { name: "Raise / all-in" });
+
+    await user.clear(screen.getByLabelText("Your hand (3 cards)"));
+    await user.click(screen.getByRole("button", { name: "Run solver" }));
+
+    expect(await screen.findByText("No hand entered")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(calls.filter((call) => call.path === "/api/solve").at(-1).body.hand).toBe("");
+    expect(screen.getByText("A-A-A")).toBeInTheDocument();
   });
 
   test("an invalid hand shows its message and clears the old verdict", async () => {
@@ -161,7 +213,6 @@ describe("App", () => {
     const analyze = calls.find((c) => c.path === "/api/analyze");
     expect(Object.keys(analyze.body).sort()).toEqual([
       "bet_size",
-      "call_range_percent",
       "fold_equity",
       "hand",
       "opponent_model",

@@ -23,6 +23,7 @@ if sys.stdout and hasattr(sys.stdout, "reconfigure"):
         pass
 
 from app import create_app
+from src.calling_range import OpponentModel
 from src.db import WinRateDB
 from src.range_finder import RangeFinder
 
@@ -151,10 +152,18 @@ def test_scenario_4_range_coverage_sensitivity(solver):
     pot = 100000.0
     bet = 50000.0
 
-    cov_00 = solver.calculate_range_coverage(solver.get_profitable_range(pot, bet, 0.00))
-    cov_15 = solver.calculate_range_coverage(solver.get_profitable_range(pot, bet, 0.15))
-    cov_30 = solver.calculate_range_coverage(solver.get_profitable_range(pot, bet, 0.30))
-    cov_40 = solver.calculate_range_coverage(solver.get_profitable_range(pot, bet, 0.40))
+    cov_00 = solver.calculate_range_coverage(
+        solver.get_profitable_range(pot, bet, solver.equities(0.00, OpponentModel.RANDOM))
+    )
+    cov_15 = solver.calculate_range_coverage(
+        solver.get_profitable_range(pot, bet, solver.equities(0.15, OpponentModel.RANDOM))
+    )
+    cov_30 = solver.calculate_range_coverage(
+        solver.get_profitable_range(pot, bet, solver.equities(0.30, OpponentModel.RANDOM))
+    )
+    cov_40 = solver.calculate_range_coverage(
+        solver.get_profitable_range(pot, bet, solver.equities(0.40, OpponentModel.RANDOM))
+    )
 
     # Invariants:
     # 1. Coverage MUST strictly increase as f increases

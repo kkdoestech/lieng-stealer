@@ -184,7 +184,7 @@ Doing that for every one of the C(52, 3) = **22,100** starting hands means
 Every request after that is a dictionary lookup plus a little arithmetic. The whole online half is
 set up in five lines when the Flask app is created:
 
-📍 [`backend/app.py:141-145`](../backend/app.py#L141-L145)
+📍 [`backend/app.py:139-143`](../backend/app.py#L139-L143)
 ```python
     if db is None:
         db = WinRateDB(DEFAULT_DB_PATH)
@@ -465,7 +465,7 @@ the **backend** writes into the notes panel followed in `a9d9ce9`. The rule-base
 what you see without an API key, used to end with `3. **GTO Insight:**`; now the heading is
 Vietnamese for "tactical assessment":
 
-📍 [`backend/app.py:709`](../backend/app.py#L709)
+📍 [`backend/app.py:704-704`](../backend/app.py#L704-L704)
 ```python
         f"3. **Nhận định chiến thuật:** "
 ```

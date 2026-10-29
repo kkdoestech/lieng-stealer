@@ -77,7 +77,7 @@ backend ([db.py:82-89](../backend/src/db.py#L82-L89), lesson 05).
 choices for the last one come from the enum itself, `[m.value for m in OpponentModel]`, so a new
 model would appear in `--help` automatically. Then:
 
-📍 [`backend/src/cli.py:349-376`](../backend/src/cli.py#L349-L376)
+📍 [`backend/src/cli.py:359-386`](../backend/src/cli.py#L359-L386)
 ```python
     args = parser.parse_args(argv)
     opponent_model = OpponentModel(args.opponent_model)
@@ -132,7 +132,7 @@ model would appear in `--help` automatically. Then:
 - **The first line of `main` switches stdout to UTF-8.** That used to happen when the module was
   imported. Now importing `src.cli` (as every test does) changes nothing:
 
-📍 [`backend/src/cli.py:70-77`](../backend/src/cli.py#L70-L77)
+📍 [`backend/src/cli.py:69-76`](../backend/src/cli.py#L69-L76)
 ```python
 def _use_utf8_stdout() -> None:
     """Ask the terminal stream for UTF-8 so Vietnamese text prints on Windows consoles."""
@@ -180,27 +180,47 @@ is a normal way for a scripted session to end, so it is 0. The constants live at
 `run_solver(pot, bet_size, fold_equity, hand_str=None, db_path=DEFAULT_DB_PATH,
 opponent_model=RANDOM)` ([cli.py:236-252](../backend/src/cli.py#L236-L252)) is the whole pipeline:
 
-📍 [`backend/src/cli.py:253-271`](../backend/src/cli.py#L253-L271)
+📍 [`backend/src/cli.py:244-282`](../backend/src/cli.py#L244-L282)
 ```python
+def run_solver(
+    pot: float,
+    bet_size: float,
+    fold_equity: float,
+    hand_str: str | None = None,
+    db_path: str | Path = DEFAULT_DB_PATH,
+    opponent_model: OpponentModel = OpponentModel.RANDOM,
+) -> None:
+    """Execute the range solver pipeline and render visual reports.
+
+    Every input is validated before anything is printed, so a bad value never leaves a
+    half-printed report behind.
+
+    Raises:
+        LiengError: If the hand or a number is invalid (InvalidGameParamsError is also a ValueError).
+        DatabaseError: If the win-rate database cannot be loaded.
+    """
     hand = Hand.from_str(hand_str) if hand_str else None
     if not (0.0 <= fold_equity <= 1.0):
         raise InvalidGameParamsError(f"Fold equity must be between 0.0 and 1.0, got {fold_equity}.")
     be_bluff = calculate_break_even_fold_equity(pot, bet_size, win_rate_when_called=0.0)
 
     db = WinRateDB(db_path)
-    # Build the calling-range tables (~50 ms) only when the range model is requested
+    # Build the calling-range tables (~40 ms) only when the range model is requested
     calling_model = CallingRangeModel() if opponent_model is OpponentModel.RANGE else None
     finder = RangeFinder(db, calling_model)
-    records = finder.solve_range(pot, bet_size, fold_equity, opponent_model)
+    equities = finder.equities(fold_equity, opponent_model)
+    records = finder.solve_range(pot, bet_size, equities)
     profitable = [r for r in records if r.is_raise_profitable]
     coverage = finder.calculate_range_coverage(profitable)
 
-    render_banner(pot, bet_size, fold_equity, be_bluff, opponent_model)
+    render_banner(pot, bet_size, equities, be_bluff)
     render_solver_overview(records, coverage)
     render_categorized_heatmap(records)
 
     if hand is not None:
-        render_single_hand_decision(hand, db, pot, bet_size, fold_equity, calling_model)
+        solution = finder.hand_solution(hand, records, equities, pot, bet_size)
+        render_single_hand_decision(solution, equities, pot, bet_size)
+
 ```
 
 Read it as three blocks:
@@ -226,19 +246,53 @@ will differ): building `CallingRangeModel()` took 53–55 ms, loading and valida
 
 ### 5. Your hand: the same choice as the API
 
-📍 [`backend/src/cli.py:162-172`](../backend/src/cli.py#L162-L172)
+📍 [`backend/src/cli.py:157-201`](../backend/src/cli.py#L157-L201)
 ```python
-    canonical_id = to_canonical(hand.cards).canonical_id
-    stats = db.get(canonical_id)
-    equity = calling_model.equity(canonical_id, fold_equity) if calling_model else stats.equity
-    ev_result = evaluate_action(pot, bet_size, fold_equity, equity)
-    # Under the range model EV is not monotonic in fold equity, so no single break-even exists
+def render_single_hand_decision(
+    solution: HandSolution,
+    equities: OpponentEquities,
+    pot: float,
+    bet_size: float,
+) -> None:
+    """Render the recommendation for one hand, straight from its 455-class table row.
+
+    With a strength-ordered opponent EV is not monotonic in fold equity, so no single break-even
+    point exists; otherwise the exact closed form is shown.
+    """
+    hand = solution.hand
+    record = solution.record
+    canonical_id = record.canonical_id
+    equity = record.equity
+    ev = record.ev
     break_even_text = (
-        f"{ev_result.break_even_fold_equity * 100:.2f}%" if calling_model is None else "n/a (range model)"
+        f"{calculate_break_even_fold_equity(pot, bet_size, equity) * 100:.2f}%"
+        if equities.opponent_model is OpponentModel.RANDOM
+        else "n/a (range model)"
     )
 
-    status_color = "green" if ev_result.is_profitable else "red"
-    action_text = "BET +EV" if ev_result.is_profitable else "NO BET (+EV NOT ESTABLISHED)"
+    status_color = "green" if record.is_raise_profitable else "red"
+    action_text = "BET +EV" if record.is_raise_profitable else "NO BET (+EV NOT ESTABLISHED)"
+
+    if HAS_RICH:
+        content = (
+            f"[bold]Hand Evaluated:[/] {hand} ([italic]{hand.score}[/])\n"
+            f"[bold]Canonical Class:[/] {canonical_id} ([cyan]{record.category.display_name}[/])\n"
+            f"[bold]Showdown Equity:[/] {equity * 100:.2f}%\n"
+            f"[bold]Expected Value (EV):[/] [{status_color}]{'+' if ev > 0 else ''}{format_currency(ev)}[/]\n"
+            f"[bold]Break-Even Fold Equity:[/] {break_even_text}\n\n"
+            f"[bold {status_color} reverse] >>> ACTION: {action_text} <<< [/]"
+        )
+        _console().print(Panel(content, title="[bold magenta]HAND EVALUATION & ACTION[/]", border_style=status_color))
+    else:
+        print("\n================ HAND EVALUATION ================")
+        print(f" Hand:               {hand} ({hand.score})")
+        print(f" Canonical Class:    {canonical_id} ({record.category.display_name})")
+        print(f" Showdown Equity:    {equity * 100:.2f}%")
+        print(f" Expected Value:     {'+' if ev > 0 else ''}{format_currency(ev)}")
+        print(f" Break-Even FE:      {break_even_text}")
+        print(f" >>> ACTION: {action_text} <<<")
+        print("=================================================\n")
+
 ```
 
 Line 164 is the CLI's version of `app.py`'s `_equity_function`
@@ -278,7 +332,7 @@ Two details of `format_currency` ([cli.py:80-82](../backend/src/cli.py#L80-L82))
 
 ### 6. `rich` if available, `print` if not
 
-📍 [`backend/src/cli.py:51-67`](../backend/src/cli.py#L51-L67)
+📍 [`backend/src/cli.py:50-66`](../backend/src/cli.py#L50-L66)
 ```python
 if TYPE_CHECKING:
     from rich.console import Console
@@ -338,7 +392,7 @@ process with these imports), and whole commands measured 0.14 s for the random m
 
 ### 7. The category table, from shared code
 
-📍 [`backend/src/cli.py:195-197`](../backend/src/cli.py#L195-L197)
+📍 [`backend/src/cli.py:203-205`](../backend/src/cli.py#L203-L205)
 ```python
 def render_categorized_heatmap(records: list[HandEVRecord]) -> None:
     """Render categorized summary tables showing distribution and top hands."""
@@ -360,7 +414,7 @@ classes, a coverage percentage, and up to five sample hands
 asks for the pot, the bet and the fold rate first, each with a default from `ev.py` when you just
 press Enter. Then:
 
-📍 [`backend/src/cli.py:290-312`](../backend/src/cli.py#L290-L312)
+📍 [`backend/src/cli.py:300-322`](../backend/src/cli.py#L300-L322)
 ```python
         model_str = input(
             f"Opponent folds 'random' or 'range' (weakest hands first)? [{default_model.value}]: "

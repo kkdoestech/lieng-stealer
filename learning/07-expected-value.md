@@ -264,16 +264,26 @@ threshold can say that, so the code scans:
 
 ### 7. How the API uses all of this
 
-📍 [`backend/app.py:332-339`](../backend/app.py#L332-L339)
+📍 [`backend/app.py:431-448`](../backend/app.py#L431-L448)
 ```python
-def _evaluate_hand(services: Services, hand: Hand, params: GameParams) -> HandResult:
-    """Evaluate one hand: EV at the given fold rate and the zones where raising is +EV."""
-    canonical = to_canonical(hand.cards)
-    stats = services.db.get(canonical.canonical_id)
-    sensitivity = None
-    if params.call_range_percent is not None:
-        equity_at = _call_range_equity_function(hand, params.call_range_percent)
-        sensitivity = _build_hand_sensitivity(
+def _evaluate_hand(
+    services: Services,
+    hand: Hand,
+    params: GameParams,
+    equities: OpponentEquities,
+    records: Sequence[HandEVRecord],
+) -> tuple[HandSolution, Sensitivity]:
+    """Answer one hand from the table and stress its assumption grid."""
+    solution = services.range_finder.hand_solution(hand, records, equities, params.pot, params.bet_size)
+    sensitivity = stress_test(
+        equities,
+        services.calling_model,
+        solution.record.canonical_id,
+        params.pot,
+        params.bet_size,
+    )
+    return solution, sensitivity
+
 ```
 
 `_equity_function` ([app.py:302-308](../backend/app.py#L302-L308)) returns either
@@ -286,31 +296,52 @@ and the zones. `services` is the app's own database and calling-range model (les
 `_hand_payload` then turns a `HandResult` into the JSON that both `/api/solve` and `/api/evaluate`
 send. The zones become two separate fields:
 
-📍 [`backend/app.py:429-451`](../backend/app.py#L429-L451)
+📍 [`backend/app.py:350-393`](../backend/app.py#L350-L393)
 ```python
-def _hand_payload(result: HandResult, model: OpponentModel) -> Json:
+def _hand_payload(
+    solution: HandSolution,
+    stats: HandStats,
+    equities: OpponentEquities,
+    sensitivity: Sensitivity | None,
+    params: GameParams,
+) -> Json:
     """The hand-evaluation fields, identical in /api/solve and /api/evaluate.
+
+    ``showdown_equity`` and ``ev`` are the 455-class table row's stored values, so the verdict card
+    and the table can never disagree. ``call_range_percent`` is derived from ``fold_equity`` (null
+    under the random model).
 
     break_even_fold_equity: exact fold frequency where EV = 0 (random model only; under RANGE,
         EV is not monotonic in fold equity, so no single break-even point exists).
     profitable_from_fold_equity: first 1%-grid fold frequency from which raising stays +EV.
         The last zone always ends at 1.0, because EV there equals the pot.
     """
+    record = solution.record
+    is_random = equities.opponent_model is OpponentModel.RANDOM
     return {
-        "hand": str(result.hand),
-        "score_name": str(result.hand.score),
-        "category": result.stats.category.name,
-        "category_name": result.stats.category.display_name,
-        "canonical_id": result.canonical.canonical_id,
-        "showdown_equity": result.ev.win_rate_when_called,
-        "equity_vs_random": result.stats.equity,
-        "random_hand_equity": result.stats.equity,
-        "call_range_percent": result.call_range_percent,
-        "sensitivity": result.sensitivity,
-        "ev": result.ev.ev,
-        "break_even_fold_equity": result.ev.break_even_fold_equity if model is OpponentModel.RANDOM else None,
-        "profitable_from_fold_equity": result.zones[-1][0],
-        "profitable_fold_zones": [[start, end] for start, end in result.zones],
+        "hand": str(solution.hand),
+        "score_name": str(solution.hand.score),
+        "category": stats.category.name,
+        "category_name": stats.category.display_name,
+        "canonical_id": record.canonical_id,
+        "showdown_equity": record.equity,
+        "equity_vs_random": stats.equity,
+        "random_hand_equity": stats.equity,
+        "call_range_percent": equities.calling_percentile,
+        "sensitivity": _sensitivity_payload(sensitivity) if sensitivity is not None else None,
+        "ev": record.ev,
+        "break_even_fold_equity": (
+            calculate_break_even_fold_equity(params.pot, params.bet_size, record.equity)
+            if is_random
+            else None
+        ),
+        "profitable_from_fold_equity": solution.zones[-1][0],
+        "profitable_fold_zones": [[start, end] for start, end in solution.zones],
+        "is_profitable": record.is_raise_profitable,
+        "decision": _decision(record.is_raise_profitable),
+        "recommended_action": "BET" if record.is_raise_profitable else "NO BET",
+    }
+
 ```
 
 - `showdown_equity` is the `w` that went into the EV (it depends on the opponent model), while

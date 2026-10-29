@@ -41,10 +41,21 @@ class TestCallingRangeModel:
         assert all(row[-1] == OPPONENT_COMBINATIONS for row in model._prefix)
 
     def test_zero_fold_matches_exact_enumeration(self, model: CallingRangeModel, db: WinRateDB) -> None:
-        """With no folds the calling range is every hand, so equity must equal winrates.json."""
+        """With no folds the calling range is every hand, so equity must equal winrates.json exactly.
+
+        This is the oracle for the unified engine: the database's stored rates and the model agree
+        to the model's own 4-decimal precision, so no tolerance is needed.
+        """
         table = model.equity_table(0.0)
         for cid, stats in db.all_items().items():
-            assert table[cid] == pytest.approx(stats.equity, abs=1e-4), cid
+            assert table[cid] == round(stats.equity, 4), cid
+
+    def test_single_query_and_full_table_use_one_implementation(self, model: CallingRangeModel) -> None:
+        """equity(cid, f) and equity_table(f)[cid] must be the same number, for every class and fold rate."""
+        for fold_equity in (0.0, 0.35, 0.7, 1.0):
+            table = model.equity_table(fold_equity)
+            for cid, equity in table.items():
+                assert model.equity(cid, fold_equity) == equity, (cid, fold_equity)
 
     def test_equity_never_increases_with_fold_equity(self, model: CallingRangeModel) -> None:
         tables = [model.equity_table(i / 20) for i in range(21)]
