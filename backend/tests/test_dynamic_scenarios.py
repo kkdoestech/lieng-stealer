@@ -4,10 +4,10 @@ Verifies that the engine and API are completely dynamic and mathematically
 rigorous across 6 diverse game scenarios:
 1. Monster Hand Value Raise (Liêng Q-K-A)
 2. Junk Hand against Calling Station (Forced Fold with 0 points)
-3. Mathematical Pure Bluff (0 points flips to Raise under high fold equity)
+3. Mathematical Pure Bluff (0 points flips to a small bet under high fold equity)
 4. Range Coverage Sensitivity Sweep across fold equities
 5. API Schema, Endpoint Variations & Dynamic Response Verification
-6. Same Medium Hand under Both Opponent Models (random raises, calling range folds)
+6. Same Medium Hand under Both Opponent Models (random pays more, calling range less)
 """
 
 import sys
@@ -60,8 +60,10 @@ def test_scenario_1_monster_hand_value_raise(client):
     assert hand_eval is not None
 
     # Invariants:
-    # 1. Recommendation MUST be "RAISE"
-    assert hand_eval["decision"] == "RAISE"
+    # 1. The advice MUST shove the whole pot as a value hand
+    assert hand_eval["advice"]["action"] == "ALL_IN"
+    assert hand_eval["advice"]["kind"] == "VALUE"
+    assert hand_eval["advice"]["reason"] == "ALL_IN_VALUE"
     # 2. Showdown Equity MUST be > 99%
     assert hand_eval["showdown_equity"] > 0.99
     # 3. EV MUST be positive (> +100,000)
@@ -74,7 +76,7 @@ def test_scenario_1_monster_hand_value_raise(client):
     print(f"  Showdown Equity: {hand_eval['showdown_equity'] * 100:.2f}%")
     print(f"  Net EV: +{hand_eval['ev']:,.0f} VND")
     print(f"  Break-Even FE: {hand_eval['break_even_fold_equity'] * 100:.1f}%")
-    print(f"  Decision: {hand_eval['decision']} -> PASS")
+    print(f"  Advice: {hand_eval['advice']['action']} -> PASS")
 
 
 def test_scenario_2_junk_hand_calling_station(client):
@@ -95,8 +97,9 @@ def test_scenario_2_junk_hand_calling_station(client):
     assert hand_eval is not None
 
     # Invariants:
-    # 1. Recommendation MUST be "CHECK/FOLD"
-    assert "FOLD" in hand_eval["decision"]
+    # 1. The advice MUST be a check: at a 5% fold rate a bluff earns under the 5%-of-pot floor
+    assert hand_eval["advice"]["action"] == "CHECK"
+    assert hand_eval["advice"]["amount"] == 0.0
     # 2. Showdown Equity MUST be < 1% (0.24%)
     assert hand_eval["showdown_equity"] < 0.01
     # 3. EV MUST be negative (close to -42,000)
@@ -110,7 +113,7 @@ def test_scenario_2_junk_hand_calling_station(client):
     print(f"  Showdown Equity: {hand_eval['showdown_equity'] * 100:.2f}%")
     print(f"  Net EV: {hand_eval['ev']:,.0f} VND")
     print(f"  Break-Even FE: {hand_eval['break_even_fold_equity'] * 100:.2f}%")
-    print(f"  Decision: {hand_eval['decision']} -> PASS")
+    print(f"  Advice: {hand_eval['advice']['action']} -> PASS")
 
 
 def test_scenario_3_pure_bluff_flip(client):
@@ -131,9 +134,12 @@ def test_scenario_3_pure_bluff_flip(client):
     assert hand_eval is not None
 
     # Invariants:
-    # 1. Recommendation MUST flip to "RAISE" despite holding 0 points
-    assert hand_eval["decision"] == "RAISE"
-    # 2. EV MUST become positive (> +20,000) solely due to fold equity exceeding 33.3%
+    # 1. The advice MUST flip to a small bluff despite holding 0 points
+    assert hand_eval["advice"]["action"] == "SMALL_BET"
+    assert hand_eval["advice"]["kind"] == "BLUFF"
+    assert hand_eval["advice"]["reason"] == "SMALL_BLUFF"
+    assert hand_eval["advice"]["amount"] == 33000.0
+    # 2. EV MUST become positive solely due to fold equity exceeding 33.3%
     assert hand_eval["ev"] > 20000.0
     assert abs(hand_eval["ev"] - 25240.0) < 100.0
     assert hand_eval["is_profitable"] is True
@@ -142,7 +148,7 @@ def test_scenario_3_pure_bluff_flip(client):
     print(f"  Hand: {hand_eval['hand']} ({hand_eval['canonical_id']})")
     print(f"  Opponent Fold Equity: 50.0% (Threshold: {data['summary']['pure_bluff_break_even_fold_equity'] * 100:.1f}%)")
     print(f"  Net EV: +{hand_eval['ev']:,.0f} VND")
-    print(f"  Decision: {hand_eval['decision']} (Flipped from Fold to Raise) -> PASS")
+    print(f"  Advice: {hand_eval['advice']['action']} {hand_eval['advice']['amount']:,.0f} VND -> PASS")
 
 
 def test_scenario_4_range_coverage_sensitivity(solver):
@@ -248,17 +254,30 @@ def test_scenario_6_same_hand_both_models(client):
     vs_range = client.post("/api/solve", json={**base, "opponent_model": "range"}).get_json()["hand_evaluation"]
 
     # Invariants:
-    # 1. Against a random caller, 36% equity makes the pot-sized bet profitable
-    assert vs_random["decision"] == "RAISE"
+    # 1. Against a random caller, 36% equity makes a small bluff worth +52,393
+    assert vs_random["advice"]["action"] == "SMALL_BET"
+    assert vs_random["advice"]["kind"] == "BLUFF"
+    assert vs_random["advice"]["ev"] == pytest.approx(52393.18)
     assert vs_random["showdown_equity"] == pytest.approx(0.36, abs=0.00005)
-    # 2. An opponent who folds their weakest 35% calls only with hands that beat 3 points
-    assert vs_range["decision"] == "CHECK/FOLD"
+    # 2. An opponent who folds their weakest 35% calls only with hands that beat 3 points,
+    #    so the same small bluff is worth +14,715 and the bigger rungs lose money
+    assert vs_range["advice"]["action"] == "SMALL_BET"
+    assert vs_range["advice"]["ev"] == 14715.32
+    assert [rung["blocked_by"] for rung in vs_range["advice"]["ladder"]] == [
+        None, "EV_BELOW_FLOOR", "EV_BELOW_FLOOR",
+    ]
     assert vs_range["showdown_equity"] < 0.02
     # 3. Both answers describe the same hand; only the opponent model differs
     assert vs_random["canonical_id"] == vs_range["canonical_id"] == "K-Q-3"
 
     print("\n[Scenario 6: Same Hand, Both Opponent Models]")
     print(f"  Hand: {vs_random['hand']} ({vs_random['canonical_id']})")
-    print(f"  Random caller:  equity {vs_random['showdown_equity'] * 100:.2f}%, EV {vs_random['ev']:+,.0f} VND -> {vs_random['decision']}")
-    print(f"  Calling range:  equity {vs_range['showdown_equity'] * 100:.2f}%, EV {vs_range['ev']:+,.0f} VND -> {vs_range['decision']}")
-    print("  Decision flips with the opponent model -> PASS")
+    print(
+        f"  Random caller:  equity {vs_random['showdown_equity'] * 100:.2f}%, "
+        f"EV {vs_random['ev']:+,.0f} VND -> {vs_random['advice']['action']} at {vs_random['advice']['amount']:,.0f}"
+    )
+    print(
+        f"  Calling range:  equity {vs_range['showdown_equity'] * 100:.2f}%, "
+        f"EV {vs_range['ev']:+,.0f} VND -> {vs_range['advice']['action']} at {vs_range['advice']['amount']:,.0f}"
+    )
+    print("  The ladder's priced rungs follow the opponent model -> PASS")

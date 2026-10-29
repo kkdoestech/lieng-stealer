@@ -14,15 +14,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Final
 
+from src.advice import FOLD_EQUITY_STEP, fold_grid
 from src.calling_range import CallingRangeModel, OpponentModel
 from src.ev import evaluate_action
 from src.exceptions import ModelError
 from src.range_finder import OpponentEquities
-
-# How far the stress grid reaches to either side of the user's fold frequency.
-FOLD_EQUITY_STEP: Final[float] = 0.10
 
 
 class Verdict(StrEnum):
@@ -53,11 +50,6 @@ class Sensitivity:
     scenarios: tuple[Scenario, ...]
 
 
-def _grid_around(center: float, step: float, *, low: float, high: float) -> tuple[float, ...]:
-    """Three sorted, de-duplicated values around ``center``, clamped to [low, high]."""
-    return tuple(sorted({round(max(low, center - step), 10), round(center, 10), round(min(high, center + step), 10)}))
-
-
 def stress_test(
     equities: OpponentEquities,
     calling_model: CallingRangeModel | None,
@@ -86,7 +78,7 @@ def stress_test(
     if equities.opponent_model is OpponentModel.RANGE and calling_model is None:
         raise ModelError("OpponentModel.RANGE requires a CallingRangeModel.")
 
-    fold_rates = _grid_around(equities.fold_equity, fold_step, low=0.0, high=1.0)
+    fold_rates = fold_grid(equities.fold_equity, fold_step)
     scenarios: list[Scenario] = []
     for fold_equity in fold_rates:
         if equities.opponent_model is OpponentModel.RANGE:

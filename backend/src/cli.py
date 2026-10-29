@@ -16,6 +16,7 @@ from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from src.advice import DEFAULT_THRESHOLDS, Action, AdviceThresholds, Kind, Reason, Recommendation, Rung
 from src.calling_range import CallingRangeModel, OpponentModel
 from src.db import WinRateDB
 from src.ev import (
@@ -154,49 +155,151 @@ def render_solver_overview(
         print("-----------------------\n")
 
 
+_ACTION_LABELS: dict[Action, str] = {
+    Action.CHECK: "CHECK",
+    Action.SMALL_BET: "SMALL BET",
+    Action.LARGE_BET: "LARGE BET",
+    Action.ALL_IN: "ALL IN",
+}
+
+_KIND_COLORS: dict[Kind, str] = {
+    Kind.VALUE: "green",
+    Kind.THIN_VALUE: "yellow",
+    Kind.BLUFF: "magenta",
+    Kind.NONE: "bright_black",
+}
+
+# One sentence per reason code, filled from the advice itself so the numbers can never drift.
+_WHY_TEXT: dict[Reason, str] = {
+    Reason.CHECK_NO_EDGE: "Check: every size loses money at your fold assumption (best case {edge}% of pot).",
+    Reason.CHECK_EDGE_TOO_SMALL: "Check: betting earns only {edge}% of the pot, under the {floor}% we need.",
+    Reason.CHECK_ASSUMPTION_FRAGILE: (
+        "Check: betting looks +EV ({edge}% of pot) at your fold assumption, "
+        "but the worst cell earns {worst}% of the pot."
+    ),
+    Reason.SMALL_BLUFF: (
+        "Small bluff: EV is +{ev} but the win rate is low ({equity}%), "
+        "so risk the least that still buys the fold."
+    ),
+    Reason.SMALL_THIN: "Small bet, thin value: nearly a coin flip when called ({equity}%), so keep the pot small.",
+    Reason.SMALL_VALUE: (
+        "Small bet with a strong hand ({equity}% when called): a bigger bet stops paying "
+        "if the caller is tighter than you assumed."
+    ),
+    Reason.LARGE_THIN: "Large bet, thin value: only a slight favourite when called ({equity}%).",
+    Reason.LARGE_VALUE: "Large bet: ahead when called ({equity}%), but not enough to risk everything.",
+    Reason.ALL_IN_VALUE: (
+        "All in: you win about {equity}% at showdown, so +{ev} is worth risking the pot "
+        "even if they fold {step}% less often than you assumed."
+    ),
+}
+
+
+def _advice_color(advice: Recommendation) -> str:
+    """Colour encodes the kind of bet, and a check is always neutral."""
+    if advice.action is Action.CHECK:
+        return _KIND_COLORS[Kind.NONE]
+    return _KIND_COLORS[advice.kind]
+
+
+def _why_line(advice: Recommendation, thresholds: AdviceThresholds) -> str:
+    """The one sentence that explains the recommendation, filled from its own numbers."""
+    # A check's own ev_ratio is zero, so its reasons quote the best rung the ladder priced.
+    edge = advice.ev_ratio if advice.action is not Action.CHECK else max(rung.ev_ratio for rung in advice.ladder)
+    return _WHY_TEXT[advice.reason].format(
+        edge=f"{edge * 100:.2f}",
+        worst=f"{advice.ladder[0].worst_ev_ratio * 100:.2f}",
+        equity=f"{advice.equity_when_called * 100:.2f}",
+        ev=format_currency(advice.ev),
+        floor=f"{thresholds.min_edge_ratio * 100:.0f}",
+        step=f"{thresholds.fold_step * 100:.0f}",
+    )
+
+
+def _rung_marker(rung: Rung) -> str:
+    """A tick when the rung clears the EV floor, a cross when it is blocked."""
+    return "✓" if rung.eligible else "✗"
+
+
+def _rung_suffix(rung: Rung, advice: Recommendation) -> str:
+    """Name the blocker, or say this is the rung the policy chose."""
+    if rung.action is advice.action:
+        return "  <- recommended"
+    return "" if rung.blocked_by is None else f"  blocked: {rung.blocked_by.value}"
+
+
+def _rung_marker_color(rung: Rung) -> str:
+    """Green when the rung clears the floor, red when it does not."""
+    return "green" if rung.eligible else "red"
+
+
 def render_single_hand_decision(
     solution: HandSolution,
     equities: OpponentEquities,
     pot: float,
     bet_size: float,
+    thresholds: AdviceThresholds = DEFAULT_THRESHOLDS,
 ) -> None:
     """Render the recommendation for one hand, straight from its 455-class table row.
 
-    With a strength-ordered opponent EV is not monotonic in fold equity, so no single break-even
-    point exists; otherwise the exact closed form is shown.
+    The row carries the whole recommendation, so this function only formats: the action, the reason
+    as one sentence, and the three rungs with a marker saying which cleared and why the others did
+    not. ``Expected Value`` stays the EV at the caller's own ``--bet``.
     """
     hand = solution.hand
     record = solution.record
-    canonical_id = record.canonical_id
-    equity = record.equity
-    ev = record.ev
+    advice = record.advice
+    action_color = _advice_color(advice)
+    action_text = f"{_ACTION_LABELS[advice.action]} ({format_currency(advice.amount)}) — {advice.kind.value}"
+    why_text = _why_line(advice, thresholds)
+    equity_text = (
+        f"{advice.equity_when_called * 100:.2f}%"
+        if advice.win_rate_defined
+        else "n/a (nobody calls at this fold rate)"
+    )
     break_even_text = (
-        f"{calculate_break_even_fold_equity(pot, bet_size, equity) * 100:.2f}%"
+        f"{calculate_break_even_fold_equity(pot, bet_size, advice.equity_when_called) * 100:.2f}%"
         if equities.opponent_model is OpponentModel.RANDOM
         else "n/a (range model)"
     )
 
-    status_color = "green" if record.is_raise_profitable else "red"
-    action_text = "BET +EV" if record.is_raise_profitable else "NO BET (+EV NOT ESTABLISHED)"
-
     if HAS_RICH:
+        ladder_rows = "\n".join(
+            f"  [{_rung_marker_color(rung)}]{_rung_marker(rung)}[/] "
+            f"{_ACTION_LABELS[rung.action]:<9} {format_currency(rung.amount):>10}  "
+            f"EV {'+' if rung.ev > 0 else ''}{format_currency(rung.ev):>12}  "
+            f"worst {rung.worst_ev_ratio * 100:+.2f}% of pot{_rung_suffix(rung, advice)}"
+            for rung in advice.ladder
+        )
         content = (
             f"[bold]Hand Evaluated:[/] {hand} ([italic]{hand.score}[/])\n"
-            f"[bold]Canonical Class:[/] {canonical_id} ([cyan]{record.category.display_name}[/])\n"
-            f"[bold]Showdown Equity:[/] {equity * 100:.2f}%\n"
-            f"[bold]Expected Value (EV):[/] [{status_color}]{'+' if ev > 0 else ''}{format_currency(ev)}[/]\n"
+            f"[bold]Canonical Class:[/] {record.canonical_id} ([cyan]{record.category.display_name}[/])\n"
+            f"[bold]Showdown Equity:[/] {equity_text}\n"
+            f"[bold]Expected Value (EV) at {format_currency(bet_size)}:[/] "
+            f"{'+' if record.ev > 0 else ''}{format_currency(record.ev)}\n"
             f"[bold]Break-Even Fold Equity:[/] {break_even_text}\n\n"
-            f"[bold {status_color} reverse] >>> ACTION: {action_text} <<< [/]"
+            f"[bold {action_color} reverse] >>> ACTION: {action_text} <<< [/]\n"
+            f"[bold]Why:[/] {why_text}\n"
+            f"[bold]Ladder ({advice.reason.value}):[/]\n{ladder_rows}"
         )
-        _console().print(Panel(content, title="[bold magenta]HAND EVALUATION & ACTION[/]", border_style=status_color))
+        _console().print(Panel(content, title="[bold magenta]HAND EVALUATION & ACTION[/]", border_style=action_color))
     else:
         print("\n================ HAND EVALUATION ================")
         print(f" Hand:               {hand} ({hand.score})")
-        print(f" Canonical Class:    {canonical_id} ({record.category.display_name})")
-        print(f" Showdown Equity:    {equity * 100:.2f}%")
-        print(f" Expected Value:     {'+' if ev > 0 else ''}{format_currency(ev)}")
+        print(f" Canonical Class:    {record.canonical_id} ({record.category.display_name})")
+        print(f" Showdown Equity:    {equity_text}")
+        print(f" Expected Value:     {'+' if record.ev > 0 else ''}{format_currency(record.ev)}")
         print(f" Break-Even FE:      {break_even_text}")
         print(f" >>> ACTION: {action_text} <<<")
+        print(f" Why: {why_text}")
+        print(" Ladder:")
+        for rung in advice.ladder:
+            print(
+                f"  {_rung_marker(rung)} {_ACTION_LABELS[rung.action]:<9} "
+                f"{format_currency(rung.amount):>10}  EV {'+' if rung.ev > 0 else ''}"
+                f"{format_currency(rung.ev):>12}  worst {rung.worst_ev_ratio * 100:+.2f}% of pot"
+                f"{_rung_suffix(rung, advice)}"
+            )
         print("=================================================\n")
 
 
