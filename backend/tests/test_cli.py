@@ -1,14 +1,13 @@
 """Unit tests for the command-line interface (src/cli.py).
 
 Verifies:
-- The default opponent model stays random (backward compatible)
-- --opponent-model range re-prices the ladder of a medium hand
-- The report shows the advice action, its kind, the why line, and the three rungs
+- The default opponent model is range (folds weakest hands first)
+- --opponent-model random re-prices the ladder with the uniform model
+- The report shows the advice action, its kind, the why line, the active assumption, and the three rungs
 - Invalid input exits with status 2 and a readable message instead of a traceback,
   before any part of the report is printed
 - A missing database exits with status 1 and its own message
-- Interactive mode: exit 2 after bad input, clean exit on end of input,
-  --opponent-model as the default answer
+- Interactive mode: exit 2 after bad input, clean exit on end of input, range as the default answer
 """
 
 import pytest
@@ -27,30 +26,31 @@ def plain(monkeypatch):
     monkeypatch.setattr(cli, "HAS_RICH", False)
 
 
-def test_default_model_is_random(capsys):
+def test_default_model_is_range(plain, capsys):
     main(MEDIUM_HAND)
     output = capsys.readouterr().out
     assert ">>> ACTION: SMALL BET (33,000) — BLUFF <<<" in output
-    assert "Why: Small bluff: EV is +52,393.18" in output
+    assert "folds their weakest 35% first, calls with the best 65% (range)" in output
+    assert "Why: Small bluff: EV is +14,715.32" in output
 
 
-def test_range_model_reprices_the_ladder(plain, capsys):
-    """Both models say 'small bluff', but the calling range kills the bigger rungs."""
-    main(MEDIUM_HAND + ["--opponent-model", "range"])
+def test_explicit_uniform_model_reprices_the_ladder(plain, capsys):
+    """The uniform model ignores hand strength, so the same hand earns much more."""
+    main(MEDIUM_HAND + ["--opponent-model", "random"])
     output = capsys.readouterr().out
     assert ">>> ACTION: SMALL BET (33,000) — BLUFF <<<" in output
-    assert "Why: Small bluff: EV is +14,715.32 but the win rate is low (1.08%)" in output
-    assert "EV      -11,995  worst -12.00% of pot  blocked: EV_BELOW_FLOOR" in output
-    assert "EV      -27,894  worst -27.89% of pot  blocked: EV_BELOW_FLOOR" in output
+    assert "folds 35% regardless of hand strength (uniform)" in output
+    assert "Why: Small bluff: EV is +52,393.18" in output
+    assert "blocked: BLUFF_TOO_SMALL_ONLY" in output
 
 
 def test_the_report_shows_the_whole_ladder_with_markers(plain, capsys):
     main(MEDIUM_HAND)
     output = capsys.readouterr().out
     assert "Ladder:" in output
-    assert "  ✓ SMALL BET     33,000  EV +   52,393.18  worst +45.07% of pot  <- recommended" in output
-    assert "  ✗ LARGE BET     75,000  EV +   44,748.76  worst +36.25% of pot  blocked: BLUFF_TOO_SMALL_ONLY" in output
-    assert "  ✗ ALL IN       100,000  EV +   40,198.52  worst +31.00% of pot  blocked: BLUFF_TOO_SMALL_ONLY" in output
+    assert "  ✓ SMALL BET     33,000  EV +   14,715.32  worst +14.72% of pot  <- recommended" in output
+    assert "  ✗ LARGE BET     75,000  EV      -11,995  worst -12.00% of pot  blocked: EV_BELOW_FLOOR" in output
+    assert "  ✗ ALL IN       100,000  EV      -27,894  worst -27.89% of pot  blocked: EV_BELOW_FLOOR" in output
 
 
 def test_a_monster_shoves_and_every_rung_clears(plain, capsys):
@@ -62,7 +62,8 @@ def test_a_monster_shoves_and_every_rung_clears(plain, capsys):
 
 
 def test_an_edge_under_the_floor_checks_and_quotes_the_best_rung(plain, capsys):
-    main(["--hand", "As Kh 10d", "--pot", "100000", "--bet", "50000", "--fold-equity", "0.05"])
+    main(["--hand", "As Kh 10d", "--pot", "100000", "--bet", "50000", "--fold-equity", "0.05",
+          "--opponent-model", "random"])
     output = capsys.readouterr().out
     assert ">>> ACTION: CHECK (0) — BLUFF <<<" in output
     assert "Why: Check: betting earns only 2.36% of the pot, under the 5% we need." in output
@@ -72,8 +73,8 @@ def test_every_size_losing_checks_and_shows_each_rung_refused(plain, capsys):
     main(["--hand", "2s 3h 5d", "--pot", "100000", "--bet", "50000", "--fold-equity", "0.05"])
     output = capsys.readouterr().out
     assert ">>> ACTION: CHECK (0) — BLUFF <<<" in output
-    assert "Why: Check: every size loses money at your fold assumption (best case -25.98% of pot)." in output
-    assert "  ✗ SMALL BET     33,000  EV   -25,977.66  worst -32.61% of pot  blocked: EV_BELOW_FLOOR" in output
+    assert "Why: Check: every size loses money at your fold assumption (best case -26.35% of pot)." in output
+    assert "  ✗ SMALL BET     33,000  EV      -26,350  worst -32.60% of pot  blocked: EV_BELOW_FLOOR" in output
 
 
 @pytest.mark.parametrize("argv", [["--hand", "Xx Kh Qd"], ["--pot", "-5"]])
@@ -90,10 +91,12 @@ def _answer_prompts(monkeypatch, answers):
     monkeypatch.setattr("builtins.input", lambda _prompt: next(replies))
 
 
-def test_interactive_mode_asks_for_opponent_model(monkeypatch, capsys):
-    _answer_prompts(monkeypatch, ["100000", "100000", "0.35", "range", "Ks Qh 3d"])
+def test_interactive_mode_defaults_to_range(monkeypatch, capsys, plain):
+    _answer_prompts(monkeypatch, ["100000", "100000", "0.35", "", "Ks Qh 3d"])
     main([])
-    assert ">>> ACTION: SMALL BET (33,000) — BLUFF <<<" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert ">>> ACTION: SMALL BET (33,000) — BLUFF <<<" in output
+    assert "folds their weakest 35% first, calls with the best 65% (range)" in output
 
 
 def test_interactive_mode_reports_invalid_hand(monkeypatch, capsys):
@@ -142,7 +145,7 @@ def test_plain_text_report_shows_the_sign_of_a_positive_ev(monkeypatch, capsys):
     monkeypatch.setattr(cli, "HAS_RICH", False)
     main(["--hand", "As Kh Qd"])
     output = capsys.readouterr().out
-    assert "Expected Value:     +132,101.34" in output
+    assert "Expected Value:     +131,876" in output
     assert ">>> ACTION: ALL IN (100,000) — VALUE <<<" in output
 
 

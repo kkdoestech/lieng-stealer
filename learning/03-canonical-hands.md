@@ -150,7 +150,7 @@ order: `A-2-3` and `Q-K-A`. A lookup must use the exact stored spelling:
 
 You can see the two spellings side by side in one API response. The web page has a preset for
 `Js Qh Kd` ([App.jsx:20](../frontend/src/App.jsx#L20)) labelled "Liêng J-Q-K"
-([i18n.js:25](../frontend/src/i18n.js#L25)); for that hand, `/api/solve` returns
+([i18n.js:29](../frontend/src/i18n.js#L29)); for that hand, `/api/solve` returns
 `"score_name": "Liêng J-Q-K"` (from `evaluator.py`'s names) and `"canonical_id": "K-Q-J"` (from
 here).
 
@@ -249,7 +249,7 @@ multiplicity into one frozen `CanonicalHand`. Both the id and the `ranks` tuple 
 `_canonical_ranks`, so they can't disagree: `A-2-3` has ranks `(ACE, TWO, THREE)`, while `K-Q-J`
 has `(KING, QUEEN, JACK)`. Until October 2026 the A-2-3/Q-K-A decision was written out twice, once
 in each function (weak spot 2). The API and CLI call this on the player's hand
-([app.py:313](../backend/app.py#L313), [cli.py:162](../backend/src/cli.py#L162)), and the API then
+([app.py:313](../backend/app.py#L313), [cli.py:164](../backend/src/cli.py#L164)), and the API then
 looks the stats up by the id it returns ([app.py:314](../backend/app.py#L314)), so the id is
 computed once per request. (Before the API refactor it was computed twice: once by
 `db.get_by_cards`, once here.)

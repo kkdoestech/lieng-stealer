@@ -49,16 +49,16 @@ Every hop below links to the line where it happens. Open them side by side as yo
 
 | # | Location | What happens |
 |---|----------|--------------|
-| 1 | [App.jsx:373-380](../frontend/src/App.jsx#L373-L380) | The button calls `startSolve`. |
-| 2 | [App.jsx:156-209](../frontend/src/App.jsx#L156-L209) | `startSolve` and the mount effect start a run; `runSolve` builds the body. |
-| 3 | [App.jsx:48-91](../frontend/src/App.jsx#L48-L91) | `fetchSolveAndAnalysis`: both requests, outside the component. |
+| 1 | [App.jsx:382-389](../frontend/src/App.jsx#L382-L389) | The button calls `startSolve`. |
+| 2 | [App.jsx:164-217](../frontend/src/App.jsx#L164-L217) | `startSolve` and the mount effect start a run; `runSolve` builds the body. |
+| 3 | [App.jsx:48-99](../frontend/src/App.jsx#L48-L99) | `fetchSolveAndAnalysis`: both requests, outside the component. |
 | 4 | [vite.config.js:7-14](../frontend/vite.config.js#L7-L14) | The `/api` proxy that forwards the request to Flask. |
 | 5 | [app.py:424-442](../backend/app.py#L424-L442) | `solve_api`: the whole server side in a dozen lines. |
 | 6 | [app.py:226-296](../backend/app.py#L226-L296) | The body, the numbers, the model and the hand are parsed. |
 | 7 | [app.py:302-347](../backend/app.py#L302-L347) | Your hand: `_evaluate_hand`, then `_hand_payload`. |
 | 8 | [app.py:350-396](../backend/app.py#L350-L396) | The whole range: `_solve_range`, then `_top_hands_payload`. |
-| 9 | [App.jsx:166-184](../frontend/src/App.jsx#L166-L184), [:211-221](../frontend/src/App.jsx#L211-L221) and [:408-473](../frontend/src/App.jsx#L408-L473) | The response becomes React state, derived values, then numbers on screen. |
-| 10 | [App.jsx:76-90](../frontend/src/App.jsx#L76-L90) | The follow-up `POST /api/analyze`. |
+| 9 | [App.jsx:174-192](../frontend/src/App.jsx#L174-L192), [:219-229](../frontend/src/App.jsx#L219-L229) and [:417-482](../frontend/src/App.jsx#L417-L482) | The response becomes React state, derived values, then numbers on screen. |
+| 10 | [App.jsx:76-98](../frontend/src/App.jsx#L76-L98) | The follow-up `POST /api/analyze`. |
 
 ---
 
@@ -66,16 +66,16 @@ Every hop below links to the line where it happens. Open them side by side as yo
 
 ### Hop 1. The click
 
-The button at [App.jsx:373-380](../frontend/src/App.jsx#L373-L380) has `onClick={startSolve}`
+The button at [App.jsx:382-389](../frontend/src/App.jsx#L382-L389) has `onClick={startSolve}`
 and is disabled while `isLoading` is true. `startSolve`
-([App.jsx:188-196](../frontend/src/App.jsx#L188-L196)) first aborts the run that may still be in
+([App.jsx:196-204](../frontend/src/App.jsx#L196-L204)) first aborts the run that may still be in
 flight (`currentRun.current?.abort()`), creates a new `AbortController`, remembers it in a ref,
 switches on both loading flags, and calls `runSolve`. So at most one run can ever change the
 screen: the newest.
 
 You do not even need to click the first time: the mount effect at
-[App.jsx:204-209](../frontend/src/App.jsx#L204-L209) starts a run through `startFirstRun`
-([App.jsx:199-202](../frontend/src/App.jsx#L199-L202)), a `useEffectEvent` that reads the current
+[App.jsx:212-217](../frontend/src/App.jsx#L212-L217) starts a run through `startFirstRun`
+([App.jsx:207-210](../frontend/src/App.jsx#L207-L210)), a `useEffectEvent` that reads the current
 inputs without making them dependencies of the effect. In development, React's StrictMode mounts
 the component twice; the effect's cleanup aborts the first run, so only the second one gets to
 update the page or send an analysis. `App.test.jsx` pins that ("StrictMode's double mount aborts
@@ -83,7 +83,7 @@ the duplicate first request").
 
 ### Hop 2. Building the request
 
-📍 [`frontend/src/App.jsx:207-238`](../frontend/src/App.jsx#L207-L238)
+📍 [`frontend/src/App.jsx:215-246`](../frontend/src/App.jsx#L215-L246)
 ```jsx
   // Start one run with the current inputs; every state change happens in a callback, after the
   // matching response has arrived. The API takes one opponent assumption: fold_equity. The
@@ -120,7 +120,7 @@ the duplicate first request").
 ```
 
 The five values come from React state, whose defaults are at
-[App.jsx:129-133](../frontend/src/App.jsx#L129-L133). The body on the wire is:
+[App.jsx:137-141](../frontend/src/App.jsx#L137-L141). The body on the wire is:
 
 ```json
 {"pot": 100000, "bet_size": 50000, "fold_equity": 0.35, "hand": "As Kh Qd", "opponent_model": "range"}
@@ -130,7 +130,7 @@ The five values come from React state, whose defaults are at
 `onAnalysis`) to `fetchSolveAndAnalysis`, a plain function defined *outside* the component. It
 holds no state; it only reports what happened:
 
-📍 [`frontend/src/App.jsx:99-103`](../frontend/src/App.jsx#L99-L103)
+📍 [`frontend/src/App.jsx:107-111`](../frontend/src/App.jsx#L107-L111)
 ```jsx
 // One solve + analysis round trip. It holds no state: it reports each step through the callbacks
 // and stops calling them as soon as `signal` is aborted (a newer run started, or the page unmounted).
@@ -176,7 +176,7 @@ def solve_api() -> Response:
     """Rank all 455 hands and, if ``hand`` is given, evaluate that hand too.
 
     JSON body (all optional): pot (> 0), bet_size (> 0), fold_equity in [0, 1],
-    opponent_model ('random' default, or 'range'), hand (e.g. 'As Kh Qd'). A blank or missing
+    opponent_model ('range' default, or 'random'), hand (e.g. 'As Kh Qd'). A blank or missing
     hand is legal: the answer is then the range itself.
     """
     services = _services()
@@ -381,7 +381,7 @@ bet the request asked about.
 - The summary also carries `final_pot()` (200,000), the pure-bluff break-even `50,000 / 150,000` =
   **0.3333** ([app.py:495-496](../backend/app.py#L495-L496), lesson 07), the highest-EV and
   threshold hands, and `category_breakdown` from
-  [range_finder.py:323-334](../backend/src/range_finder.py#L323-L334) (lesson 08).
+  [range_finder.py:307-326](../backend/src/range_finder.py#L307-L326) (lesson 08).
 
 Then `_top_hands_payload` ([app.py:544-558](../backend/app.py#L544-L558)) keeps the first 30
 records, each with `showdown_equity` and the advice's `action`, `kind` and `amount`, and `jsonify`
@@ -446,7 +446,7 @@ Flask. The 54 ms `CallingRangeModel` build never shows up: it happened once, in 
 
 ### Hop 8. Back in the browser: state
 
-📍 [`frontend/src/App.jsx:105-125`](../frontend/src/App.jsx#L105-L125)
+📍 [`frontend/src/App.jsx:113-133`](../frontend/src/App.jsx#L113-L133)
 ```jsx
   let solveJson;
   try {
@@ -491,7 +491,7 @@ development (the Vite proxy answers `502` with an empty body), or when the page 
 other server that answers `404`. It used to look at the status too, and a code-less 404 came out
 as `Check your inputs: HTTP 404`.
 
-The callbacks live in `runSolve` ([App.jsx:166-184](../frontend/src/App.jsx#L166-L184)).
+The callbacks live in `runSolve` ([App.jsx:174-192](../frontend/src/App.jsx#L174-L192)).
 `onSolveFailed` clears the old verdict, tables and analysis, since they belong to other inputs.
 `onSolved` stores the whole JSON in `solveData` and sets `isLoading` to false, which re-enables the
 button **before** the analysis starts.
@@ -499,7 +499,7 @@ button **before** the analysis starts.
 `setSolveData` makes React run `App()` again. On that render the derived values pick the response
 apart:
 
-📍 [`frontend/src/App.jsx:263-269`](../frontend/src/App.jsx#L263-L269)
+📍 [`frontend/src/App.jsx:271-277`](../frontend/src/App.jsx#L271-L277)
 ```jsx
   const handEval = solveData?.hand_evaluation;
   const summary = solveData?.summary;
@@ -535,7 +535,7 @@ locale turns 131,876 into 131.876.
 
 ### Hop 10. The follow-up: `POST /api/analyze`
 
-📍 [`frontend/src/App.jsx:127-141`](../frontend/src/App.jsx#L127-L141)
+📍 [`frontend/src/App.jsx:135-149`](../frontend/src/App.jsx#L135-L149)
 ```jsx
   // The server recomputes everything for the analysis from the same inputs.
   let advice;
@@ -569,9 +569,9 @@ for this click is:
 Back in the browser, `advice` becomes `{text, model}`, or a notice key: `aiRateLimited` for a 429,
 `aiUnreachable` for any other error status (such as the 502 of a failed OpenRouter call),
 `aiTransportFault` if the request itself threw. `onAnalysis`
-([App.jsx:180-183](../frontend/src/App.jsx#L180-L183)) stores it and clears `isAiLoading`. The
-notes drawer shows the text at [App.jsx:582](../frontend/src/App.jsx#L582) and the model the API
-reported at [App.jsx:575](../frontend/src/App.jsx#L575), only when you open the drawer.
+([App.jsx:188-191](../frontend/src/App.jsx#L188-L191)) stores it and clears `isAiLoading`. The
+notes drawer shows the text at [App.jsx:593](../frontend/src/App.jsx#L593) and the model the API
+reported at [App.jsx:586](../frontend/src/App.jsx#L586), only when you open the drawer.
 
 ---
 
@@ -647,10 +647,10 @@ parts of the page that changed. Nothing in this file touches the DOM directly.
    `hand_evaluation` and `range_coverage_percent` back, and the server believed them. Now the page
    sends only the inputs and the server recomputes. Pinned on both sides:
    `test_analyze_recomputes_instead_of_trusting_the_client`
-   ([test_api.py:273-283](../backend/tests/test_api.py#L273-L283)) and the "analysis requests send
+   ([test_api.py:275-285](../backend/tests/test_api.py#L275-L285)) and the "analysis requests send
    only the inputs" test in [App.test.jsx](../frontend/src/App.test.jsx) (exercise 5).
 3. **Unused payload.** Still open. 30 `top_hands` are sent and 10 shown
-   ([App.jsx:540](../frontend/src/App.jsx#L540)); 15 summary and evaluation keys, and every
+   ([App.jsx:550](../frontend/src/App.jsx#L550)); 15 summary and evaluation keys, and every
    `top_hands[].is_profitable`, are never read by the page. *Fix:* a `limit` parameter, and document
    which keys are for other clients.
 4. ✅ **Fixed: stacked error prefixes.** A bad hand used to read `Invalid input: Invalid hand:
@@ -661,12 +661,12 @@ parts of the page that changed. Nothing in this file touches the DOM directly.
    `test_invalid_hand_message_has_no_stacked_prefix` ([test_api.py:108-110](../backend/tests/test_api.py#L108-L110))
    and the "an invalid hand shows its message" test in `App.test.jsx`.
 5. ✅ **Fixed: two requests on page load in development.** StrictMode still mounts twice, but the
-   cleanup of the effect at [App.jsx:204-209](../frontend/src/App.jsx#L204-L209) aborts the first
+   cleanup of the effect at [App.jsx:212-217](../frontend/src/App.jsx#L212-L217) aborts the first
    run: its solve is cancelled and it never sends an analysis. Pinned by "StrictMode's double mount
    aborts the duplicate first request" in `App.test.jsx`. Production builds mount once.
 6. ✅ **Fixed: a misleading label.** The drawer used to say "OpenRouter · Llama 3.1 8B Instruct"
    even for the offline fallback. Now it shows the `model` string the API reported
-   ([App.jsx:575](../frontend/src/App.jsx#L575)). Pinned by "the notes show the model the API
+   ([App.jsx:586](../frontend/src/App.jsx#L586)). Pinned by "the notes show the model the API
    reports" in `App.test.jsx`.
 7. **Every solve also runs an analysis.** New, and open. The analysis request is sent after every
    solve, even when the notes drawer stays closed, and `/api/analyze` is rate-limited to 10 per
@@ -782,9 +782,9 @@ in `App.test.jsx`'s "shows the matching message" table.
 </details>
 
 **🟡 4. Remove the abort guards.** In the analysis half of `fetchSolveAndAnalysis`, delete
-`if (!signal.aborted)` in front of `onAnalysis(advice)` ([App.jsx:90](../frontend/src/App.jsx#L90))
+`if (!signal.aborted)` in front of `onAnalysis(advice)` ([App.jsx:98](../frontend/src/App.jsx#L98))
 and run `npm test`. Then also delete `if (signal.aborted) return;` at
-[App.jsx:80](../frontend/src/App.jsx#L80) and run it again. Predict both results.
+[App.jsx:88](../frontend/src/App.jsx#L88) and run it again. Predict both results.
 
 <details><summary>Solution</summary>
 

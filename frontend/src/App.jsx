@@ -77,6 +77,14 @@ function whyLine(t, advice, summary) {
   }
 }
 
+// The assumption the solver actually used, in the response's own words and numbers.
+function assumptionLine(t, summary) {
+  const foldPct = Math.round(summary.fold_equity * 100);
+  return summary.opponent_model === "range"
+    ? t.modelAssumptionRange(foldPct)
+    : t.modelAssumptionRandom(foldPct);
+}
+
 function loadSavedLang() {
   try {
     const saved = localStorage.getItem(LANG_STORAGE_KEY);
@@ -270,6 +278,7 @@ export default function App() {
   // The API's single opponent assumption is fold_equity; the calling range is derived from it, so
   // the second slider only displays the value that fold rate implies.
   const callingRangePercent = Math.round((1 - foldEquity) * 100);
+  const foldPercent = Math.round(foldEquity * 100);
 
   // Category Matrix Statistics (computed by the solver per category)
   const categoryMatrix = (summary?.category_breakdown || []).map((row) => ({
@@ -378,7 +387,7 @@ export default function App() {
                     aria-pressed={opponentModel === model}
                     onClick={() => setOpponentModel(model)}
                   >
-                    {model === "range" ? t.modelRange : t.modelRandom}
+                    {model === "range" ? t.modelRange(foldPercent) : t.modelRandom(foldPercent)}
                   </button>
                 ))}
               </div>
@@ -529,6 +538,7 @@ export default function App() {
               </div>
 
               <p className="verdict-why">{whyLine(t, advice, summary)}</p>
+              <p className="verdict-assumption">{assumptionLine(t, summary)}</p>
 
               <div className="ladder-strip">
                 {advice.ladder.map((rung) => (
@@ -570,6 +580,7 @@ export default function App() {
                 <span className="verdict-label">{t.recommendedAction}</span>
                 <h2 className="verdict-title">{t.noHandTitle}</h2>
                 <div className="verdict-meta">{t.noHandBody}</div>
+                {summary && <p className="verdict-assumption">{assumptionLine(t, summary)}</p>}
                 {actionCounts && (
                   <p className="verdict-why">
                     {t.actionCountsLine(

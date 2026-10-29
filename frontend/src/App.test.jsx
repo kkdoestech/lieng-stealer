@@ -336,6 +336,28 @@ describe("App", () => {
     expect(equityCard).not.toHaveTextContent("0.0%");
   });
 
+  test("the card states the opponent assumption with the fold rate", async () => {
+    mockFetch({ "/api/solve": reply(200, SOLVE_OK), "/api/analyze": reply(200, ANALYZE_OK) });
+    render(<App />);
+    await screen.findByRole("heading", { name: "All in" });
+    expect(
+      screen.getByText(
+        "Assumption: the opponent folds their weakest 35% of hands and calls with the best 65%."
+      )
+    ).toBeInTheDocument();
+  });
+
+  test("the model chips state the fold rate and follow the slider", async () => {
+    mockFetch({ "/api/solve": reply(200, SOLVE_OK), "/api/analyze": reply(200, ANALYZE_OK) });
+    render(<App />);
+    await screen.findByRole("heading", { name: "All in" });
+
+    expect(screen.getByRole("button", { name: "Folds weakest 35% first" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.change(screen.getByRole("slider", { name: "Opponent fold frequency" }), { target: { value: "0.2" } });
+    expect(screen.getByRole("button", { name: "Folds weakest 20% first" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Folds 20% regardless of hand" })).toBeInTheDocument();
+  });
+
   test("the solve body matches the shared contract with the backend", async () => {
     const calls = mockFetch({ "/api/solve": reply(200, SOLVE_OK), "/api/analyze": reply(200, ANALYZE_OK) });
     render(<App />);

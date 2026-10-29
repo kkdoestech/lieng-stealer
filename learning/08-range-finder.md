@@ -5,7 +5,7 @@
 > classes, and how each class leaves with a bet-size recommendation already attached.
 > **Files:** [`backend/src/range_finder.py`](../backend/src/range_finder.py),
 > [`backend/tests/test_range_finder.py`](../backend/tests/test_range_finder.py), and its callers
-> [`app.py:480-522`](../backend/app.py#L480-L522) and [`cli.py:347-385`](../backend/src/cli.py#L347-L385).
+> [`app.py:480-522`](../backend/app.py#L480-L522) and [`cli.py:347-385`](../backend/src/cli.py#L349-L387).
 > **Time:** ~50 min. **Before this:** [07 — Expected value](07-expected-value.md).
 
 ---
@@ -46,7 +46,7 @@ here it is *your* range.
 | 7 | [range_finder.py:234-268](../backend/src/range_finder.py#L234-L268) | `hand_solution`: the hand IS a row of that table. |
 | 8 | [range_finder.py:270-278](../backend/src/range_finder.py#L270-L278) | `_equity_scan`: the `equity_at` function the zone scan needs. |
 | 9 | [range_finder.py:291-311](../backend/src/range_finder.py#L291-L311) | `calculate_range_coverage`: combos, not classes. |
-| 10 | [range_finder.py:314-334](../backend/src/range_finder.py#L314-L334) | `CategorySummary` and `category_breakdown()`: per-category totals for the API and the CLI. |
+| 10 | [range_finder.py:307-326](../backend/src/range_finder.py#L307-L326) | `CategorySummary` and `category_breakdown()`: per-category totals for the API and the CLI. |
 | 11 | [advice.py](../backend/src/advice.py) | The policy that turns the three cells into one size (lesson 07, section 8). |
 | 12 | [sensitivity.py](../backend/src/sensitivity.py) | The fold-rate assumption stress grid behind `sensitivity`: vary the fold rate, report the range it implies. |
 | 13 | [app.py:480-522](../backend/app.py#L480-L522) | How the API summarises the records (`_solve`) and the four 3.0.0 summary fields. |
@@ -99,7 +99,7 @@ cannot change after it is built.
   `DatabaseNotLoadedError: RangeFinder needs a loaded WinRateDB; call db.load() first.`, and the
   database you passed is still unloaded afterwards. Loading is the caller's job: `create_app()`
   loads `DEFAULT_DB_PATH` ([app.py:135-136](../backend/app.py#L135-L136)), and the CLI builds
-  `WinRateDB(db_path)` ([cli.py:258](../backend/src/cli.py#L258)), whose constructor loads the
+  `WinRateDB(db_path)` ([cli.py:260](../backend/src/cli.py#L260)), whose constructor loads the
   file. (An older version loaded a relative default path into your object here; see weak spot 2.)
 - The calling-range model is optional: you only need it for `RANGE`.
 - **`_strength`** maps each ID to its `score_tuple` (lesson 02), for breaking ties in the sort. Building
@@ -425,7 +425,7 @@ Finally, `_top_hands_payload` ([app.py:544-558](../backend/app.py#L544-L558)) se
 the advice's `action`, `kind` and `amount`. A row carries those three instead of the 2.0.0
 `is_profitable` and `decision`, because a table of hands is only useful when it says what to do with
 each one. The CLI draws the same records as a heat map at
-[cli.py:306-334](../backend/src/cli.py#L306-L334), and lesson 09 walks through it.
+[cli.py:308-336](../backend/src/cli.py#L308-L336), and lesson 09 walks through it.
 
 ---
 

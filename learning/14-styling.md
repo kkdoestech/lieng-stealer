@@ -40,8 +40,8 @@ and shows which rules are now kept and which ones nothing checks.
 | 3 | [index.css:32-63](../frontend/src/index.css#L32-L63) | Resets and the `:focus-visible` ring. |
 | 4 | [App.css:63-108](../frontend/src/App.css#L63-L108) | The two-column grid and the 1024 / 480 breakpoints. |
 | 5 | [App.css:156-188](../frontend/src/App.css#L156-L188) | The stepper: how the browser's spin arrows are hidden. |
-| 6 | [App.css:426-466](../frontend/src/App.css#L426-L466) | Summary rows as a three-column grid, and the 640 breakpoint. |
-| 7 | [App.css:468-537](../frontend/src/App.css#L468-L537) | Tables: 1px lines, sideways scrolling, green and red text. |
+| 6 | [App.css:434-474](../frontend/src/App.css#L434-L474) | Summary rows as a three-column grid, and the 640 breakpoint. |
+| 7 | [App.css:476-545](../frontend/src/App.css#L476-L545) | Tables: 1px lines, sideways scrolling, green and red text. |
 | 8 | [DESIGN.md:92-95](../DESIGN.md#L92-L95) | How to check a UI change. |
 
 ---
@@ -195,7 +195,7 @@ results. The divider is not a separate element: it is the control panel's `borde
 `min-width: 0` rule is the subtle one. A grid item normally refuses to become narrower than its
 widest content, so a wide table would push the page past the screen. With `min-width: 0` the column
 can shrink, and the table scrolls inside its own `.table-wrapper` (`overflow-x: auto`,
-[App.css:471-473](../frontend/src/App.css#L471-L473)).
+[App.css:479-481](../frontend/src/App.css#L479-L481)).
 
 📍 [`frontend/src/App.css:88-102`](../frontend/src/App.css#L88-L102)
 ```css
@@ -219,7 +219,7 @@ can shrink, and the table scrolls inside its own `.table-wrapper` (`overflow-x: 
 At 1024px and below the grid becomes one column and the divider turns into a `border-bottom`. At
 480px and below the side padding drops from 24px to 16px ([App.css:104-108](../frontend/src/App.css#L104-L108)).
 The third breakpoint, 640px, lives next to the parts it changes: the verdict's EV moves to the left ([App.css:397-401](../frontend/src/App.css#L397-L401))
-and the summary rows fold into two columns ([App.css:458-466](../frontend/src/App.css#L458-L466)).
+and the summary rows fold into two columns ([App.css:466-474](../frontend/src/App.css#L466-L474)).
 Measured in headless Chromium (scrollbars hidden, so the full width is available):
 
 | Viewport | Grid columns | Divider | Side padding | Summary row columns | EV aligned |
@@ -321,10 +321,10 @@ inline styles, lesson 13) and a 2px marker.
 ### 7. Summary rows and tables
 
 The four summary figures used to be glowing "HUD cards". The container
-([App.css:429-431](../frontend/src/App.css#L429-L431)) draws a line on top, and each figure is a row
+([App.css:437-439](../frontend/src/App.css#L437-L439)) draws a line on top, and each figure is a row
 with a 1px line underneath:
 
-📍 [`frontend/src/App.css:557-571`](../frontend/src/App.css#L557-L571)
+📍 [`frontend/src/App.css:565-579`](../frontend/src/App.css#L565-L579)
 ```css
 .hud-card {
   display: grid;
@@ -345,13 +345,13 @@ with a 1px line underneath:
 
 Each `.hud-card` is a small grid: a 200px label, a 110px right-aligned value and a note. Every row
 uses the same widths, so the values line up without a table. Below 640px the row becomes
-`1fr auto` and the note wraps to its own line ([App.css:458-466](../frontend/src/App.css#L458-L466)).
+`1fr auto` and the note wraps to its own line ([App.css:466-474](../frontend/src/App.css#L466-L474)).
 Only the EV value gets an extra class, `green-metric`, and only when it is positive
-([App.jsx:464](../frontend/src/App.jsx#L464)).
+([App.jsx:473](../frontend/src/App.jsx#L473)).
 
-The tables ([App.css:475-498](../frontend/src/App.css#L475-L498)) have muted headers over a
+The tables ([App.css:483-506](../frontend/src/App.css#L483-L506)) have muted headers over a
 `--line-control` rule, `--line` between rows and `--bg-hover` on hover. Colour means something
-([App.css:524-537](../frontend/src/App.css#L524-L537)): +EV and "Raise" are green, −EV and "Fold all"
+([App.css:532-545](../frontend/src/App.css#L532-L545)): +EV and "Raise" are green, −EV and "Fold all"
 red, a "Fold" action only muted. That is [DESIGN.md:37](../DESIGN.md#L37): *green and red appear only
 where they mean raise/fold or +/−EV*.
 
@@ -394,7 +394,7 @@ now:
 | Line | Before | Now | Rule |
 |------|--------|-----|------|
 | [App.css:23](../frontend/src/App.css#L23) | title `1.35rem` (20.25px) | `1.25rem` (18.75px measured) | §3: nothing bigger than `1.25rem` |
-| [App.css:563](../frontend/src/App.css#L563) | drawer arrow `0.75rem` (11.25px) | `0.87rem` (13.05px measured) | §3: smallest `0.87rem` |
+| [App.css:571](../frontend/src/App.css#L571) | drawer arrow `0.75rem` (11.25px) | `0.87rem` (13.05px measured) | §3: smallest `0.87rem` |
 | [App.css:50](../frontend/src/App.css#L50), [:278](../frontend/src/App.css#L278) | `border-radius: 2px` | `var(--radius)` (3px measured) | §1: radius is `3px` everywhere |
 | [App.css:277](../frontend/src/App.css#L277), [:285](../frontend/src/App.css#L285), [:310](../frontend/src/App.css#L310) | raw `rgba()` / `#D9A63F` | `var(--zone-bad)`, `var(--zone-good)`, `var(--accent-hover)` | §2: colours come from the tokens |
 
@@ -459,7 +459,7 @@ Fixed since the first version of this course:
 - ✅ **Fixed: dead class names.** 18 classes set in `App.jsx` (`green-glow`, `cat-pill`,
   `status-chip`, …) had no rule. They were deleted; the 🧪 scan below now prints nothing.
 - ✅ **Fixed: sizes and radii outside the spec.** The title ([App.css:23](../frontend/src/App.css#L23)),
-  the drawer arrow ([:563](../frontend/src/App.css#L563)) and two corners
+  the drawer arrow ([:571](../frontend/src/App.css#L571)) and two corners
   ([:50](../frontend/src/App.css#L50), [:278](../frontend/src/App.css#L278)) now follow DESIGN.md §1
   and §3 (section 8).
 - ✅ **Fixed: colours that bypassed the tokens.** `--accent-hover`, `--zone-good` and `--zone-bad`
@@ -486,7 +486,7 @@ Still open:
    (exercises 7 and 8).
 3. **The rulebook and the copy still disagree in places.** DESIGN.md §5 calls the footnote "Engine
    specs" in a file whose §1 bans "engine" copy. The Vietnamese notes title "Tư vấn lý thuyết trò
-   chơi" ("game-theory advice", [i18n.js:185](../frontend/src/i18n.js#L185)) still breaks §6's "no
+   chơi" ("game-theory advice", [i18n.js:193](../frontend/src/i18n.js#L193)) still breaks §6's "no
    GTO" rule ([DESIGN.md:88](../DESIGN.md#L88)), although the offline heading below it no longer
    does. A few `k` suffixes still live outside `i18n.js` (lesson 13, weak spot 4).
 
@@ -608,7 +608,7 @@ is weak spot 2. Exercise 7 writes a check that does fail. Undo with
 </details>
 
 **🟡 5. Rename a legacy class.** Rename `tactical-btn` to `solve-btn` in
-[App.jsx:375](../frontend/src/App.jsx#L375) and in the three rules at
+[App.jsx:384](../frontend/src/App.jsx#L384) and in the three rules at
 [App.css:298-316](../frontend/src/App.css#L298-L316). Check: `grep -rn tactical-btn src` prints
 nothing, the build succeeds and the button still looks the same. Then run
 `python3 learning/verify_course.py` from the repository root.
@@ -623,13 +623,13 @@ course and DESIGN.md §5 in the same commit. Undo with
 </details>
 
 **🟡 6. Find the scan's blind spot.** In `App.css`, rename `.act-fold` (the muted "Fold" cell,
-[App.css:535](../frontend/src/App.css#L535)) to `.act-folded` and run the 🧪 scan. It still prints
+[App.css:543](../frontend/src/App.css#L543)) to `.act-folded` and run the 🧪 scan. It still prints
 nothing, although "Fold" cells have lost their style. Find the two reasons, and fix the scan.
 
 <details><summary>Solution</summary>
 
 1. `act-fold` is set in a plain expression, `className={item.is_profitable ? "act-raise" : "act-fold"}`
-   ([App.jsx:549](../frontend/src/App.jsx#L549)), which the regex doesn't read: it only knows
+   ([App.jsx:559](../frontend/src/App.jsx#L559)), which the regex doesn't read: it only knows
    `className="…"` and template strings.
 2. `css.includes(".act-fold")` is still true, because `.act-folded` contains it.
 
