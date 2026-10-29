@@ -19,8 +19,12 @@ export const STRINGS = {
     noHandTitle: "No hand entered",
     noHandBody: "Showing the full range for these inputs. Enter three cards to get a verdict for your hand.",
     opponentFolds: "Opponent folds",
-    modelRange: "Weakest hands",
-    modelRandom: "At random",
+    modelRange: (foldPct) => `Folds weakest ${foldPct}% first`,
+    modelRandom: (foldPct) => `Folds ${foldPct}% regardless of hand`,
+    modelAssumptionRange: (foldPct) =>
+      `Assumption: the opponent folds their weakest ${foldPct}% of hands and calls with the best ${100 - foldPct}%.`,
+    modelAssumptionRandom: (foldPct) =>
+      `Assumption: the opponent folds ${foldPct}% of the time regardless of their hand.`,
     profitMap: "Where a bet pays (at your bet size)",
     handLabel: "Your hand (3 cards)",
     handPlaceholder: "e.g. As Kh Qd",
@@ -145,8 +149,12 @@ export const STRINGS = {
     noHandTitle: "Chưa nhập bài",
     noHandBody: "Đang hiển thị toàn bộ dải bài với các thông số này. Nhập 3 lá để xem kết luận cho bài của bạn.",
     opponentFolds: "Đối thủ bỏ",
-    modelRange: "Bài yếu nhất",
-    modelRandom: "Ngẫu nhiên",
+    modelRange: (foldPct) => `Bỏ ${foldPct}% bài yếu nhất trước`,
+    modelRandom: (foldPct) => `Bỏ ${foldPct}% bất kể bài`,
+    modelAssumptionRange: (foldPct) =>
+      `Giả định: đối thủ bỏ ${foldPct}% bài yếu nhất và theo bằng ${100 - foldPct}% bài mạnh nhất.`,
+    modelAssumptionRandom: (foldPct) =>
+      `Giả định: đối thủ bỏ ${foldPct}% thời gian bất kể bài mạnh hay yếu.`,
     profitMap: "Bản đồ lãi khi cược (ở mức cược của bạn)",
     handLabel: "Bài của bạn (3 lá)",
     handPlaceholder: "VD: As Kh Qd",
