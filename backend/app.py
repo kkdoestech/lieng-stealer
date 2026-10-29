@@ -42,7 +42,7 @@ from src.paths import DEFAULT_DB_PATH
 from src.range_finder import HandEVRecord, HandSolution, OpponentEquities, RangeFinder, category_breakdown
 from src.sensitivity import Sensitivity, stress_test
 
-API_VERSION: Final[str] = "3.0.0"
+API_VERSION: Final[str] = "3.1.0"
 TOP_HANDS_LIMIT: Final[int] = 30
 OPENROUTER_URL: Final[str] = "https://openrouter.ai/api/v1/chat/completions"
 FALLBACK_MODEL_NAME: Final[str] = "rule-based-solver-engine (OPENROUTER_API_KEY not configured)"
@@ -318,7 +318,7 @@ def _parse_game_params(data: Json) -> GameParams:
         raise InvalidGameParamsError("Fold equity must be between 0.0 and 1.0.")
 
     try:
-        opponent_model = OpponentModel(data.get("opponent_model", OpponentModel.RANDOM.value))
+        opponent_model = OpponentModel(data.get("opponent_model", OpponentModel.RANGE.value))
     except ValueError as err:
         choices = ", ".join(m.value for m in OpponentModel)
         raise InvalidGameParamsError(f"opponent_model must be one of: {choices}.") from err
@@ -595,7 +595,7 @@ def solve_api() -> Response:
     """Rank all 455 hands and, if ``hand`` is given, evaluate that hand too.
 
     JSON body (all optional): pot (> 0), bet_size (> 0), fold_equity in [0, 1],
-    opponent_model ('random' default, or 'range'), hand (e.g. 'As Kh Qd'). A blank or missing
+    opponent_model ('range' default, or 'random'), hand (e.g. 'As Kh Qd'). A blank or missing
     hand is legal: the answer is then the range itself.
     """
     services = _services()

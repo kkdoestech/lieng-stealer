@@ -51,6 +51,7 @@ def test_scenario_1_monster_hand_value_raise(client):
         "bet_size": 50000.0,
         "fold_equity": 0.20,
         "hand": "As Kh Qd",
+        "opponent_model": "random",
     }
     res = client.post("/api/solve", json=payload)
     assert res.status_code == 200
@@ -88,6 +89,7 @@ def test_scenario_2_junk_hand_calling_station(client):
         "bet_size": 50000.0,
         "fold_equity": 0.05,
         "hand": "2s 3h 5d",
+        "opponent_model": "random",
     }
     res = client.post("/api/solve", json=payload)
     assert res.status_code == 200
@@ -125,6 +127,7 @@ def test_scenario_3_pure_bluff_flip(client):
         "bet_size": 50000.0,
         "fold_equity": 0.50,
         "hand": "2s 3h 5d",
+        "opponent_model": "random",
     }
     res = client.post("/api/solve", json=payload)
     assert res.status_code == 200

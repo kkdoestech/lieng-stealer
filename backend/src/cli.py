@@ -32,10 +32,13 @@ from src.hands import TOTAL_COMBINATIONS
 from src.paths import DEFAULT_DB_PATH
 from src.range_finder import HandEVRecord, HandSolution, OpponentEquities, RangeFinder, category_breakdown
 
-MODEL_DESCRIPTIONS = {
-    OpponentModel.RANDOM: "folds at random (random)",
-    OpponentModel.RANGE: "folds weakest hands first (range)",
-}
+
+def _model_label(equities: OpponentEquities) -> str:
+    """Name the active opponent model with the numbers it implies."""
+    fold_pct = round(equities.fold_equity * 100)
+    if equities.opponent_model is OpponentModel.RANGE:
+        return f"folds their weakest {fold_pct}% first, calls with the best {100 - fold_pct}% (range)"
+    return f"folds {fold_pct}% regardless of hand strength (uniform)"
 
 CATEGORY_LABELS = {
     HandCategory.SAP: "Sáp (Triples)",
@@ -90,7 +93,6 @@ def render_banner(
 ) -> None:
     """Render the game state banner."""
     fold_equity = equities.fold_equity
-    opponent_model = equities.opponent_model
     percentile = equities.calling_percentile
     calling_value = (
         f"strongest {percentile:.1f}% of the 22,100 hands"
@@ -102,7 +104,7 @@ def render_banner(
             f"[bold cyan]Pot Size (Dead Money):[/] {format_currency(pot)}\n"
             f"[bold cyan]Bet / Raise Sizing:[/] {format_currency(bet_size)}\n"
             f"[bold cyan]Opponent Fold Equity:[/] {fold_equity * 100:.1f}%\n"
-            f"[bold cyan]Opponent Model:[/] {MODEL_DESCRIPTIONS[opponent_model]}\n"
+            f"[bold cyan]Opponent Model:[/] {_model_label(equities)}\n"
             f"[bold cyan]Opponent Calling Range:[/] {calling_value}\n"
             f"[bold yellow]Pure Bluff Break-Even Fold Equity:[/] {be_bluff_fe * 100:.1f}%\n"
             f"[bold cyan]Final Pot (if called):[/] {format_currency(final_pot(pot, bet_size))}"
@@ -115,7 +117,7 @@ def render_banner(
         print(f" Pot Size (Dead Money):       {format_currency(pot)}")
         print(f" Bet / Raise Sizing:          {format_currency(bet_size)}")
         print(f" Opponent Fold Equity:        {fold_equity * 100:.1f}%")
-        print(f" Opponent Model:              {MODEL_DESCRIPTIONS[opponent_model]}")
+        print(f" Opponent Model:              {_model_label(equities)}")
         print(f" Opponent Calling Range:      {calling_value}")
         print(f" Pure Bluff Break-Even FE:    {be_bluff_fe * 100:.1f}%")
         print(f" Final Pot (if called):       {format_currency(final_pot(pot, bet_size))}")
@@ -449,9 +451,9 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument(
         "--opponent-model",
         choices=[m.value for m in OpponentModel],
-        default=OpponentModel.RANDOM.value,
-        help="How the opponent folds: 'random' or 'range' (weakest hands first). Default: random. "
-             "In interactive mode it becomes the default answer.",
+        default=OpponentModel.RANGE.value,
+        help="How the opponent folds: 'range' (weakest hands first, the default) or 'random' "
+             "(uniform, ignores hand strength). In interactive mode it becomes the default answer.",
     )
 
     args = parser.parse_args(argv)
