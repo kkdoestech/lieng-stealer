@@ -134,7 +134,7 @@ project has no TypeScript.
 | `npm run build` | `vite build` | `dist/`: one HTML, one CSS and one JS file |
 | `npm run preview` | `vite preview` | serves `dist/` on http://localhost:4173, to test the build |
 | `npm run lint` | `oxlint --deny-warnings` | nothing at all when the code is clean; exit code 1 on any warning |
-| `npm test` | `vitest run` | the 20 tests in `src/*.test.js` and `src/App.test.jsx` |
+| `npm test` | `vitest run` | the 35 tests in `src/*.test.js` and `src/App.test.jsx` |
 
 ### 3. From `index.html` to `<App />`
 
@@ -283,7 +283,7 @@ POST http://localhost:5173/api/analyze    answered
 The production build, served by `vite preview`, made one `/api/solve` and one `/api/analyze`. The
 difference comes from StrictMode and this effect:
 
-📍 [`frontend/src/App.jsx:199-210`](../frontend/src/App.jsx#L199-L210)
+📍 [`frontend/src/App.jsx:251-262`](../frontend/src/App.jsx#L251-L262)
 ```jsx
   // The first run on mount. It reads the current inputs without making them effect dependencies.
   const startFirstRun = useEffectEvent((controller) => {
@@ -378,8 +378,8 @@ The first import adds matchers such as `toBeInTheDocument()` and `toHaveTextCont
 `expect`. `cleanup()` removes whatever the previous test rendered, so tests can't see each other's
 DOM.
 
-Vitest finds three files: `src/App.test.jsx` (14 tests), `src/format.test.js` (4) and
-`src/i18n.test.js` (2), 20 tests in all. The App tests replace `fetch` with a fake
+Vitest finds three files: `src/App.test.jsx` (29 tests), `src/format.test.js` (4) and
+`src/i18n.test.js` (2), 35 tests in all. The App tests replace `fetch` with a fake
 ([App.test.jsx:43-55](../frontend/src/App.test.jsx#L43-L55)), so no server is needed. Lesson 13
 reads them, and lesson 15 puts them next to the backend suite.
 
@@ -477,7 +477,7 @@ Fixed since the first version of this course:
   Node 22.22.2 or newer, the floor jsdom sets.
 - ✅ **Fixed: template leftovers.** `src/assets/`, `public/` and the template README were deleted;
   [frontend/README.md](../frontend/README.md) now describes this project.
-- ✅ **Fixed: the component had no tests.** 14 Vitest tests now render `App` with `fetch` mocked
+- ✅ **Fixed: the component had no tests.** 29 Vitest tests now render `App` with `fetch` mocked
   ([App.test.jsx](../frontend/src/App.test.jsx)); 8 of the first 12 fail on the `App.jsx` that came
   before them.
 - ✅ **Fixed: a title that oversold.** [index.html:6](../frontend/index.html#L6) now says "EV solver",
@@ -494,7 +494,7 @@ Fixed since the first version of this course:
 Still open:
 
 1. **The tests can't tell a relative URL from an absolute one.** The fake `fetch` keeps only the
-   path ([App.test.jsx:46](../frontend/src/App.test.jsx#L46)), so all 14 App tests still pass when
+   path, so all 29 App tests still pass when
    `API_BASE` is `http://127.0.0.1:5000` (try it: `VITE_API_URL=http://127.0.0.1:5000 npm test`).
    The old fallback could come back unnoticed. *Fix:* one test that checks the exact URL (exercise 7).
 
@@ -512,7 +512,7 @@ The end of the output (timings vary):
 
 ```
  Test Files  3 passed (3)
-      Tests  20 passed (20)
+      Tests  35 passed (35)
 ```
 
 List every test by name:
@@ -529,19 +529,34 @@ npx vitest run --reporter=verbose | grep '✓'
  ✓ src/i18n.test.js > every language defines exactly the English keys, with the same kinds of values 3ms
  ✓ src/i18n.test.js > messages with a parameter include it in every language 1ms
  ✓ src/App.test.jsx > App > renders the verdict and figures from /api/solve 259ms
- ✓ src/App.test.jsx > App > the top-hands table reads showdown_equity 43ms
- ✓ src/App.test.jsx > App > an invalid hand shows its message and clears the old verdict 114ms
- ✓ src/App.test.jsx > App > a network failure shows the matching message 30ms
- ✓ src/App.test.jsx > App > a server error shows the matching message 30ms
- ✓ src/App.test.jsx > App > a 5xx that did not come from the API shows the matching message 39ms
- ✓ src/App.test.jsx > App > a 404 that did not come from the API shows the matching message 28ms
- ✓ src/App.test.jsx > App > an API error that isn't about the input shows the matching message 29ms
- ✓ src/App.test.jsx > App > the language toggle switches the text and is remembered 96ms
- ✓ src/App.test.jsx > App > the pot stepper moves by 10k and stops at 1,000 199ms
- ✓ src/App.test.jsx > App > the notes show the model the API reports 70ms
- ✓ src/App.test.jsx > App > analysis requests send only the inputs, never client-side results 26ms
- ✓ src/App.test.jsx > App > a click while the analysis is still loading cancels the old run 118ms
- ✓ src/App.test.jsx > App > StrictMode's double mount aborts the duplicate first request 46ms
+ ✓ src/App.test.jsx > App > the small-bluff card explains where the money comes from, in English and Vietnamese 12ms
+ ✓ src/App.test.jsx > App > the check card quotes the fold read where the small bet stops paying 9ms
+ ✓ src/App.test.jsx > App > LARGE_VALUE explains itself with the response's own numbers 8ms
+ ✓ src/App.test.jsx > App > LARGE_THIN explains itself with the response's own numbers 8ms
+ ✓ src/App.test.jsx > App > SMALL_VALUE explains itself with the response's own numbers 8ms
+ ✓ src/App.test.jsx > App > SMALL_THIN explains itself with the response's own numbers 8ms
+ ✓ src/App.test.jsx > App > CHECK_NO_EDGE explains itself with the response's own numbers 7ms
+ ✓ src/App.test.jsx > App > CHECK_EDGE_TOO_SMALL explains itself with the response's own numbers 8ms
+ ✓ src/App.test.jsx > App > a rung that does not clear is struck through with its reason 12ms
+ ✓ src/App.test.jsx > App > the nobody-calls state hides the win rate instead of showing 0% 9ms
+ ✓ src/App.test.jsx > App > the solve body matches the shared contract with the backend 21ms
+ ✓ src/App.test.jsx > App > the calling-range slider writes fold_equity and never sends its own field 62ms
+ ✓ src/App.test.jsx > App > the fold slider moves the calling-range slider with it 60ms
+ ✓ src/App.test.jsx > App > the top-hands table labels each row with its action and kind 24ms
+ ✓ src/App.test.jsx > App > clearing the hand shows the range instead of an error 17ms
+ ✓ src/App.test.jsx > App > the empty state counts the hands behind each action 21ms
+ ✓ src/App.test.jsx > App > an invalid hand shows its message and clears the old verdict 26ms
+ ✓ src/App.test.jsx > App > a network failure shows the matching message 24ms
+ ✓ src/App.test.jsx > App > a server error shows the matching message 25ms
+ ✓ src/App.test.jsx > App > a 5xx that did not come from the API shows the matching message 30ms
+ ✓ src/App.test.jsx > App > a 404 that did not come from the API shows the matching message 27ms
+ ✓ src/App.test.jsx > App > an API error that isn't about the input shows the matching message 25ms
+ ✓ src/App.test.jsx > App > the language toggle switches the text and is remembered 94ms
+ ✓ src/App.test.jsx > App > the pot stepper moves by 10k and stops at 1,000 196ms
+ ✓ src/App.test.jsx > App > the notes show the model the API reports 66ms
+ ✓ src/App.test.jsx > App > analysis requests send only the inputs, never client-side results 23ms
+ ✓ src/App.test.jsx > App > a click while the analysis is still loading cancels the old run 116ms
+ ✓ src/App.test.jsx > App > StrictMode's double mount aborts the duplicate first request 44ms
 ```
 
 ```bash
@@ -577,7 +592,7 @@ With `python app.py` and `npm run dev` both running, try the proxy:
 ```bash
 curl -s -X POST http://localhost:5173/api/solve -H 'Content-Type: application/json' \
      -d '{"hand":"As Kh Qd","opponent_model":"range"}' \
-  | python3 -c 'import sys, json; e = json.load(sys.stdin)["hand_evaluation"]; print(e["decision"], e["ev"])'
+  | python3 -c 'import sys, json; e = json.load(sys.stdin)["hand_evaluation"]; print(e["advice"]["action"], e["ev"])'
 ```
 
 ```
@@ -675,7 +690,7 @@ extra request came from StrictMode and not from the code. It is still better to 
 is what showed that the effect needed a cleanup. Undo with `git checkout -- frontend/src/main.jsx`.
 </details>
 
-**🔴 7. Pin the relative URL.** Run `VITE_API_URL=http://127.0.0.1:5000 npm test`. All 20 tests pass,
+**🔴 7. Pin the relative URL.** Run `VITE_API_URL=http://127.0.0.1:5000 npm test`. All 35 tests pass,
 although the page now calls Flask directly, as it did before the fix. Explain why, then add a test to
 [App.test.jsx](../frontend/src/App.test.jsx) that fails in exactly this situation and passes with a
 plain `npm test`.
@@ -747,6 +762,6 @@ Keep the test if you like; undo with `git checkout -- frontend/src/App.test.jsx`
 - StrictMode runs the mount effect twice in development; the effect's cleanup aborts the first run,
   so only one solve and one analysis count. Production makes one of each.
 - `npm run lint` has 104 rules active, prints nothing and exits 0; with `--deny-warnings`, any warning
-  fails it. `npm test` runs 20 tests, 14 of them on the component.
+  fails it. `npm test` runs 35 tests, 29 of them on the component.
 
 **Next:** [13 — The React app](13-frontend-app.md)

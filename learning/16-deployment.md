@@ -145,7 +145,7 @@ platform which one to use.
 
 Every backend setting has a default in code:
 
-📍 [`backend/app.py:61-74`](../backend/app.py#L61-L74)
+📍 [`backend/app.py:62-77`](../backend/app.py#L62-L77)
 ```python
 # Settings and their defaults. create_app() reads each one from the environment when it is set,
 # and an explicit ``config`` argument overrides both (tests use that).
@@ -160,10 +160,17 @@ DEFAULT_CONFIG: Final[dict[str, Any]] = {
     "OPENROUTER_API_KEY": "",
     "OPENROUTER_MODEL": "meta-llama/llama-3.1-8b-instruct:free",
     "OPENROUTER_TIMEOUT": 15.0,
+    # One ADVICE_* setting per policy threshold, so the nine numbers are defined in one place.
+    **{f"ADVICE_{field.name.upper()}": field.default for field in fields(AdviceThresholds)},
 }
 ```
 
-`_settings_from_env` ([app.py:159-175](../backend/app.py#L159-L175)) reads each of these names
+The last line is the 3.0.0 addition: the nine advice thresholds are settings like any other, named
+`ADVICE_SMALL_FRACTION`, `ADVICE_MIN_EDGE_RATIO`, `ADVICE_FOLD_STEP` and so on, generated from the
+frozen `AdviceThresholds` so a name can never drift from the field it sets. They are listed in
+`backend/.env.example` with their defaults.
+
+`_settings_from_env` ([app.py:174-190](../backend/app.py#L174-L190)) reads each of these names
 from the environment and converts it to the default's type: `"1"`, `"true"`, `"yes"` or `"on"` for a
 bool, `int()` or `float()` for a number, the raw text otherwise. A number that doesn't parse stops
 start-up with a message naming the variable, for example

@@ -325,13 +325,15 @@ Notice that these two methods do not check `_is_loaded`, while `get` and `all_it
 
 ### 8. Who creates the database
 
-📍 [`backend/app.py:139-143`](../backend/app.py#L139-L143)
+📍 [`backend/app.py:148-154`](../backend/app.py#L148-L154)
 ```python
     if db is None:
         db = WinRateDB(DEFAULT_DB_PATH)
     if calling_model is None:
         calling_model = CallingRangeModel()
-    app.extensions["lieng"] = Services(db, calling_model, RangeFinder(db, calling_model))
+    if thresholds is None:
+        thresholds = _thresholds_from_config(app.config)
+    app.extensions["lieng"] = Services(db, calling_model, RangeFinder(db, calling_model), thresholds)
 ```
 
 The web app builds its database inside `create_app()` (lesson 10), with the **absolute**

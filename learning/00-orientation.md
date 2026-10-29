@@ -123,7 +123,7 @@ The **expected value** (EV) of raising is your average profit if you could make 
 decision many times, measured against giving up (which is worth 0):
 
 ```
-EV = f · P  +  (1 − f) · [ w · (P + 2B) − B ]          raise if and only if EV > 0
+EV = f · P  +  (1 − f) · [ w · (P + 2B) − B ]
 ```
 
 Lesson [07](07-expected-value.md) derives every part of this. For now, two worked examples with the
@@ -146,6 +146,10 @@ and the equity together.
 
 A pure bluff (`w = 0`) breaks even at `f = B / (P + B) = 50,000 / 150,000 = 33.33%`. 5-3-2 needs a
 little less (33.12%) because it still wins 0.24% of showdowns.
+
+EV above zero is necessary and not sufficient. The tool answers with one of three sizes, and a bet
+must earn at least 5% of the pot at your fold rate and at the worst fold rate ten points away before
+it becomes the answer (lesson 07, section 8). A positive EV under 5% of the pot is a check.
 
 ### 4. Who calls? The two opponent models
 
@@ -182,23 +186,25 @@ Doing that for every one of the C(52, 3) = **22,100** starting hands means
    October 2026, lesson 02.)
 
 Every request after that is a dictionary lookup plus a little arithmetic. The whole online half is
-set up in five lines when the Flask app is created:
+set up in seven lines when the Flask app is created:
 
-📍 [`backend/app.py:139-143`](../backend/app.py#L139-L143)
+📍 [`backend/app.py:148-154`](../backend/app.py#L148-L154)
 ```python
     if db is None:
         db = WinRateDB(DEFAULT_DB_PATH)
     if calling_model is None:
         calling_model = CallingRangeModel()
-    app.extensions["lieng"] = Services(db, calling_model, RangeFinder(db, calling_model))
+    if thresholds is None:
+        thresholds = _thresholds_from_config(app.config)
+    app.extensions["lieng"] = Services(db, calling_model, RangeFinder(db, calling_model), thresholds)
 ```
 
-Load 455 records, build the calling-range tables, wrap both in a range finder: that is all the
-server's state. These lines live inside `create_app()`, an **app factory** (lesson
-[10](10-flask-api.md)): each app object gets its own services, stored in `app.extensions`, and a
-test can pass in its own database. Until October 2026 the same objects were module-level globals,
+Load 455 records, build the calling-range tables, read the advice thresholds, wrap it all in a range
+finder: that is all the server's state. These lines live inside `create_app()`, an **app factory**
+(lesson [10](10-flask-api.md)): each app object gets its own services, stored in `app.extensions`, and
+a test can pass in its own database. Until October 2026 the same objects were module-level globals,
 which `AGENTS.md` forbids; the only module-level object left is `app = create_app()`
-([app.py:594](../backend/app.py#L594)), the entry point for `gunicorn app:app` and `python app.py`.
+([app.py:877](../backend/app.py#L877)), the entry point for `gunicorn app:app` and `python app.py`.
 One equity lookup took about 0.1 µs on the same machine.
 
 ### 6. A tour of the repository
@@ -261,6 +267,7 @@ python -m src.cli --pot 100000 --bet 50000 --fold-equity 0.35 --hand "As Kh Qd"
 │ Bet / Raise Sizing: 50,000                                                   │
 │ Opponent Fold Equity: 35.0%                                                  │
 │ Opponent Model: folds at random (random)                                     │
+│ Opponent Calling Range: n/a (calls with a random hand)                       │
 │ Pure Bluff Break-Even Fold Equity: 33.3%                                     │
 │ Final Pot (if called): 200,000                                               │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -269,16 +276,25 @@ python -m src.cli --pot 100000 --bet 50000 --fold-equity 0.35 --hand "As Kh Qd"
 │ Hand Evaluated: As Kh Qd (Liêng Q-K-A)                                       │
 │ Canonical Class: Q-K-A (Liêng)                                               │
 │ Showdown Equity: 99.69%                                                      │
-│ Expected Value (EV): +132,097                                                │
+│ Expected Value (EV) at 50,000: +132,101.34                                   │
 │ Break-Even Fold Equity: 0.00%                                                │
 │                                                                              │
-│  >>> ACTION: RAISE / ALL-IN RECOMMENDED <<<                                  │
+│  >>> ACTION: ALL IN (100,000) — VALUE <<<                                    │
+│ Why: All in: you win about 99.69% at showdown, so +164,402.00 is worth       │
+│ risking the pot even if they fold 10% less often than you assumed.           │
+│ Ladder (ALL_IN_VALUE):                                                       │
+│   ✓ SMALL BET     33,000  EV +  121,119.11  worst +117.87% of pot            │
+│   ✓ LARGE BET     75,000  EV +  148,251.67  worst +140.83% of pot            │
+│   ✓ ALL IN       100,000  EV +  164,402.00  worst +154.49% of pot  <-        │
+│ recommended                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
 The `SOLVER OVERVIEW` panel in the middle says `Profitable Classes: 455 / 455 canonical classes`.
-With a fold rate of 35%, above the 33.3% pure-bluff line, *every* hand is worth raising here. The
-CLI checks the hand and the numbers before it prints anything: `--hand "As Xh Kd"` prints only
+With a fold rate of 35%, above the 33.3% pure-bluff line, *every* hand is worth a bet here. The
+answer is still one size. Q-K-A clears the floor at all three rungs and the policy takes the biggest
+one; lesson 07 explains the ladder and lesson 09 shows the same panel for a hand that has to bluff.
+The CLI checks the hand and the numbers before it prints anything: `--hand "As Xh Kd"` prints only
 `Invalid input: Invalid card 'Xh': …` and exits with code 2 (lesson 09).
 
 **The API.** If the server is running (`python app.py`), ask it directly:
@@ -288,7 +304,7 @@ curl -s http://127.0.0.1:5000/health
 ```
 
 ```
-{"classes_loaded":455,"database_loaded":true,"status":"healthy","version":"1.1.0"}
+{"classes_loaded":455,"database_loaded":true,"status":"healthy","version":"3.0.0"}
 ```
 
 ```bash
@@ -297,20 +313,22 @@ curl -s -X POST http://127.0.0.1:5000/api/evaluate -H "Content-Type: application
 ```
 
 ```
-{"bet_size":50000.0,"break_even_fold_equity":0.0,"canonical_id":"Q-K-A","category":"LIENG","category_name":"Li\u00eang","decision":"RAISE","equity_vs_random":0.9969,"ev":132097.0,"fold_equity":0.35,"hand":"As Kh Qd","is_profitable":true,"opponent_model":"random","pot":100000.0,"profitable_fold_zones":[[0.0,1.0]],"profitable_from_fold_equity":0.0,"score_name":"Li\u00eang Q-K-A","showdown_equity":0.9969}
+{"advice": {"action": "ALL_IN", "amount": 100000.0, "equity_when_called": 0.99693335, "ev": 164402.00325, "ev_ratio": 1.6440200325, "kind": "VALUE", "ladder": [{"action": "SMALL_BET", "amount": 33000.0, "blocked_by": null, "eligible": true, "ev": 121119.10846500001, "ev_ratio": 1.21119108465, "robust": true, "worst_ev_ratio": 1.1787001485500002}, {"action": "LARGE_BET", "amount": 75000.0, "blocked_by": null, "eligible": true, "ev": 148251.669375, "ev_ratio": 1.48251669375, "robust": true, "worst_ev_ratio": 1.4082833562500001}, {"action": "ALL_IN", "amount": 100000.0, "blocked_by": null, "eligible": true, "ev": 164402.00325, "ev_ratio": 1.6440200325, "robust": true, "worst_ev_ratio": 1.5449400275}], "reason": "ALL_IN_VALUE", "robust": true, "why": {"call_component": 129402.00325000001, "fold_component": 35000.0, "net": 164402.00325}, "win_rate_defined": true}, "bet_size": 50000.0, "break_even_fold_equity": 0.0, "call_range_percent": null, "canonical_id": "Q-K-A", "category": "LIENG", "category_name": "Li\u00eang", "equity_vs_random": 0.99693335, "ev": 132101.33550000002, "fold_equity": 0.35, "hand": "As Kh Qd", "is_profitable": true, "opponent_model": "random", "pot": 100000.0, "profitable_fold_zones": [[0.0, 1.0]], "profitable_from_fold_equity": 0.0, "random_hand_equity": 0.99693335, "score_name": "Li\u00eang Q-K-A", "showdown_equity": 0.99693335}
 ```
 
-Same hand, same spot, same +132,097 as the CLI: both front doors call the same engine. (`\u00ea`
+Same hand, same spot, same +132,101 as the CLI: both front doors call the same engine. (`\u00ea`
 is how JSON escapes the `ê` of Liêng; a JSON parser turns it back.) Every endpoint uses the same
-names, `bet_size`, `showdown_equity` and `decision`; the old request field `bet` is still accepted.
-A bad request is JSON too, with a stable code, e.g.
+names, `bet_size`, `showdown_equity` and `advice`; the old request field `bet` is still accepted.
+`advice` is the recommendation: an action, a kind, an amount, the reason and the three rungs behind
+it (lesson 07). The `sensitivity` block is cut from this paste. A bad request is JSON too, with a
+stable code, e.g.
 `{"code": "invalid_hand", "error": "A Liêng hand cannot have duplicate cards."}` (lesson 10).
 
 **The frontend tests.** `npm test` (from `frontend/`) runs Vitest and ends with:
 
 ```
  Test Files  3 passed (3)
-      Tests  20 passed (20)
+      Tests  35 passed (35)
 ```
 
 `npm run dev` then serves the page on <http://localhost:5173>. It solves the default spot as soon
@@ -446,7 +464,7 @@ how the app obeys it:
 The last stale phrase went in `a9d9ce9`. §4.2 used to say the 455 classes minimise "offline Monte
 Carlo overhead", although the data is exact; it now gives the real saving:
 
-📍 [`AGENTS.md:103`](../AGENTS.md#L103)
+📍 [`AGENTS.md:105`](../AGENTS.md#L105)
 ```
 - Reducing $22,100 \rightarrow 455$ canonical keys cuts the offline work to $455 \times 18{,}424 \approx 8.4$ million exact showdowns and keeps the database below 100 KB.
 ```
@@ -465,9 +483,9 @@ the **backend** writes into the notes panel followed in `a9d9ce9`. The rule-base
 what you see without an API key, used to end with `3. **GTO Insight:**`; now the heading is
 Vietnamese for "tactical assessment":
 
-📍 [`backend/app.py:704-704`](../backend/app.py#L704-L704)
+📍 [`backend/app.py:860`](../backend/app.py#L860)
 ```python
-        f"3. **Nhận định chiến thuật:** "
+        f"3. **Nhận định chiến thuật:** {_reason_sentence(advice_rec, summary)}"
 ```
 
 and the LLM prompt asks for "[Lời khuyên chiến thuật]" (tactical advice) instead of

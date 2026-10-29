@@ -44,7 +44,7 @@ Its own jobs are input, errors, translation and formatting.
 | 6 | [App.jsx:223-403](../frontend/src/App.jsx#L223-L403) | The header and the left column: steppers, presets, slider, model toggle, profit map. |
 | 7 | [App.jsx:405-588](../frontend/src/App.jsx#L405-L588) | The right column: verdict, summary rows, two tables, notes. |
 | 8 | [i18n.js](../frontend/src/i18n.js) and [i18n.test.js](../frontend/src/i18n.test.js) | Two dictionaries with the same 84 keys, and the test that enforces it. |
-| 9 | [format.js](../frontend/src/format.js), [format.test.js](../frontend/src/format.test.js) and [App.test.jsx](../frontend/src/App.test.jsx) | The two pure helpers, and the 20 tests. |
+| 9 | [format.js](../frontend/src/format.js), [format.test.js](../frontend/src/format.test.js) and [App.test.jsx](../frontend/src/App.test.jsx) | The two pure helpers, and the 35 tests. |
 
 ---
 
@@ -79,7 +79,7 @@ that survives between renders (see the concept box).
 
 The language is loaded once and saved on every change:
 
-📍 [`frontend/src/App.jsx:29-36`](../frontend/src/App.jsx#L29-L36)
+📍 [`frontend/src/App.jsx:81-88`](../frontend/src/App.jsx#L81-L88)
 ```jsx
 function loadSavedLang() {
   try {
@@ -102,7 +102,7 @@ which also sets `<html lang>` for screen readers. An unknown saved value falls b
 The round trip lives **outside** the component. It holds no state; it reports each step through
 three callbacks and stops calling them as soon as its `signal` is aborted:
 
-📍 [`frontend/src/App.jsx:48-74`](../frontend/src/App.jsx#L48-L74)
+📍 [`frontend/src/App.jsx:100-126`](../frontend/src/App.jsx#L100-L126)
 ```jsx
 // One solve + analysis round trip. It holds no state: it reports each step through the callbacks
 // and stops calling them as soon as `signal` is aborted (a newer run started, or the page unmounted).
@@ -142,7 +142,7 @@ async function fetchSolveAndAnalysis(body, signal, { onSolved, onSolveFailed, on
   check makes the old run go quiet instead of overwriting the newer run's results (section 4).
 - **Errors are a key plus a detail**, not a sentence (section 7). `solveErrorFor` picks the key:
 
-📍 [`frontend/src/App.jsx:38-46`](../frontend/src/App.jsx#L38-L46)
+📍 [`frontend/src/App.jsx:90-98`](../frontend/src/App.jsx#L90-L98)
 ```jsx
 // Map a failed /api/solve response to the message shown under the button ({ key, detail }).
 // The API answers every error with { error, code }. A response without a code did not come from
@@ -165,7 +165,7 @@ the same Q-K-A shows **+131,876** in the UI but **+132,097** from a bare `curl` 
 
 ### 3. Step 2: `/api/analyze`, and every way to fail
 
-📍 [`frontend/src/App.jsx:76-91`](../frontend/src/App.jsx#L76-L91)
+📍 [`frontend/src/App.jsx:128-143`](../frontend/src/App.jsx#L128-L143)
 ```jsx
   // The server recomputes everything for the analysis from the same inputs.
   let advice;
@@ -219,7 +219,7 @@ spot 3).
 The component's side of a run is three small functions. `runSolve` builds the body and turns each
 callback into state changes:
 
-📍 [`frontend/src/App.jsx:156-187`](../frontend/src/App.jsx#L156-L187)
+📍 [`frontend/src/App.jsx:208-239`](../frontend/src/App.jsx#L208-L239)
 ```jsx
   // Start one run with the current inputs; every state change happens in a callback, after the
   // matching response has arrived. The API takes one opponent assumption: fold_equity. The
@@ -258,7 +258,7 @@ callback into state changes:
 As soon as the numbers are in, `isLoading` goes false and the page renders them; the analysis is
 still on its way. `startSolve` is what the button calls:
 
-📍 [`frontend/src/App.jsx:188-197`](../frontend/src/App.jsx#L188-L197)
+📍 [`frontend/src/App.jsx:240-249`](../frontend/src/App.jsx#L240-L249)
 ```jsx
   // Start a run from a click: cancel any run still in flight, then show the loading state.
   const startSolve = () => {
@@ -280,7 +280,7 @@ run" never appears ([App.test.jsx:151-172](../frontend/src/App.test.jsx#L151-L17
 
 The first run starts on mount:
 
-📍 [`frontend/src/App.jsx:199-217`](../frontend/src/App.jsx#L199-L217)
+📍 [`frontend/src/App.jsx:251-270`](../frontend/src/App.jsx#L251-L270)
 ```jsx
   // The first run on mount. It reads the current inputs without making them effect dependencies.
   const startFirstRun = useEffectEvent((controller) => {
@@ -297,7 +297,8 @@ The first run starts on mount:
 
   const handEval = solveData?.hand_evaluation;
   const summary = solveData?.summary;
-  const isRaise = handEval?.decision === "RAISE";
+  const advice = handEval?.advice;
+  const actionCounts = summary?.action_counts;
 
   const zones = handEval?.profitable_fold_zones;
 
@@ -322,7 +323,7 @@ key of the `/api/solve` answer and where it ends up:
 
 | JSON key | Example value | Shown as | Where |
 |----------|---------------|----------|-------|
-| `hand_evaluation.decision` | `"RAISE"` | "Raise / all-in", green (red for `CHECK/FOLD`) | [:213](../frontend/src/App.jsx#L213), [:409-414](../frontend/src/App.jsx#L409-L414) |
+| `hand_evaluation.advice` | `{"action": "ALL_IN", "kind": "VALUE", "amount": 100000.0, …}` | the recommendation the card renders, with the ladder behind it | [:266](../frontend/src/App.jsx#L266) |
 | `.hand` · `.canonical_id` · `.score_name` | `As Kh Qd` · `Q-K-A` · `Liêng Q-K-A` | the line under the verdict | [:416-420](../frontend/src/App.jsx#L416-L420) |
 | `.ev` | `131876.0` | "+131,876 VND", and again in the summary | [:427](../frontend/src/App.jsx#L427), [:464-465](../frontend/src/App.jsx#L464-L465) |
 | `.profitable_fold_zones` | `[[0.0, 1.0]]` | "…when the opponent folds 0%–100%", and the green bar | [:430](../frontend/src/App.jsx#L430), [:330-344](../frontend/src/App.jsx#L330-L344) |
@@ -335,12 +336,14 @@ key of the `/api/solve` answer and where it ends up:
 | `summary.category_breakdown[]` | 4 rows | the coverage table | [:499-514](../frontend/src/App.jsx#L499-L514) |
 | `top_hands[]` (30 sent) | `A-A-A` first | the first **10** rows of the second table, with `showdown_equity` as the equity column | [:540-553](../frontend/src/App.jsx#L540-L553) |
 
-Sent but never read: in `hand_evaluation` `category`, `category_name`, `is_profitable`,
-`break_even_fold_equity` and `profitable_from_fold_equity`; in `summary` `pot`, `bet_size`,
-`final_pot`, `total_canonical_classes`, `profitable_classes`, `total_combinations`, `highest_ev_*`
-and `threshold_*` (15 of the 29 fields); and `top_hands[].decision`, since the table reads
-`is_profitable` ([:549](../frontend/src/App.jsx#L549)). The "of 22,100" is written into the
-translation ([i18n.js:51](../frontend/src/i18n.js#L51)) instead.
+Sent but never read: in `hand_evaluation` `category`, `category_name`, `random_hand_equity`,
+`is_profitable`, `break_even_fold_equity` and `profitable_from_fold_equity`; in `summary` `pot`,
+`bet_size`, `final_pot`, `total_canonical_classes`, `profitable_classes`, `total_combinations`,
+`bet_ladder`, `highest_ev_*` and `threshold_*`; and in `advice`, `robust`. The page renders
+`advice.action`, `.kind`, `.amount`, `.reason`, `.why`, the three `ladder` rows, and `sizing` for
+the numbers behind them, so the thresholds are read from the response instead of typed into the
+page. The "of 22,100" is written into the translation
+([i18n.js:51](../frontend/src/i18n.js#L51)) instead.
 
 With an empty hand field, `hand_evaluation` is `null`: the verdict and profit map disappear, equity
 shows `N/A`, and the summary and tables still show the whole-range results.
@@ -349,7 +352,7 @@ shows `N/A`, and the summary and tables still show the whole-range results.
 
 The pot and the bet use the same small component:
 
-📍 [`frontend/src/App.jsx:93-123`](../frontend/src/App.jsx#L93-L123)
+📍 [`frontend/src/App.jsx:145-175`](../frontend/src/App.jsx#L145-L175)
 ```jsx
 function Stepper({ id, label, value, onChange }) {
   return (
@@ -398,10 +401,11 @@ function Stepper({ id, label, value, onChange }) {
 
 The presets are data at the top of the file:
 
-📍 [`frontend/src/App.jsx:15-23`](../frontend/src/App.jsx#L15-L23)
+📍 [`frontend/src/App.jsx:15-24`](../frontend/src/App.jsx#L15-L24)
 ```jsx
 const POT_PRESETS = [50000, 100000, 200000, 500000];
-const BET_PRESET_MULTIPLES = [0.5, 1, 2]; // bet = multiple × pot
+// bet = multiple × pot, matching the policy's three rungs so no preset can exceed the all-in rung
+const BET_PRESET_MULTIPLES = [0.33, 0.75, 1];
 const HAND_PRESETS = [
   { cards: "As Kh Qd", labelKey: "presetLiengQKA" },
   { cards: "7s 7h 7d", labelKey: "presetSap7" },
@@ -411,18 +415,20 @@ const HAND_PRESETS = [
 ];
 ```
 
-Each list becomes buttons with one `.map`: pot presets at [:259-268](../frontend/src/App.jsx#L259-L268),
-bet presets at [:276-288](../frontend/src/App.jsx#L276-L288) and hand presets at
-[:360-369](../frontend/src/App.jsx#L360-L369). A hand preset stores an i18n **key**, not a label, so
-the text comes from `t[labelKey]`. A bet preset computes its amount from the pot
-(`Math.round(pot * multiple)`), looks active only while the bet equals it exactly, and gets its label
-from `t.betPresetLabel(...)` with the multiple formatted for the locale: "0.5x pot" in English,
-"0,5x pot" in Vietnamese. The model buttons ([:315-327](../frontend/src/App.jsx#L315-L327)) form a
-`role="group"` with `aria-pressed`, so assistive technology announces which one is on.
+The bet multiples are the policy's three rungs (0.33, 0.75 and the whole pot), so a preset can
+never ask for a size the ladder does not price (lesson 07, section 8). A hand preset stores an
+i18n **key**, not a label, so the text comes from `t[labelKey]`. A bet preset computes its amount
+from the pot (`Math.round(pot * multiple)`), looks active only while the bet equals it exactly, and
+gets its label from `t.betPresetLabel(...)` with the multiple formatted for the locale: "0.33x pot"
+in English, "0,33x pot" in Vietnamese.
+
+Each list becomes buttons with one `.map`: pot presets at [:316-328](../frontend/src/App.jsx#L316-L328),
+bet presets right below them and hand presets further down. The model buttons form a `role="group"`
+with `aria-pressed`, so assistive technology announces which one is on.
 
 The profit map draws each zone with inline percentages:
 
-📍 [`frontend/src/App.jsx:357-371`](../frontend/src/App.jsx#L357-L371)
+📍 [`frontend/src/App.jsx:410-424`](../frontend/src/App.jsx#L410-L424)
 ```jsx
             {zones && (
               <div className="profit-map">
@@ -464,7 +470,7 @@ The solve errors sit together:
 
 The render calls every message the same way:
 
-📍 [`frontend/src/App.jsx:409-413`](../frontend/src/App.jsx#L409-L413)
+📍 [`frontend/src/App.jsx:462-466`](../frontend/src/App.jsx#L462-L466)
 ```jsx
           {solveError && (
             <div className="terminal-alert" role="alert">
@@ -536,7 +542,7 @@ belongs. Comparing shapes instead of values lets the wording differ freely. The 
 [App.test.jsx](../frontend/src/App.test.jsx) renders the real component in jsdom (lesson 12) with
 `fetch` replaced:
 
-📍 [`frontend/src/App.test.jsx:55-70`](../frontend/src/App.test.jsx#L55-L70)
+📍 [`frontend/src/App.test.jsx:156-171`](../frontend/src/App.test.jsx#L156-L171)
 ```jsx
 const reply = (status, body) => ({ ok: status < 400, status, json: async () => body });
 
@@ -559,7 +565,7 @@ function mockFetch(routes) {
 `reply` fakes just the part of a `Response` the app uses (`ok`, `status`, `json()`). A route can be
 a fixed reply, an `Error` (to simulate "no answer"), or a function of the call number, which lets one
 test answer the first solve with 200 and the second with 400. `calls` records each request's path,
-parsed body and `signal`, so tests can check what was sent and what was aborted. The 14 tests find
+parsed body and `signal`, so tests can check what was sent and what was aborted. The 29 App tests find
 elements the way a user would (`getByRole("button", { name: "Run solver" })`, `findByRole("alert")`)
 rather than by class name. 8 of the first 12 fail on the `App.jsx` that came before those fixes.
 
@@ -711,7 +717,7 @@ npm test 2>&1 | grep -E 'Test Files|Tests '
 
 ```
  Test Files  3 passed (3)
-      Tests  20 passed (20)
+      Tests  35 passed (35)
 ```
 
 Call the helpers yourself, and list the translation keys that `App.jsx` never mentions:
@@ -815,7 +821,7 @@ new message, "Something other than the solver answered (HTTP 404). Check that /a
 backend.", except for 502, 503 and 504, which a proxy sends when it can't reach the backend. Write
 the test first: in the table at [App.test.jsx:96-106](../frontend/src/App.test.jsx#L96-L106), make
 the bare-404 row expect `"Something other than the solver answered (HTTP 404)"`. See it fail, then
-make all 20 tests pass.
+make all 35 tests pass.
 
 <details><summary>Solution</summary>
 
@@ -838,7 +844,7 @@ Add the message to both languages in `i18n.js`, next to `solverOffline`:
     notSolver: (detail) => `Một máy chủ khác đã trả lời thay bộ giải (${detail}). Kiểm tra /api có dẫn tới backend không.`,
 ```
 
-(the first line in `en`, the second in `vi`). All 20 tests pass and `npm run lint` stays silent. Skip
+(the first line in `en`, the second in `vi`). All 35 tests pass and `npm run lint` stays silent. Skip
 the Vietnamese line and the parity test fails instead. Undo with
 `git checkout -- frontend/src/App.jsx frontend/src/App.test.jsx frontend/src/i18n.js`.
 </details>

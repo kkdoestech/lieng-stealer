@@ -75,7 +75,7 @@ carry no meaning. Don't add new names in that vocabulary." What they style today
 
 ### 2. The tokens
 
-📍 [`frontend/src/index.css:1-30`](../frontend/src/index.css#L1-L30)
+📍 [`frontend/src/index.css:1-31`](../frontend/src/index.css#L1-L31)
 ```css
 :root {
   /* Ayu Dark (bordered): one background, regions split by 1px lines */
@@ -91,10 +91,11 @@ carry no meaning. Don't add new names in that vocabulary." What they style today
   --text-strong: #E6E1CF;
   --muted: #8A9199;
 
-  --accent: #E6B450;   /* focus, main action only */
+  --accent: #E6B450;   /* focus, main action, thin-value hands */
   --accent-hover: #D9A63F;
-  --good: #AAD94C;     /* raise / +EV */
-  --bad: #F07178;      /* fold / -EV / errors */
+  --good: #AAD94C;     /* value hands / +EV */
+  --bad: #F07178;      /* -EV / errors */
+  --bluff: #D2A6FF;    /* bluff hands: a bluff is a real play, not a warning */
   /* Soft fills for the profit map: the same two colours, mostly transparent */
   --zone-good: color-mix(in srgb, var(--good) 45%, transparent);
   --zone-bad: color-mix(in srgb, var(--bad) 20%, transparent);
@@ -109,28 +110,33 @@ carry no meaning. Don't add new names in that vocabulary." What they style today
 }
 ```
 
-Every colour on the page comes from these fifteen names: `App.css` contains no hex or `rgba()`
+The `--bluff` token is the 3.0.0 addition, and it is a design statement: a bluff gets its own
+colour instead of borrowing the warning red, because it is a real play rather than a mistake.
+
+Every colour on the page comes from these sixteen names: `App.css` contains no hex or `rgba()`
 value at all ([DESIGN.md:38](../DESIGN.md#L38) makes that a rule). This is what each one is for,
-according to [DESIGN.md §2](../DESIGN.md#L17-L40), and how often the two CSS files use it:
+according to [DESIGN.md §2](../DESIGN.md#L17-L40), and how often the two CSS files use it
+(`grep -o 'var(--THE_TOKEN)' frontend/src/*.css | wc -l` for each row):
 
 | Token | Use (DESIGN.md) | `var()` uses |
 |-------|-----------------|--------------|
 | `--bg` | page background (also the text colour on the yellow button) | 2 |
 | `--bg-input` | text and number inputs | 1 |
-| `--bg-hover` | hover on buttons and table rows | 4 |
+| `--bg-hover` | hover on buttons and table rows | 5 |
 | `--bg-active` | the selected preset or language | 2 |
-| `--line` | section dividers, table rows | 9 |
-| `--line-control` | borders of inputs and buttons | 6 |
-| `--text` | body text | 3 |
-| `--text-strong` | headings, values, input text | 12 |
-| `--muted` | secondary text (6:1 contrast on `--bg`) | 16 |
-| `--accent` | focus ring, slider, "Run solver". **Nothing else.** | 5 |
+| `--line` | section dividers, table rows | 11 |
+| `--line-control` | borders of inputs and buttons | 8 |
+| `--text` | body text | 5 |
+| `--text-strong` | headings, values, input text | 13 |
+| `--muted` | secondary text (6:1 contrast on `--bg`) | 22 |
+| `--accent` | focus ring, slider, "Run solver", thin-value hands | 6 |
 | `--accent-hover` | hover state of "Run solver" | 1 |
-| `--good` | raise, +EV (one of the uses is inside `--zone-good`) | 5 |
-| `--bad` | fold, −EV, errors (one of the uses is inside `--zone-bad`) | 5 |
+| `--good` | value hands, +EV (one of the uses is inside `--zone-good`) | 5 |
+| `--bad` | −EV, errors (one of the uses is inside `--zone-bad`) | 4 |
+| `--bluff` | bluff hands, in the verdict card | 1 |
 | `--zone-good` | profitable stretches of the profit map | 1 |
 | `--zone-bad` | the rest of the profit map's track | 1 |
-| `--radius` | every corner, 3px | 10 |
+| `--radius` | every corner, 3px | 13 |
 
 Four things in this block are easy to miss:
 
@@ -150,7 +156,7 @@ makes `width` include padding and border (`box-sizing: border-box`, so a `width:
 overflows), gives `body` the page colours, and makes buttons and inputs inherit the page font, which
 they do not do by default. Then:
 
-📍 [`frontend/src/index.css:55-58`](../frontend/src/index.css#L55-L58)
+📍 [`frontend/src/index.css:56-59`](../frontend/src/index.css#L56-L59)
 ```css
 :focus-visible {
   outline: 2px solid var(--accent);
@@ -318,7 +324,7 @@ The four summary figures used to be glowing "HUD cards". The container
 ([App.css:429-431](../frontend/src/App.css#L429-L431)) draws a line on top, and each figure is a row
 with a 1px line underneath:
 
-📍 [`frontend/src/App.css:449-463`](../frontend/src/App.css#L449-L463)
+📍 [`frontend/src/App.css:557-571`](../frontend/src/App.css#L557-L571)
 ```css
 .hud-card {
   display: grid;
