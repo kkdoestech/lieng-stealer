@@ -62,7 +62,6 @@ def test_a_monster_shoves_and_every_rung_clears(plain, capsys):
 
 
 def test_an_edge_under_the_floor_checks_and_quotes_the_best_rung(plain, capsys):
-    """A-K-10 at a 5% fold rate: the best size earns 2.36% of the pot, under the 5% floor."""
     main(["--hand", "As Kh 10d", "--pot", "100000", "--bet", "50000", "--fold-equity", "0.05"])
     output = capsys.readouterr().out
     assert ">>> ACTION: CHECK (0) — BLUFF <<<" in output

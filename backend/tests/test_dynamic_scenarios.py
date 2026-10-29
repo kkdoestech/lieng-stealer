@@ -139,7 +139,7 @@ def test_scenario_3_pure_bluff_flip(client):
     assert hand_eval["advice"]["kind"] == "BLUFF"
     assert hand_eval["advice"]["reason"] == "SMALL_BLUFF"
     assert hand_eval["advice"]["amount"] == 33000.0
-    # 2. EV MUST become positive solely due to fold equity exceeding 33.3%
+    # 2. EV MUST become positive on fold equity alone
     assert hand_eval["ev"] > 20000.0
     assert abs(hand_eval["ev"] - 25240.0) < 100.0
     assert hand_eval["is_profitable"] is True
@@ -174,7 +174,7 @@ def test_scenario_4_range_coverage_sensitivity(solver):
     # Invariants:
     # 1. Coverage MUST strictly increase as f increases
     assert cov_00 < cov_15 < cov_30 < cov_40
-    # 2. Coverage at f = 0.40 MUST equal 100.0% (pure bluff threshold is 33.3%)
+    # 2. Coverage at f = 0.40 MUST equal 100.0%
     assert cov_40 == 100.0
     # 3. Coverage at f = 0.00 is restricted (< 80% under pot odds, and strict >50% equity hands < 50%)
     assert cov_00 < 80.0
@@ -254,13 +254,13 @@ def test_scenario_6_same_hand_both_models(client):
     vs_range = client.post("/api/solve", json={**base, "opponent_model": "range"}).get_json()["hand_evaluation"]
 
     # Invariants:
-    # 1. Against a random caller, 36% equity makes a small bluff worth +52,393
+    # 1. Against a random caller the same small bluff pays far more
     assert vs_random["advice"]["action"] == "SMALL_BET"
     assert vs_random["advice"]["kind"] == "BLUFF"
     assert vs_random["advice"]["ev"] == pytest.approx(52393.18)
     assert vs_random["showdown_equity"] == pytest.approx(0.36, abs=0.00005)
     # 2. An opponent who folds their weakest 35% calls only with hands that beat 3 points,
-    #    so the same small bluff is worth +14,715 and the bigger rungs lose money
+    #    so the small bluff pays much less and the bigger rungs lose money
     assert vs_range["advice"]["action"] == "SMALL_BET"
     assert vs_range["advice"]["ev"] == 14715.32
     assert [rung["blocked_by"] for rung in vs_range["advice"]["ladder"]] == [

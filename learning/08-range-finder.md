@@ -48,7 +48,7 @@ here it is *your* range.
 | 9 | [range_finder.py:291-311](../backend/src/range_finder.py#L291-L311) | `calculate_range_coverage`: combos, not classes. |
 | 10 | [range_finder.py:314-334](../backend/src/range_finder.py#L314-L334) | `CategorySummary` and `category_breakdown()`: per-category totals for the API and the CLI. |
 | 11 | [advice.py](../backend/src/advice.py) | The policy that turns the three cells into one size (lesson 07, section 8). |
-| 12 | [sensitivity.py](../backend/src/sensitivity.py) | The 3-point assumption stress grid behind `sensitivity`: vary the fold rate, report the range it implies. |
+| 12 | [sensitivity.py](../backend/src/sensitivity.py) | The fold-rate assumption stress grid behind `sensitivity`: vary the fold rate, report the range it implies. |
 | 13 | [app.py:480-522](../backend/app.py#L480-L522) | How the API summarises the records (`_solve`) and the four 3.0.0 summary fields. |
 | 14 | [test_range_finder.py](../backend/tests/test_range_finder.py) | Tests: boundaries, monotonicity, the two models, tie order, one-answer-per-hand identity, the fold cells, category totals. |
 
@@ -58,14 +58,13 @@ here it is *your* range.
 
 ### 1. The result: one record per class
 
-📍 [`backend/src/range_finder.py:24-38`](../backend/src/range_finder.py#L24-L38)
+📍 [`backend/src/range_finder.py:25-38`](../backend/src/range_finder.py#L25-L38)
 ```python
-@dataclass(frozen=True)
 class HandEVRecord:
     """Immutable valuation record for a canonical hand under specific game state.
 
     ``ev`` is the EV at the caller's ``bet_size``; ``advice`` is what the policy says to do with
-    the ladder. The single-hand answer and the table are the same row, so the two cannot disagree.
+    the ladder.
     """
 
     canonical_id: str
@@ -85,7 +84,7 @@ cannot change after it is built.
 
 ### 2. Construction
 
-📍 [`backend/src/range_finder.py:116-121`](../backend/src/range_finder.py#L116-L121)
+📍 [`backend/src/range_finder.py:112-117`](../backend/src/range_finder.py#L112-L117)
 ```python
         if not db.is_loaded:
             raise DatabaseNotLoadedError("RangeFinder needs a loaded WinRateDB; call db.load() first.")
@@ -108,10 +107,10 @@ cannot change after it is built.
 
 ### 3. `solve_range`, part 1: where does equity come from?
 
-📍 [`backend/src/range_finder.py:123-144`](../backend/src/range_finder.py#L123-L144)
+📍 [`backend/src/range_finder.py:119-140`](../backend/src/range_finder.py#L119-L140)
 ```python
     def equities(self, fold_equity: float, opponent_model: OpponentModel) -> OpponentEquities:
-        """The one equity source for a request: 455 numbers under one opponent assumption.
+        """Build the 455-class equity table for this request.
 
         Args:
             fold_equity: Opponent fold frequency in [0.0, 1.0]. Under RANGE it also fixes the
@@ -144,7 +143,7 @@ cannot change after it is built.
 
 ### 4. `solve_range`, part 2: score and sort
 
-📍 [`backend/src/range_finder.py:185-232`](../backend/src/range_finder.py#L185-L232)
+📍 [`backend/src/range_finder.py:180-227`](../backend/src/range_finder.py#L180-L227)
 ```python
     def solve_range(
         self,
@@ -158,8 +157,8 @@ cannot change after it is built.
         Args:
             pot: Dead pot size before hero's bet (must be > 0).
             bet_size: Additional bet / raise amount (must be > 0).
-            equities: The request's single equity source; it also owns the fold rate used in
-                the EV formula, so the table and the formula cannot be handed different ones.
+            equities: The equities to value every class under; it also carries the fold rate the
+                EV formula uses.
             thresholds: The advice policy's numbers.
 
         Returns:
@@ -278,7 +277,7 @@ the next-stronger one (K-K-J 0.9612 just above K-K-Q 0.961). So "the profitable 
 
 ### 6. Coverage counts hands, not classes
 
-📍 [`backend/src/range_finder.py:306-311`](../backend/src/range_finder.py#L306-L311)
+📍 [`backend/src/range_finder.py:298-303`](../backend/src/range_finder.py#L298-L303)
 ```python
         if not profitable_records:
             return 0.0
@@ -312,10 +311,10 @@ Notice `if r.is_raise_profitable` inside the sum: the function filters again, so
 
 ### 7. How the callers use the records
 
-📍 [`backend/app.py:480-522`](../backend/app.py#L480-L522)
+📍 [`backend/app.py:475-517`](../backend/app.py#L475-L517)
 ```python
 def _solve(services: Services, params: GameParams) -> tuple[OpponentEquities, list[HandEVRecord], Json]:
-    """Score all 455 classes from one equity source; return it, the records, and the summary."""
+    """Score all 455 classes; return the equities, the records, and the summary."""
 
     equities = services.range_finder.equities(params.fold_equity, params.opponent_model)
     records = services.range_finder.solve_range(
@@ -390,7 +389,7 @@ and the effective thresholds, so a client never has to hard-code either.
 The rest of the summary is `category_breakdown` ([app.py:512-520](../backend/app.py#L512-L520)),
 one row per category, built by shared code in this module:
 
-📍 [`backend/src/range_finder.py:314-334`](../backend/src/range_finder.py#L314-L334)
+📍 [`backend/src/range_finder.py:306-326`](../backend/src/range_finder.py#L306-L326)
 ```python
 @dataclass(frozen=True)
 class CategorySummary:

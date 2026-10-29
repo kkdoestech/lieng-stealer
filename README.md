@@ -361,7 +361,7 @@ range each cell implies.
 | `worst_ev_ratio` | The worst of the stress cells, as a share of the pot |
 | `robust` | `worst_ev_ratio` is not negative |
 | `eligible` | This rung may be the answer |
-| `blocked_by` | Why it may not: `EV_BELOW_FLOOR`, `NEEDS_BIGGER_EDGE`, `BLUFF_TOO_SMALL_ONLY`, `NOT_ROBUST`, or `null` when eligible |
+| `blocked_by` | Why it may not: `EV_BELOW_FLOOR`, `NEEDS_BIGGER_EDGE`, `BLUFF_TOO_SMALL_ONLY`, or `null` when eligible |
 
 **Summary fields added in 3.0.0.** `summary` keeps every field it had, including
 `range_coverage_percent`, and adds:
@@ -584,7 +584,7 @@ lieng-stealer/
 │   │   ├── ev.py               EV, break-even fold equity, profitable fold zones
 │   │   ├── advice.py           the three-rung ladder, the 5% floor and the value/thin/bluff bands
 │   │   ├── range_finder.py     the request's one equity source, EV of all 455 types, advice, sorting, coverage
-│   │   ├── sensitivity.py      the 3-point assumption stress grid behind `sensitivity`
+│   │   ├── sensitivity.py      the fold-rate assumption stress grid behind `sensitivity`
 │   │   └── cli.py              command-line interface
 │   └── tests/                  pytest suite (267 tests)
 ├── frontend/

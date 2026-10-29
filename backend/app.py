@@ -119,7 +119,7 @@ def create_app(
 
     Args:
         db: A loaded win-rate database. Defaults to loading backend/data/winrates.json.
-        calling_model: The calling-range model. Defaults to building one (about 60 ms).
+        calling_model: The calling-range model. Defaults to building one.
         config: Settings that override DEFAULT_CONFIG and the environment. ``TESTING=True``
             also turns the rate limiter off and ignores any OPENROUTER_API_KEY from the
             environment (so a test can never call the real service), unless the config sets
@@ -172,7 +172,6 @@ def create_app(
 
 
 def _settings_from_env() -> dict[str, Any]:
-    """Read every DEFAULT_CONFIG key that is set in the environment, converted to its type."""
     settings: dict[str, Any] = {}
     for key, default in DEFAULT_CONFIG.items():
         raw = os.environ.get(key)
@@ -348,7 +347,6 @@ def _parse_hand(data: Json, *, required: bool) -> Hand | None:
 # Computation shared by the endpoints
 # --------------------------------------------------------------------------------------------
 def _sensitivity_payload(sensitivity: Sensitivity) -> Json:
-    """Project the assumption stress grid into the API vocabulary."""
     percentiles = [
         scenario.call_range_percent
         for scenario in sensitivity.scenarios
@@ -388,7 +386,6 @@ def _rung_payload(rung: Rung) -> Json:
 
 
 def _advice_payload(advice: Recommendation) -> Json:
-    """Project the recommendation into the API vocabulary."""
     return {
         "action": advice.action.value,
         "kind": advice.kind.value,
@@ -433,10 +430,9 @@ def _hand_payload(
 ) -> Json:
     """The hand-evaluation fields, identical in /api/solve and /api/evaluate.
 
-    ``showdown_equity``, ``ev`` and ``advice`` are the 455-class table row's stored values, so the
-    verdict card and the table can never disagree. ``ev`` stays the EV at the caller's ``bet_size``;
-    ``advice.ev`` is the EV of the size the policy recommends. ``call_range_percent`` is derived from
-    ``fold_equity`` (null under the random model).
+    ``showdown_equity``, ``ev`` and ``advice`` come from the 455-class table row. ``ev`` stays the EV
+    at the caller's ``bet_size``; ``advice.ev`` is the EV of the size the policy recommends.
+    ``call_range_percent`` is derived from ``fold_equity`` (null under the random model).
 
     break_even_fold_equity: exact fold frequency where EV = 0 (random model only; under RANGE,
         EV is not monotonic in fold equity, so no single break-even point exists).
@@ -470,7 +466,6 @@ def _hand_payload(
 
 
 def _action_counts(records: Sequence[HandEVRecord]) -> Json:
-    """How many canonical classes each action covers, in ladder order."""
     counts: Json = {action.value: 0 for action in Action}
     for record in records:
         counts[record.advice.action.value] += 1
@@ -478,7 +473,7 @@ def _action_counts(records: Sequence[HandEVRecord]) -> Json:
 
 
 def _solve(services: Services, params: GameParams) -> tuple[OpponentEquities, list[HandEVRecord], Json]:
-    """Score all 455 classes from one equity source; return it, the records, and the summary."""
+    """Score all 455 classes; return the equities, the records, and the summary."""
 
     equities = services.range_finder.equities(params.fold_equity, params.opponent_model)
     records = services.range_finder.solve_range(
@@ -529,7 +524,6 @@ def _evaluate_hand(
     equities: OpponentEquities,
     records: Sequence[HandEVRecord],
 ) -> tuple[HandSolution, Sensitivity]:
-    """Answer one hand from the table and stress its assumption grid."""
     solution = services.range_finder.hand_solution(hand, records, equities, params.pot, params.bet_size)
     sensitivity = stress_test(
         equities,
@@ -625,7 +619,7 @@ def evaluate_api() -> Response:
     data = _request_body()
     params = _parse_game_params(data)
     hand = _parse_hand(data, required=True)
-    assert hand is not None  # required=True never returns None
+    assert hand is not None
 
     equities, records, _summary = _solve(services, params)
     return jsonify({
@@ -713,7 +707,7 @@ def analyze_api() -> Response | tuple[Response, int]:
 def _model_line(params: GameParams, equities: OpponentEquities) -> str:
     if params.opponent_model is OpponentModel.RANGE:
         percentile = equities.calling_percentile
-        assert percentile is not None  # RANGE always has a calling range
+        assert percentile is not None
         return f"folds their weakest hands (calls only with the top {percentile:.1f}%)"
     return "folds at random, regardless of hand strength"
 
@@ -862,7 +856,6 @@ def _fallback_advice(
 
 
 def _reason_sentence(advice: Recommendation, summary: Json) -> str:
-    """One Vietnamese sentence for the reason code, from the advice's numbers and the policy."""
     # A check's own ev_ratio is zero, so its reasons quote the best rung the ladder priced.
     edge = advice.ev_ratio if advice.action is not Action.CHECK else max(rung.ev_ratio for rung in advice.ladder)
     return _REASON_TEXT[advice.reason].format(

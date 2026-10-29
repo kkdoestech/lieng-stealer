@@ -26,7 +26,7 @@ class HandEVRecord:
     """Immutable valuation record for a canonical hand under specific game state.
 
     ``ev`` is the EV at the caller's ``bet_size``; ``advice`` is what the policy says to do with
-    the ladder. The single-hand answer and the table are the same row, so the two cannot disagree.
+    the ladder.
     """
 
     canonical_id: str
@@ -88,11 +88,7 @@ class OpponentEquities:
 
 @dataclass(frozen=True)
 class HandSolution:
-    """One hand's answer: its row of the 455-class table, plus where raising pays.
-
-    ``record.equity`` and ``record.ev`` are the reported ``showdown_equity`` and ``ev``.
-    They are not recomputed, so they cannot drift from the table.
-    """
+    """One hand's answer: its row of the 455-class table, plus where raising pays."""
 
     hand: Hand
     record: HandEVRecord
@@ -121,7 +117,7 @@ class RangeFinder:
         self._strength = {h.canonical_id: h.score.score_tuple for h in generate_all_canonical_hands()}
 
     def equities(self, fold_equity: float, opponent_model: OpponentModel) -> OpponentEquities:
-        """The one equity source for a request: 455 numbers under one opponent assumption.
+        """Build the 455-class equity table for this request.
 
         Args:
             fold_equity: Opponent fold frequency in [0.0, 1.0]. Under RANGE it also fixes the
@@ -152,8 +148,7 @@ class RangeFinder:
 
         Under RANGE a different fold frequency is also a different calling range, so each cell is
         its own equity table; under RANDOM the equity does not depend on the fold rate, so every
-        cell reuses the stored number. The centre cell is ``equities(fold_equity, model).of(cid)``,
-        which is what keeps the ladder and the reported equity on one source.
+        cell reuses the stored number. The centre cell is ``equities(fold_equity, model).of(cid)``.
 
         Args:
             fold_equity: The user's fold frequency in [0.0, 1.0].
@@ -194,8 +189,8 @@ class RangeFinder:
         Args:
             pot: Dead pot size before hero's bet (must be > 0).
             bet_size: Additional bet / raise amount (must be > 0).
-            equities: The request's single equity source; it also owns the fold rate used in
-                the EV formula, so the table and the formula cannot be handed different ones.
+            equities: The equities to value every class under; it also carries the fold rate the
+                EV formula uses.
             thresholds: The advice policy's numbers.
 
         Returns:
@@ -241,12 +236,10 @@ class RangeFinder:
     ) -> HandSolution:
         """Answer one hand from the table: the matching row, plus the fold rates where raising pays.
 
-        The reported equity and EV are the row's stored values, not a second computation.
-
         Args:
             hand: Hero's three cards.
             records: The 455 records produced by ``solve_range`` for the same equities.
-            equities: The same equity source those records came from.
+            equities: The equities those records came from.
             pot: Dead pot size before hero's bet (must be > 0).
             bet_size: Additional bet / raise amount (must be > 0).
 
@@ -268,7 +261,6 @@ class RangeFinder:
         raise ModelError(f"Canonical hand '{canonical_id}' is missing from the 455-class table.")
 
     def _equity_scan(self, equities: OpponentEquities, canonical_id: str) -> Callable[[float], float]:
-        """Map a hypothetical fold frequency to Hero's equity there, under the same assumption."""
         if equities.opponent_model is OpponentModel.RANGE:
             model = self._calling_model
             if model is None:

@@ -83,7 +83,7 @@ the duplicate first request").
 
 ### Hop 2. Building the request
 
-📍 [`frontend/src/App.jsx:208-239`](../frontend/src/App.jsx#L208-L239)
+📍 [`frontend/src/App.jsx:207-238`](../frontend/src/App.jsx#L207-L238)
 ```jsx
   // Start one run with the current inputs; every state change happens in a callback, after the
   // matching response has arrived. The API takes one opponent assumption: fold_equity. The
@@ -130,7 +130,7 @@ The five values come from React state, whose defaults are at
 `onAnalysis`) to `fetchSolveAndAnalysis`, a plain function defined *outside* the component. It
 holds no state; it only reports what happened:
 
-📍 [`frontend/src/App.jsx:100-104`](../frontend/src/App.jsx#L100-L104)
+📍 [`frontend/src/App.jsx:99-103`](../frontend/src/App.jsx#L99-L103)
 ```jsx
 // One solve + analysis round trip. It holds no state: it reports each step through the callbacks
 // and stops calling them as soon as `signal` is aborted (a newer run started, or the page unmounted).
@@ -169,7 +169,7 @@ the API, or `VITE_API_URL` points at the API and `CORS_ORIGINS` must list the pa
 
 Werkzeug matches `POST /api/solve` to `solve_api` in the `api` blueprint:
 
-📍 [`backend/app.py:599-619`](../backend/app.py#L599-L619)
+📍 [`backend/app.py:593-613`](../backend/app.py#L593-L613)
 ```python
 @api.post("/api/solve")
 def solve_api() -> Response:
@@ -273,7 +273,7 @@ one frozen `HandResult`.
 
 ### Hop 6. Packing `hand_evaluation`
 
-📍 [`backend/app.py:446-469`](../backend/app.py#L446-L469)
+📍 [`backend/app.py:442-465`](../backend/app.py#L442-L465)
 ```python
     record = solution.record
     is_random = equities.opponent_model is OpponentModel.RANDOM
@@ -335,7 +335,7 @@ bet the request asked about.
 
 ### Hop 7. The whole range
 
-📍 [`backend/app.py:483-507`](../backend/app.py#L483-L507)
+📍 [`backend/app.py:478-502`](../backend/app.py#L478-L502)
 ```python
     equities = services.range_finder.equities(params.fold_equity, params.opponent_model)
     records = services.range_finder.solve_range(
@@ -446,7 +446,7 @@ Flask. The 54 ms `CallingRangeModel` build never shows up: it happened once, in 
 
 ### Hop 8. Back in the browser: state
 
-📍 [`frontend/src/App.jsx:106-126`](../frontend/src/App.jsx#L106-L126)
+📍 [`frontend/src/App.jsx:105-125`](../frontend/src/App.jsx#L105-L125)
 ```jsx
   let solveJson;
   try {
@@ -499,7 +499,7 @@ button **before** the analysis starts.
 `setSolveData` makes React run `App()` again. On that render the derived values pick the response
 apart:
 
-📍 [`frontend/src/App.jsx:264-270`](../frontend/src/App.jsx#L264-L270)
+📍 [`frontend/src/App.jsx:263-269`](../frontend/src/App.jsx#L263-L269)
 ```jsx
   const handEval = solveData?.hand_evaluation;
   const summary = solveData?.summary;
@@ -535,7 +535,7 @@ locale turns 131,876 into 131.876.
 
 ### Hop 10. The follow-up: `POST /api/analyze`
 
-📍 [`frontend/src/App.jsx:128-142`](../frontend/src/App.jsx#L128-L142)
+📍 [`frontend/src/App.jsx:127-141`](../frontend/src/App.jsx#L127-L141)
 ```jsx
   // The server recomputes everything for the analysis from the same inputs.
   let advice;

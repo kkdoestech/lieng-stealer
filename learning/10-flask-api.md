@@ -167,7 +167,7 @@ you will see. That is deliberate (fail fast), not a guard that forgot to work.
 
 Every POST view starts with `data = _request_body()` and `params = _parse_game_params(data)`.
 
-📍 [`backend/app.py:260-287`](../backend/app.py#L260-L287)
+📍 [`backend/app.py:259-286`](../backend/app.py#L259-L286)
 ```python
 def _request_body() -> Json:
     """The JSON body as a dict. No body means "use the defaults"; anything else must be a JSON object."""
@@ -208,7 +208,7 @@ def _number(data: Json, name: str, default: float, *aliases: str) -> float:
   A string is parsed (`"0.5"` works), and the result must be finite, which rules out `"nan"`,
   `"inf"` and `-inf`.
 
-📍 [`backend/app.py:301-328`](../backend/app.py#L301-L328)
+📍 [`backend/app.py:300-327`](../backend/app.py#L300-L327)
 ```python
 def _parse_game_params(data: Json) -> GameParams:
     """Parse and validate pot, bet size, fold equity, and opponent model from a request body.
@@ -276,7 +276,7 @@ old check `pot <= 0` let NaN through (every comparison with NaN is false) and th
 
 ### 3. Errors: one JSON shape everywhere
 
-📍 [`backend/app.py:228-254`](../backend/app.py#L228-L254)
+📍 [`backend/app.py:227-253`](../backend/app.py#L227-L253)
 ```python
 def _error(message: str, code: str, status: int) -> tuple[Response, int]:
     return jsonify({"error": message, "code": code}), status
@@ -346,7 +346,7 @@ error without any `code` tells it the answer did not come from this API at all (
 
 The views are short because the work is in the shared helpers:
 
-📍 [`backend/app.py:599-619`](../backend/app.py#L599-L619)
+📍 [`backend/app.py:593-613`](../backend/app.py#L593-L613)
 ```python
 @api.post("/api/solve")
 def solve_api() -> Response:
@@ -487,7 +487,7 @@ still there as a fact about EV.
 The web UI calls this endpoint right after `/api/solve`, with the *same* body, and shows the answer
 in the notes drawer.
 
-📍 [`backend/app.py:656-673`](../backend/app.py#L656-L673)
+📍 [`backend/app.py:650-667`](../backend/app.py#L650-L667)
 ```python
     services = _services()
     data = _request_body()
@@ -587,7 +587,7 @@ which told the model nothing about the size.
 
 When OpenRouter fails, the client gets a fixed message and the operator gets the details:
 
-📍 [`backend/app.py:696-710`](../backend/app.py#L696-L710)
+📍 [`backend/app.py:690-704`](../backend/app.py#L690-L704)
 ```python
     except requests.RequestException:
         current_app.logger.exception("OpenRouter request failed")
@@ -653,7 +653,7 @@ pins this, and checks that `/api/solve` is not limited; `test_rate_limit_respons
 
 ### 7. Running it
 
-📍 [`backend/app.py:877-882`](../backend/app.py#L877-L882)
+📍 [`backend/app.py:870-875`](../backend/app.py#L870-L875)
 ```python
 app = create_app()
 

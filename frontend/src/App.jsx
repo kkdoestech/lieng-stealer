@@ -13,7 +13,6 @@ const AMOUNT_STEP = 10000;
 const MIN_AMOUNT = 1000;
 
 const POT_PRESETS = [50000, 100000, 200000, 500000];
-// bet = multiple × pot, matching the policy's three rungs so no preset can exceed the all-in rung
 const BET_PRESET_MULTIPLES = [0.33, 0.75, 1];
 const HAND_PRESETS = [
   { cards: "As Kh Qd", labelKey: "presetLiengQKA" },
@@ -269,7 +268,7 @@ export default function App() {
   const zones = handEval?.profitable_fold_zones;
 
   // The API's single opponent assumption is fold_equity; the calling range is derived from it, so
-  // the second slider is a view/controller of the same value and can never disagree with it.
+  // the second slider only displays the value that fold rate implies.
   const callingRangePercent = Math.round((1 - foldEquity) * 100);
 
   // Category Matrix Statistics (computed by the solver per category)

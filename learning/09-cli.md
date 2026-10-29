@@ -78,7 +78,7 @@ backend ([db.py:82-89](../backend/src/db.py#L82-L89), lesson 05).
 choices for the last one come from the enum itself, `[m.value for m in OpponentModel]`, so a new
 model would appear in `--help` automatically. Then:
 
-📍 [`backend/src/cli.py:462-489`](../backend/src/cli.py#L462-L489)
+📍 [`backend/src/cli.py:457-484`](../backend/src/cli.py#L457-L484)
 ```python
     args = parser.parse_args(argv)
     opponent_model = OpponentModel(args.opponent_model)
@@ -181,7 +181,7 @@ is a normal way for a scripted session to end, so it is 0. The constants live at
 `run_solver(pot, bet_size, fold_equity, hand_str=None, db_path=DEFAULT_DB_PATH,
 opponent_model=RANDOM)` ([cli.py:236-252](../backend/src/cli.py#L236-L252)) is the whole pipeline:
 
-📍 [`backend/src/cli.py:347-385`](../backend/src/cli.py#L347-L385)
+📍 [`backend/src/cli.py:342-379`](../backend/src/cli.py#L342-L379)
 ```python
 def run_solver(
     pot: float,
@@ -206,7 +206,7 @@ def run_solver(
     be_bluff = calculate_break_even_fold_equity(pot, bet_size, win_rate_when_called=0.0)
 
     db = WinRateDB(db_path)
-    # Build the calling-range tables (~40 ms) only when the range model is requested
+    # Build the calling-range tables only when the range model is requested
     calling_model = CallingRangeModel() if opponent_model is OpponentModel.RANGE else None
     finder = RangeFinder(db, calling_model)
     equities = finder.equities(fold_equity, opponent_model)
@@ -221,7 +221,6 @@ def run_solver(
     if hand is not None:
         solution = finder.hand_solution(hand, records, equities, pot, bet_size)
         render_single_hand_decision(solution, equities, pot, bet_size)
-
 ```
 
 Read it as three blocks:
@@ -247,7 +246,7 @@ will differ): building `CallingRangeModel()` took 53–55 ms, loading and valida
 
 ### 5. Your hand: the same recommendation as the API
 
-📍 [`backend/src/cli.py:236-285`](../backend/src/cli.py#L236-L285)
+📍 [`backend/src/cli.py:231-298`](../backend/src/cli.py#L231-L298)
 ```python
 def render_single_hand_decision(
     solution: HandSolution,
@@ -258,9 +257,9 @@ def render_single_hand_decision(
 ) -> None:
     """Render the recommendation for one hand, straight from its 455-class table row.
 
-    The row carries the whole recommendation, so this function only formats: the action, the reason
-    as one sentence, and the three rungs with a marker saying which cleared and why the others did
-    not. ``Expected Value`` stays the EV at the caller's own ``--bet``.
+    This function only formats: the action, the reason as one sentence, and the three rungs with a
+    marker saying which cleared and why the others did not. ``Expected Value`` stays the EV at the
+    caller's own ``--bet``.
     """
     hand = solution.hand
     record = solution.record
@@ -299,6 +298,24 @@ def render_single_hand_decision(
             f"[bold]Ladder ({advice.reason.value}):[/]\n{ladder_rows}"
         )
         _console().print(Panel(content, title="[bold magenta]HAND EVALUATION & ACTION[/]", border_style=action_color))
+    else:
+        print("\n================ HAND EVALUATION ================")
+        print(f" Hand:               {hand} ({hand.score})")
+        print(f" Canonical Class:    {record.canonical_id} ({record.category.display_name})")
+        print(f" Showdown Equity:    {equity_text}")
+        print(f" Expected Value:     {'+' if record.ev > 0 else ''}{format_currency(record.ev)}")
+        print(f" Break-Even FE:      {break_even_text}")
+        print(f" >>> ACTION: {action_text} <<<")
+        print(f" Why: {why_text}")
+        print(" Ladder:")
+        for rung in advice.ladder:
+            print(
+                f"  {_rung_marker(rung)} {_ACTION_LABELS[rung.action]:<9} "
+                f"{format_currency(rung.amount):>10}  EV {'+' if rung.ev > 0 else ''}"
+                f"{format_currency(rung.ev):>12}  worst {rung.worst_ev_ratio * 100:+.2f}% of pot"
+                f"{_rung_suffix(rung, advice)}"
+            )
+        print("=================================================\n")
 ```
 
 The renderer formats, it does not decide. Every value it prints comes off `record.advice`:
@@ -462,7 +479,7 @@ process with these imports), and whole commands measured 0.14 s for the random m
 
 ### 7. The category table, from shared code
 
-📍 [`backend/src/cli.py:306-308`](../backend/src/cli.py#L306-L308)
+📍 [`backend/src/cli.py:301-303`](../backend/src/cli.py#L301-L303)
 ```python
 def render_categorized_heatmap(records: list[HandEVRecord]) -> None:
     """Render categorized summary tables showing distribution and top hands."""
@@ -484,7 +501,7 @@ classes, a coverage percentage, and up to five sample hands
 asks for the pot, the bet and the fold rate first, each with a default from `ev.py` when you just
 press Enter. Then:
 
-📍 [`backend/src/cli.py:403-425`](../backend/src/cli.py#L403-L425)
+📍 [`backend/src/cli.py:398-420`](../backend/src/cli.py#L398-L420)
 ```python
         model_str = input(
             f"Opponent folds 'random' or 'range' (weakest hands first)? [{default_model.value}]: "
@@ -522,7 +539,7 @@ press Enter. Then:
 
 How do you test something that reads the keyboard? You replace `input`:
 
-📍 [`backend/tests/test_cli.py:88-105`](../backend/tests/test_cli.py#L88-L105)
+📍 [`backend/tests/test_cli.py:87-104`](../backend/tests/test_cli.py#L87-L104)
 ```python
 def _answer_prompts(monkeypatch, answers):
     """Feed interactive-mode prompts from a list instead of the keyboard."""

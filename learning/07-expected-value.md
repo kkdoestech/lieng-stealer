@@ -269,7 +269,7 @@ threshold can say that, so the code scans:
 
 ### 7. How the API uses all of this
 
-📍 [`backend/app.py:525-542`](../backend/app.py#L525-L542)
+📍 [`backend/app.py:520-535`](../backend/app.py#L520-L535)
 ```python
 def _evaluate_hand(
     services: Services,
@@ -278,7 +278,6 @@ def _evaluate_hand(
     equities: OpponentEquities,
     records: Sequence[HandEVRecord],
 ) -> tuple[HandSolution, Sensitivity]:
-    """Answer one hand from the table and stress its assumption grid."""
     solution = services.range_finder.hand_solution(hand, records, equities, params.pot, params.bet_size)
     sensitivity = stress_test(
         equities,
@@ -288,7 +287,6 @@ def _evaluate_hand(
         params.bet_size,
     )
     return solution, sensitivity
-
 ```
 
 `_evaluate_hand` above is the whole bridge from the table to JSON. The `equity_at` function that
@@ -301,7 +299,7 @@ your own fold rate once, through `hand_solution`, and the three advice cells thr
 `_hand_payload` then turns a `HandSolution` into the JSON that both `/api/solve` and `/api/evaluate`
 send. The zones become two separate fields, and the advice rides along:
 
-📍 [`backend/app.py:427-469`](../backend/app.py#L427-L469)
+📍 [`backend/app.py:424-465`](../backend/app.py#L424-L465)
 ```python
 def _hand_payload(
     solution: HandSolution,
@@ -312,10 +310,9 @@ def _hand_payload(
 ) -> Json:
     """The hand-evaluation fields, identical in /api/solve and /api/evaluate.
 
-    ``showdown_equity``, ``ev`` and ``advice`` are the 455-class table row's stored values, so the
-    verdict card and the table can never disagree. ``ev`` stays the EV at the caller's ``bet_size``;
-    ``advice.ev`` is the EV of the size the policy recommends. ``call_range_percent`` is derived from
-    ``fold_equity`` (null under the random model).
+    ``showdown_equity``, ``ev`` and ``advice`` come from the 455-class table row. ``ev`` stays the EV
+    at the caller's ``bet_size``; ``advice.ev`` is the EV of the size the policy recommends.
+    ``call_range_percent`` is derived from ``fold_equity`` (null under the random model).
 
     break_even_fold_equity: exact fold frequency where EV = 0 (random model only; under RANGE,
         EV is not monotonic in fold equity, so no single break-even point exists).
@@ -397,7 +394,7 @@ Three rules turn those numbers into an answer.
    minus and plus 0.10. The all-in rung also has to be a `VALUE` hand and has to beat the large rung's
    EV. A bluff is capped at the small rung. No eligible rung, and the answer is `CHECK`.
 
-📍 [`backend/src/advice.py:284-316`](../backend/src/advice.py#L284-L316)
+📍 [`backend/src/advice.py:283-315`](../backend/src/advice.py#L283-L315)
 ```python
     amounts = ladder(pot, thresholds)
     central = tuple(calculate_ev(pot, amount, centre.fold_equity, centre.equity_when_called) for amount in amounts)

@@ -63,7 +63,6 @@ class Blocked(StrEnum):
     """Why one rung of the ladder is not the answer."""
 
     EV_BELOW_FLOOR = "EV_BELOW_FLOOR"
-    NOT_ROBUST = "NOT_ROBUST"
     NEEDS_BIGGER_EDGE = "NEEDS_BIGGER_EDGE"
     BLUFF_TOO_SMALL_ONLY = "BLUFF_TOO_SMALL_ONLY"
 
@@ -346,7 +345,6 @@ def recommend(
 
 
 def _kind(equity: float, thresholds: AdviceThresholds) -> Kind:
-    """Label the hand from its win rate alone."""
     if equity >= thresholds.value_equity_floor:
         return Kind.VALUE
     if equity >= thresholds.bluff_equity_ceiling:
@@ -355,7 +353,6 @@ def _kind(equity: float, thresholds: AdviceThresholds) -> Kind:
 
 
 def _start_rung(equity: float, thresholds: AdviceThresholds) -> int:
-    """The largest rung the win rate allows the walk to begin at (2 all-in, 1 large, 0 small)."""
     if equity >= thresholds.all_in_min_equity:
         return 2
     if equity > thresholds.large_min_equity:
@@ -372,7 +369,6 @@ def _blocker(
     worst_ratios: Sequence[float],
     thresholds: AdviceThresholds,
 ) -> Blocked | None:
-    """Why this rung is not the answer, in the order the policy checks it."""
     if ev_ratios[index] < thresholds.min_edge_ratio or worst_ratios[index] < thresholds.min_edge_ratio:
         return Blocked.EV_BELOW_FLOOR
     if kind is Kind.BLUFF and index > 0:
@@ -382,10 +378,6 @@ def _blocker(
         return Blocked.NEEDS_BIGGER_EDGE
     if index == 2 and (kind is not Kind.VALUE or central[2] <= central[1]):
         return Blocked.NEEDS_BIGGER_EDGE
-    # Unreachable while min_edge_ratio > 0, which the validator enforces: a negative worst cell
-    # already fails the floor above. Kept so the policy stays correct if that floor is ever relaxed.
-    if worst_ratios[index] < 0.0:
-        return Blocked.NOT_ROBUST
     return None
 
 
@@ -394,7 +386,6 @@ def _check_reason(
     ev_ratios: Sequence[float],
     thresholds: AdviceThresholds,
 ) -> Reason:
-    """Which of the three check reasons fired, by the spec's priority."""
     if max(central) <= 0.0:
         return Reason.CHECK_NO_EDGE
     if max(ev_ratios) < thresholds.min_edge_ratio:
@@ -403,7 +394,6 @@ def _check_reason(
 
 
 def _bet_reason(index: int, kind: Kind) -> Reason:
-    """Which of the bet reasons fired, by the chosen rung and the hand's kind."""
     if index == 2:
         return Reason.ALL_IN_VALUE
     if index == 1:

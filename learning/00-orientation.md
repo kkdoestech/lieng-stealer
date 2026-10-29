@@ -483,7 +483,7 @@ the **backend** writes into the notes panel followed in `a9d9ce9`. The rule-base
 what you see without an API key, used to end with `3. **GTO Insight:**`; now the heading is
 Vietnamese for "tactical assessment":
 
-📍 [`backend/app.py:860`](../backend/app.py#L860)
+📍 [`backend/app.py:854`](../backend/app.py#L854)
 ```python
         f"3. **Nhận định chiến thuật:** {_reason_sentence(advice_rec, summary)}"
 ```

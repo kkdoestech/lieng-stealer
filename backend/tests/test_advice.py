@@ -105,7 +105,6 @@ def test_ladder_is_pot_relative_and_strictly_increasing() -> None:
 # --- One row per rule of the ordered policy --------------------------------------------------
 
 def test_a_monster_shoves_the_whole_pot() -> None:
-    """Rule 5 (start at all-in from 85% equity) and rule 8 (ALL_IN_VALUE)."""
     advice = recommend(POT, FoldCell(0.35, 0.9952), MONSTER_CELLS)
 
     assert (advice.action, advice.kind, advice.reason) == (Action.ALL_IN, Kind.VALUE, Reason.ALL_IN_VALUE)
@@ -121,7 +120,6 @@ def test_a_monster_shoves_the_whole_pot() -> None:
 
 
 def test_a_medium_hand_bluffs_the_smallest_rung() -> None:
-    """Rule 4 (the 5% floor) plus rule 7 (a bluff is capped at the small rung)."""
     advice = recommend(POT, FoldCell(0.35, 0.0108), MEDIUM_CELLS)
 
     assert (advice.action, advice.kind, advice.reason) == (Action.SMALL_BET, Kind.BLUFF, Reason.SMALL_BLUFF)
@@ -136,7 +134,6 @@ def test_a_medium_hand_bluffs_the_smallest_rung() -> None:
 
 
 def test_a_junk_hand_checks_when_a_small_bet_only_pays_at_your_own_fold_rate() -> None:
-    """Rule 6: the centre clears the floor, the worst cell earns 0.25% of the pot, so Hero checks."""
     advice = recommend(POT, FoldCell(0.35, 0.0), JUNK_CELLS)
 
     assert (advice.action, advice.kind, advice.reason) == (Action.CHECK, Kind.BLUFF, Reason.CHECK_ASSUMPTION_FRAGILE)
@@ -147,7 +144,6 @@ def test_a_junk_hand_checks_when_a_small_bet_only_pays_at_your_own_fold_rate() -
 
 
 def test_a_junk_hand_checks_when_the_worst_cell_pays_under_the_floor() -> None:
-    """At a 35% fold rate the random model's worst cell earns 0.54% of the pot, so Hero checks there too."""
     cells = tuple(FoldCell(rate, 0.00236105) for rate in (0.25, 0.35, 0.45))
     advice = recommend(POT, FoldCell(0.35, 0.00236105), cells)
 
@@ -156,7 +152,6 @@ def test_a_junk_hand_checks_when_the_worst_cell_pays_under_the_floor() -> None:
 
 
 def test_a_junk_hand_bluffs_small_when_the_worst_cell_still_pays() -> None:
-    """The same junk hand at a 50% fold rate: the small rung earns 20% of the pot in its worst cell."""
     cells = tuple(FoldCell(rate, 0.00236105) for rate in (0.4, 0.5, 0.6))
     advice = recommend(POT, FoldCell(0.5, 0.00236105), cells)
 
@@ -169,7 +164,6 @@ def test_a_junk_hand_bluffs_small_when_the_worst_cell_still_pays() -> None:
 
 
 def test_every_size_losing_is_a_check_with_no_edge() -> None:
-    """Rule 6, first branch: the best central EV is not positive."""
     advice = recommend(POT, FoldCell(0.0, 0.10), _flat(0.0, 0.10))
 
     assert (advice.action, advice.reason) == (Action.CHECK, Reason.CHECK_NO_EDGE)
@@ -177,7 +171,6 @@ def test_every_size_losing_is_a_check_with_no_edge() -> None:
 
 
 def test_an_edge_under_the_floor_is_a_check() -> None:
-    """Rule 6, second branch: the best rung earns 1.86% of the pot, under the 5% floor."""
     advice = recommend(POT, FoldCell(0.0, 0.21), _flat(0.0, 0.21))
 
     assert (advice.action, advice.reason) == (Action.CHECK, Reason.CHECK_EDGE_TOO_SMALL)
@@ -185,7 +178,6 @@ def test_an_edge_under_the_floor_is_a_check() -> None:
 
 
 def test_a_coin_flip_starts_at_the_small_rung() -> None:
-    """Rule 5 and rule 11: exactly 50% equity is not a favourite, so the walk starts small."""
     advice = recommend(POT, FoldCell(0.35, 0.50), _flat(0.35, 0.50))
 
     assert (advice.action, advice.kind, advice.reason) == (Action.SMALL_BET, Kind.THIN_VALUE, Reason.SMALL_THIN)
@@ -198,7 +190,6 @@ def test_a_coin_flip_starts_at_the_small_rung() -> None:
 
 
 def test_a_favourite_starts_at_the_large_rung_and_the_all_in_is_refused() -> None:
-    """Rule 5 (large from 50% equity) and rule 10 (the all-in needs a bigger edge)."""
     advice = recommend(POT, FoldCell(0.35, 0.60), _flat(0.35, 0.60))
 
     assert (advice.action, advice.kind, advice.reason) == (Action.LARGE_BET, Kind.VALUE, Reason.LARGE_VALUE)
@@ -207,7 +198,6 @@ def test_a_favourite_starts_at_the_large_rung_and_the_all_in_is_refused() -> Non
 
 
 def test_a_bluff_never_reaches_a_large_rung_even_when_it_clears_the_floor() -> None:
-    """Rule 7: at a 90% fold rate every rung is profitable, but a 44% hand may only bet small."""
     advice = recommend(POT, FoldCell(0.90, 0.44), _flat(0.90, 0.44))
 
     assert (advice.action, advice.kind, advice.reason) == (Action.SMALL_BET, Kind.BLUFF, Reason.SMALL_BLUFF)

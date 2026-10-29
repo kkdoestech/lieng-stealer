@@ -169,7 +169,7 @@ _KIND_COLORS: dict[Kind, str] = {
     Kind.NONE: "bright_black",
 }
 
-# One sentence per reason code, filled from the advice itself so the numbers can never drift.
+# One sentence per reason code, filled from the advice's own fields.
 _WHY_TEXT: dict[Reason, str] = {
     Reason.CHECK_NO_EDGE: "Check: every size loses money at your fold assumption (best case {edge}% of pot).",
     Reason.CHECK_EDGE_TOO_SMALL: "Check: betting earns only {edge}% of the pot, under the {floor}% we need.",
@@ -196,14 +196,12 @@ _WHY_TEXT: dict[Reason, str] = {
 
 
 def _advice_color(advice: Recommendation) -> str:
-    """Colour encodes the kind of bet, and a check is always neutral."""
     if advice.action is Action.CHECK:
         return _KIND_COLORS[Kind.NONE]
     return _KIND_COLORS[advice.kind]
 
 
 def _why_line(advice: Recommendation, thresholds: AdviceThresholds) -> str:
-    """The one sentence that explains the recommendation, filled from its own numbers."""
     # A check's own ev_ratio is zero, so its reasons quote the best rung the ladder priced.
     edge = advice.ev_ratio if advice.action is not Action.CHECK else max(rung.ev_ratio for rung in advice.ladder)
     return _WHY_TEXT[advice.reason].format(
@@ -217,19 +215,16 @@ def _why_line(advice: Recommendation, thresholds: AdviceThresholds) -> str:
 
 
 def _rung_marker(rung: Rung) -> str:
-    """A tick when the rung clears the EV floor, a cross when it is blocked."""
     return "✓" if rung.eligible else "✗"
 
 
 def _rung_suffix(rung: Rung, advice: Recommendation) -> str:
-    """Name the blocker, or say this is the rung the policy chose."""
     if rung.action is advice.action:
         return "  <- recommended"
     return "" if rung.blocked_by is None else f"  blocked: {rung.blocked_by.value}"
 
 
 def _rung_marker_color(rung: Rung) -> str:
-    """Green when the rung clears the floor, red when it does not."""
     return "green" if rung.eligible else "red"
 
 
@@ -242,9 +237,9 @@ def render_single_hand_decision(
 ) -> None:
     """Render the recommendation for one hand, straight from its 455-class table row.
 
-    The row carries the whole recommendation, so this function only formats: the action, the reason
-    as one sentence, and the three rungs with a marker saying which cleared and why the others did
-    not. ``Expected Value`` stays the EV at the caller's own ``--bet``.
+    This function only formats: the action, the reason as one sentence, and the three rungs with a
+    marker saying which cleared and why the others did not. ``Expected Value`` stays the EV at the
+    caller's own ``--bet``.
     """
     hand = solution.hand
     record = solution.record
@@ -367,7 +362,7 @@ def run_solver(
     be_bluff = calculate_break_even_fold_equity(pot, bet_size, win_rate_when_called=0.0)
 
     db = WinRateDB(db_path)
-    # Build the calling-range tables (~40 ms) only when the range model is requested
+    # Build the calling-range tables only when the range model is requested
     calling_model = CallingRangeModel() if opponent_model is OpponentModel.RANGE else None
     finder = RangeFinder(db, calling_model)
     equities = finder.equities(fold_equity, opponent_model)

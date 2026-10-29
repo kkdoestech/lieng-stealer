@@ -6,9 +6,11 @@ Verifies:
 - When fold equity is 0%, only hands exceeding the required pot odds threshold are profitable
 - Monotonicity: Increasing fold equity strictly increases or maintains range coverage
 - Opponent models: the inequity source honours the model; equal-EV hands are ordered by strength
-- One answer per hand: the single-hand solution IS the matching row of the 455-class table
+- One answer per hand: hand_solution returns the record solve_range built for that class
 - The advice board: the centre cell of fold_cells is the reported equity, for every class
 """
+
+from typing import cast
 
 import pytest
 
@@ -21,7 +23,6 @@ from src.range_finder import OpponentEquities, RangeFinder, category_breakdown
 
 
 def _equities(finder: RangeFinder, fold_equity: float, model: OpponentModel = OpponentModel.RANDOM) -> OpponentEquities:
-    """The one equity source a request would build for these inputs."""
     return finder.equities(fold_equity, model)
 
 
@@ -131,10 +132,10 @@ class TestOpponentModels:
 
 
 class TestOneAnswerPerHand:
-    """The single-hand answer must be the table's own row, by construction."""
+    """The single-hand answer is read from the 455-class solve."""
 
     def test_hand_solution_is_the_table_row_for_every_class(self, finder_with_model: RangeFinder) -> None:
-        """One answer per hand: hand_solution's record IS the matching element of solve_range."""
+        """hand_solution returns the record solve_range built for that class."""
         equities = _equities(finder_with_model, 0.35, OpponentModel.RANGE)
         records = finder_with_model.solve_range(100000.0, 50000.0, equities)
         by_class = {record.canonical_id: record for record in records}
@@ -152,7 +153,7 @@ class TestOneAnswerPerHand:
     def test_equity_table_is_immutable(self, finder_with_model: RangeFinder) -> None:
         equities = _equities(finder_with_model, 0.35, OpponentModel.RANGE)
         with pytest.raises(TypeError):
-            equities.table()["Q-K-A"] = 0.0  # type: ignore[index]
+            cast("dict[str, float]", equities.table())["Q-K-A"] = 0.0
 
     def test_hand_solution_zones_stay_inside_the_fold_grid(self, finder_with_model: RangeFinder) -> None:
         equities = _equities(finder_with_model, 0.35, OpponentModel.RANGE)
@@ -165,7 +166,7 @@ class TestOneAnswerPerHand:
 
 
 class TestFoldCells:
-    """The advice ladder reads the same equity source as the reported number, one cell at a time."""
+    """The ladder prices the same class under each fold cell, one cell at a time."""
 
     @pytest.mark.parametrize("fold_equity", [0.0, 0.2, 0.35, 0.5, 0.75, 1.0])
     @pytest.mark.parametrize("model", [OpponentModel.RANGE, OpponentModel.RANDOM])

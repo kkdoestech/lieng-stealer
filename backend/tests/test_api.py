@@ -146,7 +146,7 @@ def test_a_bluff_keeps_the_large_and_all_in_rungs_out_of_reach(client):
 
 
 def test_a_junk_hand_checks_instead_of_shoving(client):
-    """The reported spot must not answer 'raise': the worst cell earns 0.25% of the pot."""
+    """The reported spot must not answer 'raise'."""
     hand = client.post("/api/solve", json={
         "pot": 100000, "bet_size": 50000, "fold_equity": 0.35,
         "hand": "2s 3h 5d", "opponent_model": "range",
@@ -158,7 +158,7 @@ def test_a_junk_hand_checks_instead_of_shoving(client):
 
 
 def test_the_opponent_model_moves_the_rung(client):
-    """J-7-2 wins 89.7% against a random caller (all-in) but 84.2% against a calling range (large)."""
+    """J-7-2 clears the all-in win-rate gate against a random caller but not against a calling range."""
     body = {"pot": 100000, "bet_size": 50000, "fold_equity": 0.35, "hand": "Js 7h 2d"}
     vs_random = client.post("/api/solve", json=body).get_json()["hand_evaluation"]["advice"]
     vs_range = client.post("/api/solve", json={**body, "opponent_model": "range"}).get_json()["hand_evaluation"]["advice"]
@@ -185,7 +185,7 @@ def test_nobody_calling_is_an_undefined_win_rate_not_zero(client):
 
 
 def test_the_advice_matches_the_table_row_for_the_hand(client):
-    """The card and the table are one row, so a hand in top_hands reports the same advice."""
+    """A hand inside top_hands reports the same advice as its own card."""
     data = client.post("/api/solve", json=UI_REQUEST).get_json()
     rows = {row["canonical_id"]: row for row in data["top_hands"]}
     hand = data["hand_evaluation"]
@@ -263,10 +263,10 @@ def test_thresholds_come_from_advice_config_and_environment(shared_services, mon
         create_app(db=db, calling_model=model, config={"TESTING": True})
 
 
-# --- One answer per hand (DEFECT 1) ---------------------------------------------------------
+# --- One answer per hand --------------------------------------------------------------------
 
 def test_hand_equity_equals_the_table_equity_for_the_same_class(client):
-    """DEFECT 1: the verdict card and the 455-class table must report the same equity and EV.
+    """The verdict card and the 455-class table must report the same equity and EV.
 
     On the pre-unification code this read 0.9897793053545586 / 131171.30969609262 from the card
     (the percentile engine) and 0.9952 / 131876.0 from the table (the fold-equity engine).
@@ -281,7 +281,7 @@ def test_hand_equity_equals_the_table_equity_for_the_same_class(client):
 
 
 def test_one_equity_per_hand_at_every_fold_rate(client):
-    """The reported equity is the table's number and the EV is reproducible from it."""
+    """The EV is reproducible from the reported equity at every fold rate."""
     for fold_equity in (0.0, 0.2, 0.35, 0.6, 0.9):
         body = {**UI_REQUEST, "fold_equity": fold_equity}
         data = client.post("/api/solve", json=body).get_json()
@@ -296,7 +296,7 @@ def test_one_equity_per_hand_at_every_fold_rate(client):
 
 
 def test_ev_is_reproducible_from_the_reported_equity(client):
-    """A regression guard against a second equity source creeping back into the hand path."""
+    """The hand path may not compute its own equity: a second implementation must fail this."""
     hand = client.post("/api/solve", json=UI_REQUEST).get_json()["hand_evaluation"]
     expected = calculate_ev(
         UI_REQUEST["pot"], UI_REQUEST["bet_size"], UI_REQUEST["fold_equity"], hand["showdown_equity"]
@@ -312,7 +312,7 @@ def test_zero_fold_equity_matches_the_random_model(client):
     assert vs_range["showdown_equity"] == pytest.approx(vs_random["showdown_equity"], abs=1e-4)
 
 
-# --- Derived calling range and the 3-point sensitivity grid ---------------------------------
+# --- Derived calling range and the sensitivity grid -----------------------------------------
 
 def test_calling_range_percent_is_derived_from_fold_equity(client):
     """fold_equity is the primitive; the calling range is (1 - f) * 100, never a second input."""
@@ -360,11 +360,11 @@ def test_sensitivity_is_present_for_the_random_model_too(client):
     assert all(cell["call_range_percent"] is None for cell in hand_eval["sensitivity"]["scenarios"])
 
 
-# --- Removed field and the blank-hand request (DEFECTS 2 and 3) -----------------------------
+# --- Removed field and the blank-hand request -----------------------------------------------
 
 @pytest.mark.parametrize("value", [30, 0, -1, 100.1, "NaN", None])
 def test_removed_field_is_a_400_that_names_its_replacement(client, value):
-    """DEFECT 2's old companion: the redundant opponent knob is rejected loudly, not ignored."""
+    """The redundant opponent knob is rejected loudly, not ignored."""
     response = client.post("/api/solve", json={"call_range_percent": value, "hand": "2s 3h 5d"})
 
     assert response.status_code == 400
@@ -384,7 +384,7 @@ def test_removed_field_is_rejected_on_every_solver_endpoint(client, endpoint):
 @pytest.mark.parametrize("blank", ["", "   ", None])
 @pytest.mark.parametrize("model", ["range", "random"])
 def test_blank_hand_is_a_range_only_answer(client, blank, model):
-    """DEFECT 3: clearing the hand input must answer the range, never raise a 400."""
+    """Clearing the hand input answers the range, never a 400."""
     body = {"pot": 100000, "bet_size": 50000, "fold_equity": 0.35, "opponent_model": model}
     if blank is not None:
         body["hand"] = blank
@@ -410,7 +410,7 @@ def test_evaluate_still_requires_a_hand(client):
     assert res.get_json() == {"error": "Field 'hand' is required.", "code": "invalid_params"}
 
 
-# --- The shared UI contract (DEFECT 3) ------------------------------------------------------
+# --- The shared UI contract ------------------------------------------------------------------
 
 def _pinned(value: object) -> object:
     """A JSON structure with every float turned into a tight approx, so 120932.08 pins its float."""
@@ -519,7 +519,7 @@ def test_break_even_fields_random_model(client):
     assert hand_eval["profitable_from_fold_equity"] == 0.34
 
 
-# --- One vocabulary across endpoints (M3) ---------------------------------------------------
+# --- One vocabulary across endpoints ---------------------------------------------------------
 
 HAND_KEYS = {
     "hand", "score_name", "category", "category_name", "canonical_id", "showdown_equity", "equity_vs_random",
@@ -564,7 +564,7 @@ def test_evaluate_reports_both_break_even_fields(client):
     assert evaluated["profitable_from_fold_equity"] == 0.51
 
 
-# --- Validation and JSON errors (H2, H3, M4) ------------------------------------------------
+# --- Validation and JSON errors --------------------------------------------------------------
 
 @pytest.mark.parametrize(
     "body",
@@ -610,7 +610,7 @@ def test_unexpected_errors_are_json_without_details(shared_services, monkeypatch
     assert res.get_json() == {"error": "Internal server error.", "code": "internal_error"}
 
 
-# --- /api/analyze (H4) ----------------------------------------------------------------------
+# --- /api/analyze ----------------------------------------------------------------------------
 
 ANALYZE_PAYLOAD = {"pot": 100000, "bet_size": 50000, "fold_equity": 0.35, "hand": "As Kh Qd"}
 
@@ -742,7 +742,7 @@ def test_analyze_upstream_failures_are_502_without_details(keyed_client, monkeyp
     assert "secret" not in body["error"] and "network" not in body["error"]
 
 
-# --- Rate limit, CORS, dependency injection (H5, M1) ----------------------------------------
+# --- Rate limit, CORS, dependency injection --------------------------------------------------
 
 def test_analyze_is_rate_limited(shared_services):
     db, model = shared_services

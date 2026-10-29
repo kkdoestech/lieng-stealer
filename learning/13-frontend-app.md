@@ -79,7 +79,7 @@ that survives between renders (see the concept box).
 
 The language is loaded once and saved on every change:
 
-📍 [`frontend/src/App.jsx:81-88`](../frontend/src/App.jsx#L81-L88)
+📍 [`frontend/src/App.jsx:80-87`](../frontend/src/App.jsx#L80-L87)
 ```jsx
 function loadSavedLang() {
   try {
@@ -102,7 +102,7 @@ which also sets `<html lang>` for screen readers. An unknown saved value falls b
 The round trip lives **outside** the component. It holds no state; it reports each step through
 three callbacks and stops calling them as soon as its `signal` is aborted:
 
-📍 [`frontend/src/App.jsx:100-126`](../frontend/src/App.jsx#L100-L126)
+📍 [`frontend/src/App.jsx:99-125`](../frontend/src/App.jsx#L99-L125)
 ```jsx
 // One solve + analysis round trip. It holds no state: it reports each step through the callbacks
 // and stops calling them as soon as `signal` is aborted (a newer run started, or the page unmounted).
@@ -142,7 +142,7 @@ async function fetchSolveAndAnalysis(body, signal, { onSolved, onSolveFailed, on
   check makes the old run go quiet instead of overwriting the newer run's results (section 4).
 - **Errors are a key plus a detail**, not a sentence (section 7). `solveErrorFor` picks the key:
 
-📍 [`frontend/src/App.jsx:90-98`](../frontend/src/App.jsx#L90-L98)
+📍 [`frontend/src/App.jsx:89-97`](../frontend/src/App.jsx#L89-L97)
 ```jsx
 // Map a failed /api/solve response to the message shown under the button ({ key, detail }).
 // The API answers every error with { error, code }. A response without a code did not come from
@@ -165,7 +165,7 @@ the same Q-K-A shows **+131,876** in the UI but **+132,097** from a bare `curl` 
 
 ### 3. Step 2: `/api/analyze`, and every way to fail
 
-📍 [`frontend/src/App.jsx:128-143`](../frontend/src/App.jsx#L128-L143)
+📍 [`frontend/src/App.jsx:127-142`](../frontend/src/App.jsx#L127-L142)
 ```jsx
   // The server recomputes everything for the analysis from the same inputs.
   let advice;
@@ -219,7 +219,7 @@ spot 3).
 The component's side of a run is three small functions. `runSolve` builds the body and turns each
 callback into state changes:
 
-📍 [`frontend/src/App.jsx:208-239`](../frontend/src/App.jsx#L208-L239)
+📍 [`frontend/src/App.jsx:207-238`](../frontend/src/App.jsx#L207-L238)
 ```jsx
   // Start one run with the current inputs; every state change happens in a callback, after the
   // matching response has arrived. The API takes one opponent assumption: fold_equity. The
@@ -258,7 +258,7 @@ callback into state changes:
 As soon as the numbers are in, `isLoading` goes false and the page renders them; the analysis is
 still on its way. `startSolve` is what the button calls:
 
-📍 [`frontend/src/App.jsx:240-249`](../frontend/src/App.jsx#L240-L249)
+📍 [`frontend/src/App.jsx:239-248`](../frontend/src/App.jsx#L239-L248)
 ```jsx
   // Start a run from a click: cancel any run still in flight, then show the loading state.
   const startSolve = () => {
@@ -280,7 +280,7 @@ run" never appears ([App.test.jsx:151-172](../frontend/src/App.test.jsx#L151-L17
 
 The first run starts on mount:
 
-📍 [`frontend/src/App.jsx:251-270`](../frontend/src/App.jsx#L251-L270)
+📍 [`frontend/src/App.jsx:250-269`](../frontend/src/App.jsx#L250-L269)
 ```jsx
   // The first run on mount. It reads the current inputs without making them effect dependencies.
   const startFirstRun = useEffectEvent((controller) => {
@@ -352,7 +352,7 @@ shows `N/A`, and the summary and tables still show the whole-range results.
 
 The pot and the bet use the same small component:
 
-📍 [`frontend/src/App.jsx:145-175`](../frontend/src/App.jsx#L145-L175)
+📍 [`frontend/src/App.jsx:144-174`](../frontend/src/App.jsx#L144-L174)
 ```jsx
 function Stepper({ id, label, value, onChange }) {
   return (
@@ -404,7 +404,6 @@ The presets are data at the top of the file:
 📍 [`frontend/src/App.jsx:15-24`](../frontend/src/App.jsx#L15-L24)
 ```jsx
 const POT_PRESETS = [50000, 100000, 200000, 500000];
-// bet = multiple × pot, matching the policy's three rungs so no preset can exceed the all-in rung
 const BET_PRESET_MULTIPLES = [0.33, 0.75, 1];
 const HAND_PRESETS = [
   { cards: "As Kh Qd", labelKey: "presetLiengQKA" },
@@ -413,6 +412,7 @@ const HAND_PRESETS = [
   { cards: "9s 10h Kd", labelKey: "presetDiem9" },
   { cards: "2s 3h 5d", labelKey: "presetDiem0" },
 ];
+
 ```
 
 The bet multiples are the policy's three rungs (0.33, 0.75 and the whole pot), so a preset can
@@ -428,7 +428,7 @@ with `aria-pressed`, so assistive technology announces which one is on.
 
 The profit map draws each zone with inline percentages:
 
-📍 [`frontend/src/App.jsx:410-424`](../frontend/src/App.jsx#L410-L424)
+📍 [`frontend/src/App.jsx:409-423`](../frontend/src/App.jsx#L409-L423)
 ```jsx
             {zones && (
               <div className="profit-map">
@@ -470,7 +470,7 @@ The solve errors sit together:
 
 The render calls every message the same way:
 
-📍 [`frontend/src/App.jsx:462-466`](../frontend/src/App.jsx#L462-L466)
+📍 [`frontend/src/App.jsx:461-465`](../frontend/src/App.jsx#L461-L465)
 ```jsx
           {solveError && (
             <div className="terminal-alert" role="alert">

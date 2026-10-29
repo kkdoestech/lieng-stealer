@@ -5,7 +5,8 @@ strength-ordered model that single number also fixes the calling range (the oppo
 weakest ``f`` share of the 22,100 pre-deal combinations), so this module stresses ``f`` alone and
 reports the derived calling range in each cell.
 
-The result is a 3-point grid around the user's assumption. ``ROBUST_BET`` means raising stays
+The result is the fold cells around the user's assumption: two or three of them, because a cell
+clamps onto the centre at either end of the range. ``ROBUST_BET`` means raising stays
 profitable in every cell, ``ROBUST_NO_BET`` means it never is, and ``ASSUMPTION_SENSITIVE`` means
 the recommendation flips somewhere inside the grid.
 """
@@ -42,7 +43,7 @@ class Scenario:
 
 @dataclass(frozen=True)
 class Sensitivity:
-    """The 3-point assumption grid around the user's fold frequency."""
+    """The stress cells around the user's fold frequency."""
 
     fold_equity_range: tuple[float, float]
     central_equity_when_called: float
@@ -70,7 +71,7 @@ def stress_test(
         fold_step: How far either side of the central fold frequency each cell reaches.
 
     Returns:
-        The three scenarios, their EV range, and the verdict classification.
+        The scenarios, their EV range, and the verdict classification.
 
     Raises:
         ModelError: If RANGE is requested and no CallingRangeModel was supplied.
@@ -84,7 +85,7 @@ def stress_test(
         if equities.opponent_model is OpponentModel.RANGE:
             # Under RANGE the fold frequency is also the cut: a tighter assumption means a
             # stronger caller and lower equity. Under RANDOM equity is constant.
-            assert calling_model is not None  # guarded above; narrows the type for mypy
+            assert calling_model is not None
             equity = calling_model.equity(canonical_id, fold_equity)
             percentile: float | None = round((1.0 - fold_equity) * 100.0, 4)
         else:
