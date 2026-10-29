@@ -345,8 +345,14 @@
 }
 
 /* --------------------------------------------------------------------------
-   Verdict
+   Verdict: what to do, how much, why, and why not the bigger bet
    -------------------------------------------------------------------------- */
+.verdict-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+
 .verdict-banner {
   display: flex;
   flex-wrap: wrap;
@@ -366,12 +372,43 @@
   margin: 2px 0 4px;
 }
 
-.verdict-raise .verdict-title {
+.verdict-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+
+/* Colour names the kind of hand, so the whole card (title, chip, ladder) agrees on it.
+   A bluff is coloured like any other play, not like a warning. */
+.kind-value {
   color: var(--good);
 }
 
-.verdict-fold .verdict-title {
-  color: var(--bad);
+.kind-thin {
+  color: var(--accent);
+}
+
+.kind-bluff {
+  color: var(--bluff);
+}
+
+.kind-none {
+  color: var(--muted);
+}
+
+.kind-chip {
+  border: 1px solid currentColor;
+  border-radius: var(--radius);
+  padding: 1px 8px;
+  font-size: 0.87rem;
+}
+
+/* The sentence explains the card, so it stays neutral: the kind colours the verdict, not the reason. */
+.verdict-why {
+  margin-top: 12px;
+  line-height: 1.6;
+  color: var(--text);
 }
 
 /* No hand entered: a neutral banner that explains the range-only view. */
@@ -439,6 +476,77 @@
   color: var(--good);
 }
 
+/* The three rungs, so "why not all-in?" is answered by a number on screen. */
+.ladder-strip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.ladder-rung {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+}
+
+.ladder-rung.chosen {
+  border-color: currentColor;
+  background: var(--bg-hover);
+}
+
+.ladder-rung.rung-blocked {
+  color: var(--muted);
+}
+
+.ladder-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.ladder-mark,
+.ladder-label {
+  font-weight: 600;
+}
+
+.ladder-amount,
+.ladder-ev {
+  font-variant-numeric: tabular-nums;
+}
+
+.ladder-amount {
+  color: var(--text-strong);
+}
+
+.ladder-rung.rung-blocked .ladder-amount,
+.ladder-rung.rung-blocked .ladder-ev {
+  text-decoration: line-through;
+}
+
+.ladder-ev {
+  font-size: 0.87rem;
+  color: var(--muted);
+}
+
+.ladder-blocked {
+  margin-top: 4px;
+  font-size: 0.87rem;
+  color: var(--muted);
+}
+
+.ladder-note {
+  margin-top: 10px;
+  font-size: 0.87rem;
+  color: var(--muted);
+}
+
+@media (max-width: 640px) {
+  .ladder-strip {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* --------------------------------------------------------------------------
    Summary figures: one row per figure
    -------------------------------------------------------------------------- */
@@ -464,6 +572,14 @@
 
 .hud-value.green-metric {
   color: var(--good);
+}
+
+/* The "nobody calls" sentence replaces a percentage, so it needs to wrap instead of clipping. */
+.hud-value.hud-phrase {
+  font-weight: 400;
+  font-size: 0.87rem;
+  color: var(--muted);
+  white-space: normal;
 }
 
 .hud-subtext {
@@ -538,18 +654,13 @@
 }
 
 .positive-ev,
-.chip-full,
-.act-raise {
+.chip-full {
   color: var(--good);
 }
 
 .negative-ev,
 .chip-zero {
   color: var(--bad);
-}
-
-.act-fold {
-  color: var(--muted);
 }
 
 /* --------------------------------------------------------------------------

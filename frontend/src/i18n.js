@@ -21,7 +21,7 @@ export const STRINGS = {
     opponentFolds: "Opponent folds",
     modelRange: "Weakest hands",
     modelRandom: "At random",
-    profitMap: "Where raising pays (this hand)",
+    profitMap: "Where a bet pays (at your bet size)",
     handLabel: "Your hand (3 cards)",
     handPlaceholder: "e.g. As Kh Qd",
     betPresetLabel: (multiple) => `${multiple}x pot`,
@@ -47,19 +47,48 @@ export const STRINGS = {
     specQueryVal: "O(1), precomputed",
 
     recommendedAction: "Recommended action",
-    actionRaise: "Raise / all-in",
-    actionFold: "Check / fold",
+    actionLabel: { CHECK: "Check", SMALL_BET: "Small bet", LARGE_BET: "Large bet", ALL_IN: "All in" },
+    kindLabel: { VALUE: "Value", THIN_VALUE: "Thin value", BLUFF: "Bluff" },
+    blocked: {
+      EV_BELOW_FLOOR: "not worth the extra risk",
+      NEEDS_BIGGER_EDGE: "needs a bigger edge",
+      BLUFF_TOO_SMALL_ONLY: "bluffs stay small",
+      NOT_ROBUST: "depends on the fold read",
+    },
     expectedValueTag: "Expected value",
-    profitableWhen: "Raising is +EV when the opponent folds",
+    evTag: "EV",
+    evAtRecommendedSize: "at the recommended size",
+    evAtYourBetSize: (ev) => `at your bet size: ${ev}`,
+    winRateUndefined: "nobody calls at this setting, so the win rate is undefined",
+    profitableWhen: "A bet at your size pays when they fold",
+    thresholdNote: (minEdge, foldStep) =>
+      `We recommend a bet only when it earns at least ${minEdge}% of the pot and still earns it if the opponent folds ${foldStep}% less than you think.`,
+    actionCountsLine: (allIn, large, small, check) =>
+      `${allIn} hands go all in here, ${large} bet large, ${small} bet small, and ${check} check.`,
+    whyAllInValue: (equity, foldStep) =>
+      `You win about ${equity} when called, so the all-in is worth the risk even if they fold ${foldStep}% less than you think.`,
+    whyLargeValue: (equity) =>
+      `You are ahead when called (${equity}), but not enough to risk the whole pot.`,
+    whyLargeThin: (equity) =>
+      `Only a slight favourite when called (${equity}), so keep it to a large bet.`,
+    whySmallValue: (amount) =>
+      `Strong enough to bet ${amount} for value; a bigger bet risks more than it adds.`,
+    whySmallThin: (equity) => `Close to a coin flip when called (${equity}), so keep the pot small.`,
+    whySmallBluff: (ev, equity) =>
+      `Positive EV (${ev}) but a low win rate (${equity}). The money comes from folds, so use the smallest bet that still buys the fold.`,
+    whyCheckNoEdge: (fold) => `Every size loses money at this fold read (${fold}).`,
+    whyCheckEdgeTooSmall: (ev, edge, minEdge) =>
+      `Betting earns only ${ev} (${edge} of pot), under the ${minEdge} we need.`,
+    whyCheckFragile: (ev, fold, worstEv, worstFold) =>
+      `Betting earns ${ev} if they fold ${fold}, but only ${worstEv} if they fold ${worstFold}. One bad read from break-even.`,
 
-    rangeCoverage: "Range coverage",
-    combosOfTotal: "of 22,100 combos are +EV",
+    betRecommended: "Hands worth a bet",
+    combosWorthBet: "of 22,100 combos get a bet",
     showdownEquity: "Showdown equity",
     showdownEquitySub: "vs. a random hand",
     vsCallingRange: (pct) => `vs. the top ${pct}% that call`,
     vsRandomShort: (equity) => `${equity} vs. a random hand`,
     expectedValue: "Expected value",
-    expectedValueSub: "net VND per decision",
     bluffThreshold: "Bluff break-even",
     bluffThresholdSub: "fold rate needed to raise with 0 points",
     notAvailable: "N/A",
@@ -87,8 +116,6 @@ export const STRINGS = {
     colMultiplicity: "Combos",
     colAction: "Action",
     combosSuffix: "combos",
-    raise: "Raise",
-    fold: "Fold",
 
     notesCollapse: "Hide analysis notes",
     notesExpand: "Show analysis notes",
@@ -121,7 +148,7 @@ export const STRINGS = {
     opponentFolds: "Đối thủ bỏ",
     modelRange: "Bài yếu nhất",
     modelRandom: "Ngẫu nhiên",
-    profitMap: "Bản đồ lãi khi tố (bài này)",
+    profitMap: "Bản đồ lãi khi cược (ở mức cược của bạn)",
     handLabel: "Bài của bạn (3 lá)",
     handPlaceholder: "VD: As Kh Qd",
     betPresetLabel: (multiple) => `${multiple}x pot`,
@@ -147,19 +174,48 @@ export const STRINGS = {
     specQueryVal: "O(1) tra cứu bộ đệm",
 
     recommendedAction: "Hành động khuyến nghị",
-    actionRaise: "Tố / tất tay",
-    actionFold: "Không tố / bỏ bài",
+    actionLabel: { CHECK: "Không cược", SMALL_BET: "Cược nhỏ", LARGE_BET: "Cược lớn", ALL_IN: "Tất tay" },
+    kindLabel: { VALUE: "Cược giá trị", THIN_VALUE: "Giá trị mỏng", BLUFF: "Cược hù" },
+    blocked: {
+      EV_BELOW_FLOOR: "không đáng để thêm rủi ro",
+      NEEDS_BIGGER_EDGE: "cần lợi thế lớn hơn",
+      BLUFF_TOO_SMALL_ONLY: "cược hù chỉ nên nhỏ",
+      NOT_ROBUST: "phụ thuộc vào mức bỏ bài",
+    },
     expectedValueTag: "Giá trị kỳ vọng",
-    profitableWhen: "Tố có lãi khi đối thủ bỏ",
+    evTag: "EV",
+    evAtRecommendedSize: "ở mức khuyến nghị",
+    evAtYourBetSize: (ev) => `ở mức cược của bạn: ${ev}`,
+    winRateUndefined: "ở thiết lập này không ai theo, nên không xác định được tỷ lệ thắng",
+    profitableWhen: "Cược ở mức của bạn có lãi khi đối thủ bỏ",
+    thresholdNote: (minEdge, foldStep) =>
+      `Chỉ khuyến nghị cược khi cược lãi ít nhất ${minEdge}% pot và vẫn lãi nếu đối thủ bỏ ít hơn ${foldStep}% so với bạn nghĩ.`,
+    actionCountsLine: (allIn, large, small, check) =>
+      `${allIn} thế bài tất tay ở đây, ${large} cược lớn, ${small} cược nhỏ và ${check} không cược.`,
+    whyAllInValue: (equity, foldStep) =>
+      `Bạn thắng khoảng ${equity} khi bị theo, nên tất tay đáng để đặt cả pot kể cả khi đối thủ bỏ ít hơn ${foldStep}% so với bạn nghĩ.`,
+    whyLargeValue: (equity) =>
+      `Khi bị theo bạn vẫn mạnh hơn (${equity}), nhưng chưa đủ để đặt cả pot.`,
+    whyLargeThin: (equity) =>
+      `Khi bị theo bạn chỉ nhỉnh hơn một chút (${equity}), nên giữ ở mức cược lớn.`,
+    whySmallValue: (amount) =>
+      `Bài đủ mạnh để cược nhỏ ${amount} lấy giá trị; cược lớn hơn rủi ro nhiều hơn phần lãi thêm.`,
+    whySmallThin: (equity) => `Gần như cân kèo khi bị theo (${equity}), nên giữ pot nhỏ.`,
+    whySmallBluff: (ev, equity) =>
+      `EV dương (${ev}) nhưng tỷ lệ thắng thấp (${equity}). Lãi đến từ việc đối thủ bỏ bài, nên chỉ cần cược mức nhỏ nhất đủ để họ bỏ.`,
+    whyCheckNoEdge: (fold) => `Mọi mức cược đều lỗ ở mức bỏ bài này (${fold}).`,
+    whyCheckEdgeTooSmall: (ev, edge, minEdge) =>
+      `Cược chỉ lãi ${ev} (${edge} pot), dưới mức ${minEdge} cần có.`,
+    whyCheckFragile: (ev, fold, worstEv, worstFold) =>
+      `Cược lãi ${ev} nếu đối thủ bỏ ${fold}, nhưng chỉ còn ${worstEv} nếu họ bỏ ${worstFold}. Chỉ cần đọc sai một nhịp là hết lãi.`,
 
-    rangeCoverage: "Độ phủ dải bài",
-    combosOfTotal: "/ 22.100 tổ hợp",
+    betRecommended: "Số bài nên cược",
+    combosWorthBet: "/ 22.100 tổ hợp được khuyến nghị cược",
     showdownEquity: "Tỷ lệ thắng khi lật bài",
     showdownEquitySub: "trước 49 lá chưa biết",
     vsCallingRange: (pct) => `trước top ${pct}% bài theo`,
     vsRandomShort: (equity) => `ngẫu nhiên ${equity}`,
     expectedValue: "Giá trị kỳ vọng",
-    expectedValueSub: "lãi ròng (VND) mỗi quyết định",
     bluffThreshold: "Ngưỡng tố hù (bluff)",
     bluffThresholdSub: "tỷ lệ bỏ bài tối thiểu cho bài 0 điểm",
     notAvailable: "N/A",
@@ -187,8 +243,6 @@ export const STRINGS = {
     colMultiplicity: "Số tổ hợp",
     colAction: "Hành động",
     combosSuffix: "tổ hợp",
-    raise: "Tố",
-    fold: "Bỏ",
 
     notesCollapse: "Thu gọn ghi chú phân tích",
     notesExpand: "Ghi chú phân tích toán học",
